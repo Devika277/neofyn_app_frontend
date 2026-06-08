@@ -7,7 +7,7 @@ import 'package:http_parser/http_parser.dart';
 
 class WalletService {
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'https://kinsman-borax-colony.ngrok-free.dev/api', // replace with your backend URL
+    baseUrl: 'https://neofyn-app-backend.onrender.com/api', // replace with your backend URL
   connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 15),
   ));

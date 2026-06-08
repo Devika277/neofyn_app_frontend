@@ -101,7 +101,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final url = Uri.parse('https://kinsman-borax-colony.ngrok-free.dev/api/auth/register');
+      final url = Uri.parse('https://neofyn-app-backend.onrender.com/api/auth/register');
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},

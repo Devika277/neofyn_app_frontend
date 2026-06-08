@@ -35,7 +35,7 @@ class _SenderDashboardScreenState extends State<SenderDashboardScreen> {
   double _remainingLimit = 0;
 
   // Base URL – same as other screens
-  final String _baseUrl = 'https://kinsman-borax-colony.ngrok-free.dev';
+  final String _baseUrl = 'https://neofyn-app-backend.onrender.com';
 
   @override
   void initState() {

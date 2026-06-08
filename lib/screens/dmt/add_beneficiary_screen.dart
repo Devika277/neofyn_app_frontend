@@ -50,7 +50,7 @@ class _AddBeneficiaryScreenState extends State<AddBeneficiaryScreen> {
   @override
   void initState() {
     super.initState();
-    _dmtService = DMTService('https://kinsman-borax-colony.ngrok-free.dev');
+    _dmtService = DMTService('https://neofyn-app-backend.onrender.com');
     _checkAgentAndRedirect();
     _loadBanks();
     _loadStates();

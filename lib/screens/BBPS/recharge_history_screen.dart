@@ -33,7 +33,7 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
       final token = prefs.getString('accessToken');
       if (token == null) throw Exception('Not logged in');
 
-      final baseUrl = 'https://kinsman-borax-colony.ngrok-free.dev'; // use your config
+      final baseUrl = 'https://neofyn-app-backend.onrender.com'; // use your config
       final response = await http.get(
         Uri.parse('$baseUrl/api/recharge/history'),
         headers: {

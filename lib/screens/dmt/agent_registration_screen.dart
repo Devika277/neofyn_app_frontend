@@ -39,7 +39,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   @override
   void initState() {
     super.initState();
-    _dmtService = DMTService('https://kinsman-borax-colony.ngrok-free.dev'); // replace with env
+    _dmtService = DMTService('https://neofyn-app-backend.onrender.com'); // replace with env
     _checkExistingAgent();  // ← skip if already registered
     _loadStates();
   }

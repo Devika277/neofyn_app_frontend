@@ -8,7 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../screens/login_screen.dart';
 import 'package:my_app/screens/BBPS/recharge_receipt_screen.dart';
 
-const String _baseUrl = 'https://kinsman-borax-colony.ngrok-free.dev';
+const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
 
 class OperatorItem {
   final String code;

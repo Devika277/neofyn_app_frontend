@@ -34,7 +34,7 @@ class _SenderOtpScreenState extends State<SenderOtpScreen> {
   @override
   void initState() {
     super.initState();
-    _dmtService = DMTService('https://kinsman-borax-colony.ngrok-free.dev'); // replace with env
+    _dmtService = DMTService('https://neofyn-app-backend.onrender.com'); // replace with env
 
     _otpControllers = List.generate(widget.otpLength, (_) => TextEditingController());
     _focusNodes = List.generate(widget.otpLength, (_) => FocusNode());

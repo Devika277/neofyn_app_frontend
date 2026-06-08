@@ -1,6 +1,6 @@
 class ApiConfig {
   // Change this to your actual backend IP/URL
-  static const String baseUrl = 'https://kinsman-borax-colony.ngrok-free.dev'; // Your Node.js server IP
+  static const String baseUrl = 'https://neofyn-app-backend.onrender.com'; // Your Node.js server IP
   
   // AEPS Endpoints
   static const String aepsBanks = '/api/aeps/banks';
