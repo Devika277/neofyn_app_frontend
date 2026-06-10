@@ -12,6 +12,7 @@ import 'providers/beneficiary_provider.dart';
 import 'providers/wallet_provider.dart';
 import 'services/storage_service.dart'; // adjust path
 import 'providers/remitter_provider.dart';
+import 'providers/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BeneficiaryProvider()),
         ChangeNotifierProvider(create: (_) => WalletProvider()),
         ChangeNotifierProvider(create: (_) => RemitterProvider()), // add this
+        ChangeNotifierProvider(create: (_) => AuthProvider()), 
 
       ],
       child: MaterialApp(

@@ -6,8 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:my_app/providers/wallet_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/api_config.dart';
-import '../layout/UserHomeScreen.dart';
+import '../../config/api_config.dart';
+import '../../layout/UserHomeScreen.dart';
 import 'package:my_app/providers/aeps_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,6 +245,8 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (token != null && token != 'null' && token.isNotEmpty) {
         await _storage.write(key: 'jwt_token', value: token);
+        await _storage.write(key: 'access_token', value: token);   // ✅ ADD THIS
+
         final prefs = await SharedPreferences.getInstance();
 
         String? userId, name, phone;

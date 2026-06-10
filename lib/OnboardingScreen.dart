@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
+import 'screens/account/login_screen.dart';
+import 'screens/account/register_screen.dart';
 
 // ── Neofyn Bharath Brand Colors ──────────────────────────────────────────────
 class NeofynColors {

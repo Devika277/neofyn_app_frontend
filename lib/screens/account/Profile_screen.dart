@@ -1,5 +1,8 @@
+// lib/screens/profile_page.dart
 import 'package:flutter/material.dart';
-
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../screens/account/set_tpin_screen.dart'; // adjust path as needed
 
 class ProfilePage extends StatelessWidget {
   final VoidCallback onLogout;
@@ -8,6 +11,10 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final user = authProvider.user;
+    final hasTpin = user?.tpinSet ?? false;
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -82,13 +89,23 @@ class ProfilePage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        "Premium User",
-                        style: TextStyle(
-                          color: const Color(0xFF00FF9D),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline,
+                            size: 14,
+                            color: hasTpin ? const Color(0xFF00FF9D) : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            hasTpin ? "TPIN Set" : "TPIN Not Set",
+                            style: TextStyle(
+                              color: hasTpin ? const Color(0xFF00FF9D) : Colors.grey,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -106,10 +123,46 @@ class ProfilePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          _settingItem(Icons.lock_rounded, "Security", Icons.chevron_right_rounded),
-          _settingItem(Icons.notifications_rounded, "Notifications", Icons.chevron_right_rounded),
-          _settingItem(Icons.language_rounded, "Language", Icons.chevron_right_rounded),
-          _settingItem(Icons.help_rounded, "Help Center", Icons.chevron_right_rounded),
+          _settingItem(
+            context,
+            Icons.lock_rounded,
+            "Security",
+            Icons.chevron_right_rounded,
+            onTap: () {
+              // Navigate to Set/Change TPIN screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SetTPINScreen()),
+              );
+            },
+          ),
+          _settingItem(
+            context,
+            Icons.notifications_rounded,
+            "Notifications",
+            Icons.chevron_right_rounded,
+            onTap: () {
+              // TODO: notifications settings
+            },
+          ),
+          _settingItem(
+            context,
+            Icons.language_rounded,
+            "Language",
+            Icons.chevron_right_rounded,
+            onTap: () {
+              // TODO: language selection
+            },
+          ),
+          _settingItem(
+            context,
+            Icons.help_rounded,
+            "Help Center",
+            Icons.chevron_right_rounded,
+            onTap: () {
+              // TODO: help center
+            },
+          ),
           const SizedBox(height: 40),
           Center(
             child: TextButton(
@@ -144,7 +197,13 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _settingItem(IconData icon, String title, IconData trailingIcon) {
+  Widget _settingItem(
+    BuildContext context,
+    IconData icon,
+    String title,
+    IconData trailingIcon, {
+    required VoidCallback onTap,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -159,15 +218,12 @@ class ProfilePage extends StatelessWidget {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
         ),
         trailing: Icon(trailingIcon, color: Colors.grey),
-        onTap: () {},
+        onTap: onTap,
       ),
     );
   }
 
   void _showLogoutDialog(BuildContext context) {
-    // Same logout dialog as in HomeDashboardContent
-    // Can be refactored to a shared component
-    // For now, using simplified version
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
