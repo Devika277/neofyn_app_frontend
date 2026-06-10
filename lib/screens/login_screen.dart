@@ -887,7 +887,7 @@ class _LoginScreenState extends State<LoginScreen> {
           border: Border.all(color: AppColors.primary.withOpacity(0.25)),
         ),
         child: const Text(
-          'Smart Banking Solutions',
+          'Smart Banking Solution',
           style: TextStyle(
             fontSize: 11,
             color: Colors.white70,
