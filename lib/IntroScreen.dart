@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:my_app/screens/register_screen.dart';
-import 'screens/login_screen.dart';
+import 'package:my_app/screens/account/register_screen.dart';
+import 'screens/account/login_screen.dart';
 
 // ── Neofyn Brand Colors - Green Theme ────────────────────────────────────────
 class NeofynColors {
