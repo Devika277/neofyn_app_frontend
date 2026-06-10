@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/mpin_service.dart';
-import '../layout/UserHomeScreen.dart';
+import '../../services/mpin_service.dart';
+import '../../layout/UserHomeScreen.dart';
 
 class MpinVerifyScreen extends StatefulWidget {
   final String userId;

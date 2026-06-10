@@ -11,8 +11,8 @@ import 'package:my_app/providers/wallet_provider.dart';
 import 'package:my_app/providers/aeps_provider.dart';
 import 'register_screen.dart';
 import '../../services/mpin_service.dart';
-import '../set_mpin_screen.dart';
-import '../mpin_verify_screen.dart';
+import 'set_mpin_screen.dart';
+import 'mpin_verify_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 //  NEOFYN FIN TECH BRAND TOKENS - Clean Professional UI
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/mpin_service.dart';
+import '../../services/mpin_service.dart';
 import 'mpin_verify_screen.dart';
 
 class SetMpinScreen extends StatefulWidget {
