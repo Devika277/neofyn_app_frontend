@@ -29,7 +29,7 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
   @override
   void initState() {
     super.initState();
-    _mpinFocusNode.requestFocus();
+    // _mpinFocusNode.requestFocus();
   }
 
   @override
@@ -225,9 +225,9 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
           child: TextField(
             controller: _mpinController,
             focusNode: _mpinFocusNode,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.none,
             maxLength: 6,
-            autofocus: true,
+            autofocus: false,
             showCursor: false,
             style: const TextStyle(fontSize: 1, color: Colors.transparent),
             decoration: const InputDecoration(

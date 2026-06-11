@@ -208,8 +208,11 @@ class _SetMpinScreenState extends State<SetMpinScreen> {
             controller: controller,
             focusNode: focusNode,
             obscureText: !_isMpinVisible,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.none,
             maxLength: 6,
+            showCursor: false,
+            readOnly: true,
+            enableInteractiveSelection: false,
             style: const TextStyle(
               fontSize: 24,
               color: Colors.white,

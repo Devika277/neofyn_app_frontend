@@ -7,7 +7,7 @@ class MpinService {
   static const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
   // ✅ Use the SAME key as LoginScreen
   static const String _tokenKey = 'jwt_token';
-  static const String _mpinSetKey = 'mpin_set_local';
+  // static const String _mpinSetKey = 'mpin_set_local';
 
   static final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
@@ -40,7 +40,7 @@ class MpinService {
     }
 
     // Cache locally that MPIN is set
-    await _storage.write(key: _mpinSetKey, value: 'true');
+    // await _storage.write(key: _mpinSetKey, value: 'true');
   }
 
   // Verify MPIN
@@ -102,6 +102,6 @@ class MpinService {
 
   // Clear local MPIN flags (call on logout)
   static Future<void> clearMpinStatus() async {
-    await _storage.delete(key: _mpinSetKey);
+    // await _storage.delete(key: _mpinSetKey);
   }
 }
