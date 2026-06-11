@@ -6,8 +6,8 @@ import 'services/storage_service.dart';
 import 'services/session_service.dart';
 import 'services/mpin_service.dart';
 import 'screens/account/login_screen.dart';
-import 'screens/set_mpin_screen.dart';
-import 'screens/mpin_verify_screen.dart';
+import 'screens/account/set_mpin_screen.dart';
+import 'screens/account/mpin_verify_screen.dart';
 
 import 'package:provider/provider.dart';
 
