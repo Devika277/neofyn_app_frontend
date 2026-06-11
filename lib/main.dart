@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:my_app/debug_overlay.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'IntroScreen.dart';
 import 'services/storage_service.dart';
 import 'services/session_service.dart';
@@ -107,43 +108,48 @@ class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver {
     );
   }
 
+  // In main.dart, find this method and replace it:
   Future<Widget> _getInitialScreen() async {
+    final prefs = await SharedPreferences.getInstance(); // ✅ Add this
+
+    // ✅ Check if intro has been shown before
+    final hasSeenIntro = prefs.getBool('has_seen_intro') ?? false;
+
     // Check if user is logged in
     final isLoggedIn = await SessionService.isLoggedIn();
 
-    if (!isLoggedIn) {
-      // First time or logged out - show intro
+    // ✅ FIRST TIME - Show intro and mark as seen
+    if (!hasSeenIntro) {
+      await prefs.setBool('has_seen_intro', true); // Mark intro as seen
       return const IntroScreen();
+    }
+
+    // ✅ RETURNING USER - Skip intro
+    if (!isLoggedIn) {
+      return const LoginScreen(); // Direct to login
     }
 
     // Check if session is still valid (24 hours)
     final isSessionValid = await SessionService.isSessionValid();
 
     if (!isSessionValid) {
-      // Session expired - clear and show login
       await SessionService.clearSession();
       return const LoginScreen();
     }
 
-    // Session valid - check if MPIN needs re-verification (5 min idle)
+    // Session valid - check MPIN
     final needsMpin = await SessionService.needsMpinVerification();
     final isMpinSet = await MpinService.isMpinSet();
     final token = await SessionService.getToken();
     final userId = await SessionService.getUserId();
 
     if (needsMpin && isMpinSet && token != null && userId != null) {
-      // Need MPIN re-verification
       return MpinVerifyScreen(userId: userId, token: token);
     } else if (!isMpinSet && token != null && userId != null) {
-      // MPIN not set
       return SetMpinScreen(userId: userId, token: token);
-    } else if (!needsMpin && isMpinSet) {
-      // Session valid, MPIN set, within 5 minutes - go to home directly
-      // Import UserHomeScreen if needed
-      // return const UserHomeScreen();
     }
 
     // Default fallback
-    return const IntroScreen();
+    return const LoginScreen();
   }
 }
