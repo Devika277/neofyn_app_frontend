@@ -10,7 +10,7 @@ import '../../layout/UserHomeScreen.dart';
 import 'package:my_app/providers/wallet_provider.dart';
 import 'package:my_app/providers/aeps_provider.dart';
 import 'register_screen.dart';
-import '../services/mpin_service.dart';
+import '../../services/mpin_service.dart';
 import 'set_mpin_screen.dart';
 import 'mpin_verify_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,10 +227,8 @@ class _LoginScreenState extends State<LoginScreen> {
           token = data['accessToken'];
         }
 
-        if (token != null && token.isNotEmpty) {
-          await _storage.write(key: 'jwt_token', value: token);
-          await _storage.write(key: 'access_token', value: token);   // ✅ ADD THIS
-
+      if (token != null && token != 'null' && token.isNotEmpty) {
+        await _storage.write(key: 'jwt_token', value: token);
         final prefs = await SharedPreferences.getInstance();
 
           String? userId, name, phone;
