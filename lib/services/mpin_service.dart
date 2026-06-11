@@ -4,13 +4,18 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MpinService {
-  static const String _baseUrl = 'https://neofyn-app-backend.onrender.com'; // Replace with your backend URL
-  static const String _tokenKey = 'access_token';
-  static const String _mpinSetKey = 'mpin_set_local'; // optional local cache
+  static const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
+  // ✅ Use the SAME key as LoginScreen
+  static const String _tokenKey = 'jwt_token';
+  static const String _mpinSetKey = 'mpin_set_local';
 
   static final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  // Get stored JWT token
+  // ✅ Optional: store token after login (already done in LoginScreen, but kept for completeness)
+  static Future<void> storeToken(String token) async {
+    await _storage.write(key: _tokenKey, value: token);
+  }
+
   static Future<String?> _getToken() async {
     return await _storage.read(key: _tokenKey);
   }
@@ -30,15 +35,15 @@ class MpinService {
     );
 
     if (response.statusCode != 200) {
-      final error = jsonDecode(response.body)['error'] ?? 'Failed to set MPIN';
-      throw Exception(error);
+      final dynamic error = jsonDecode(response.body)['error'];
+      throw Exception(error ?? 'Failed to set MPIN');
     }
 
-    // Optionally cache that MPIN is set locally
+    // Cache locally that MPIN is set
     await _storage.write(key: _mpinSetKey, value: 'true');
   }
 
-  // Verify MPIN (e.g., during login or before sensitive action)
+  // Verify MPIN
   static Future<bool> verifyMpin(String mpin) async {
     final token = await _getToken();
     if (token == null) throw Exception('User not authenticated');
@@ -52,16 +57,12 @@ class MpinService {
       body: jsonEncode({'mpin': mpin}),
     );
 
-    if (response.statusCode == 200) {
-      return true;
-    } else if (response.statusCode == 401) {
-      return false; // invalid MPIN
-    } else {
-      throw Exception('Verification failed');
-    }
+    if (response.statusCode == 200) return true;
+    if (response.statusCode == 401) return false;
+    throw Exception('Verification failed');
   }
 
-  // Change MPIN (requires current MPIN)
+  // Change MPIN
   static Future<void> changeMpin(String currentMpin, String newMpin) async {
     final token = await _getToken();
     if (token == null) throw Exception('User not authenticated');
@@ -84,20 +85,20 @@ class MpinService {
     }
   }
 
-  // Check if MPIN is already set (calls backend or uses local cache)
+  // Check if MPIN is already set (uses local cache + optionally backend)
   static Future<bool> isMpinSet() async {
-    // First check local cache for speed
-    final local = await _storage.read(key: _mpinSetKey);
-    if (local == 'true') return true;
-
-    // Otherwise verify with backend (if needed)
-    final token = await _getToken();
-    if (token == null) return false;
-
-    // You could add a dedicated endpoint like /api/auth/mpin-status
-    // For now, return false and let the user attempt setMpin
-    return false;
+  final token = await _getToken();
+  if (token == null) return false;
+  final response = await http.get(
+    Uri.parse('$_baseUrl/api/auth/mpin-status'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    return data['mpinSet'] == true;
   }
+  return false;
+}
 
   // Clear local MPIN flags (call on logout)
   static Future<void> clearMpinStatus() async {

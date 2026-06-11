@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/mpin_service.dart';
-import 'mpin_verify_screen.dart';
+import 'mpin_verify_screen.dart'; // adjust path to your MPIN verify screen
+
 
 class SetMpinScreen extends StatefulWidget {
+  // Parameters kept only if needed elsewhere – otherwise you can remove them.
   final String userId;
   final String token;
 
@@ -48,7 +50,6 @@ class _SetMpinScreenState extends State<SetMpinScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-
                   // Shield Icon
                   Container(
                     width: 80,
@@ -73,7 +74,6 @@ class _SetMpinScreenState extends State<SetMpinScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   const Text(
                     'Set Your MPIN',
                     style: TextStyle(
@@ -241,7 +241,6 @@ class _SetMpinScreenState extends State<SetMpinScreen> {
                 },
               ),
             ),
-            // ✅ Fixed: Use proper void callback
             onChanged: (value) {
               setState(() => _errorMessage = null);
             },
@@ -293,54 +292,46 @@ class _SetMpinScreenState extends State<SetMpinScreen> {
     );
   }
 
-  // ✅ Fixed: Made this a proper VoidCallback method
   Future<void> _setMpin() async {
     final mpin = _mpinController.text.trim();
     final confirmMpin = _confirmMpinController.text.trim();
 
+    // Basic front‑end validation for better UX
     if (mpin.isEmpty || confirmMpin.isEmpty) {
       setState(() => _errorMessage = 'Please fill in both fields');
       return;
     }
-
     if (mpin.length != 6) {
       setState(() => _errorMessage = 'MPIN must be 6 digits');
       return;
     }
-
     if (mpin != confirmMpin) {
       setState(() => _errorMessage = 'MPINs do not match');
       return;
     }
 
-    // Check for common/easy MPINs
-    if (mpin == '000000' ||
-        mpin == '123456' ||
-        mpin == '111111' ||
-        mpin == '222222') {
-      // ✅ Updated common PINs
-      setState(() => _errorMessage = 'Please choose a more secure MPIN');
-      return;
-    }
-
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
+      // Call the service – it reads the token from secure storage automatically
       await MpinService.setMpin(mpin);
       HapticFeedback.heavyImpact();
 
       if (mounted) {
+        // After successful set, go directly to home screen.
+        // (No need to verify again; the user will verify on next login.)
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) =>
-                MpinVerifyScreen(userId: widget.userId, token: widget.token),
-          ),
+          MaterialPageRoute(builder: (_) => const MpinVerifyScreen(userId: '', token: '',)),
         );
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to set MPIN. Please try again.';
+        // Display the actual error message from the service/backend
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }

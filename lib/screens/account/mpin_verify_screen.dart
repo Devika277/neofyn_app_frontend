@@ -4,14 +4,12 @@ import '../../services/mpin_service.dart';
 import '../../layout/UserHomeScreen.dart';
 
 class MpinVerifyScreen extends StatefulWidget {
-  final String userId;
-  final String token;
+  // Parameters kept for compatibility with existing navigation calls,
+  // but they are not used because MpinService reads token from storage.
+  final String? userId;
+  final String? token;
 
-  const MpinVerifyScreen({
-    super.key,
-    required this.userId,
-    required this.token,
-  });
+  const MpinVerifyScreen({super.key, this.userId, this.token});
 
   @override
   State<MpinVerifyScreen> createState() => _MpinVerifyScreenState();
@@ -59,7 +57,6 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 40),
-
                   // Lock Icon
                   Container(
                     width: 80,
@@ -84,7 +81,6 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   const Text(
                     'Enter MPIN',
                     style: TextStyle(
@@ -409,10 +405,12 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
     if (_isLocked) return;
 
     final mpin = _mpinController.text.trim();
-
     if (mpin.length != 6) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final isValid = await MpinService.verifyMpin(mpin);
@@ -420,12 +418,14 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
       if (isValid) {
         HapticFeedback.heavyImpact();
         if (mounted) {
+          // Navigate directly to home screen on success
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const UserHomeScreen()),
           );
         }
       } else {
+        // Invalid MPIN – backend returned 401
         setState(() {
           _attemptsLeft--;
           _errorMessage = 'Invalid MPIN. $_attemptsLeft attempts remaining.';
@@ -438,8 +438,10 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
         }
       }
     } catch (e) {
+      // Show the actual error message from the service (e.g., "MPIN not set", network error)
+      String errorMsg = e.toString().replaceFirst('Exception: ', '');
       setState(() {
-        _errorMessage = 'Error verifying MPIN. Please try again.';
+        _errorMessage = errorMsg;
         _isLoading = false;
       });
     }
@@ -452,7 +454,6 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
       _errorMessage = 'Too many attempts. Please wait 30 seconds.';
     });
 
-    // Countdown timer
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted) return false;
@@ -492,7 +493,8 @@ class _MpinVerifyScreenState extends State<MpinVerifyScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // Navigate back to login
+              // Clear stored MPIN status and go to login
+              MpinService.clearMpinStatus();
               Navigator.pushReplacementNamed(context, '/login');
             },
             child: const Text(
