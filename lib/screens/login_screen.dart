@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:my_app/services/session_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
@@ -250,6 +251,8 @@ class _LoginScreenState extends State<LoginScreen> {
             // ✅ Create local non-nullable variables
             final String finalUserId = userId;
             final String finalToken = token;
+
+            await SessionService.saveLoginSession(finalToken, finalUserId);
 
             await prefs.setString('userId', finalUserId);
             await prefs.setString('name', name ?? '');
