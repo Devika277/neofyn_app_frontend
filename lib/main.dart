@@ -117,39 +117,65 @@ class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver {
 
     // Check if user is logged in
     final isLoggedIn = await SessionService.isLoggedIn();
-
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🔍 APP OPENED');
+    print('🔍 hasSeenIntro: $hasSeenIntro');
+    print('🔍 isLoggedIn: $isLoggedIn');
     // ✅ FIRST TIME - Show intro and mark as seen
     if (!hasSeenIntro) {
+      print('🔍 → Showing INTRO');
+
       await prefs.setBool('has_seen_intro', true); // Mark intro as seen
       return const IntroScreen();
     }
 
     // ✅ RETURNING USER - Skip intro
     if (!isLoggedIn) {
+      print('🔍 → Showing LOGIN (not logged in)');
       return const LoginScreen(); // Direct to login
     }
 
     // Check if session is still valid (24 hours)
     final isSessionValid = await SessionService.isSessionValid();
-
+    print('🔍 isSessionValid: $isSessionValid');
     if (!isSessionValid) {
+      print('🔍 → Session expired, showing LOGIN');
       await SessionService.clearSession();
       return const LoginScreen();
     }
 
     // Session valid - check MPIN
+    // Session valid - check MPIN
     final needsMpin = await SessionService.needsMpinVerification();
-    final isMpinSet = await MpinService.isMpinSet();
+
+    bool isMpinSet = false;
+    try {
+      isMpinSet = await MpinService.isMpinSet();
+      print('🔍 isMpinSet: $isMpinSet');
+    } catch (e) {
+      print('🔍 isMpinSet ERROR: $e');
+      isMpinSet = false;
+    }
+
     final token = await SessionService.getToken();
     final userId = await SessionService.getUserId();
 
-    if (needsMpin && isMpinSet && token != null && userId != null) {
-      return MpinVerifyScreen(userId: userId, token: token);
-    } else if (!isMpinSet && token != null && userId != null) {
-      return SetMpinScreen(userId: userId, token: token);
+    print('🔍 needsMpin: $needsMpin');
+    print('🔍 token: ${token != null ? "YES" : "NO"}');
+    print('🔍 userId: ${userId != null ? "YES" : "NO"}');
+
+// ✅ FIXED LOGIC
+    if (token != null && userId != null) {
+      if (isMpinSet) {
+        print('🔍 → Showing MPIN VERIFY');
+        return MpinVerifyScreen(userId: userId, token: token);
+      } else {
+        print('🔍 → Showing SET MPIN');
+        return SetMpinScreen(userId: userId, token: token);
+      }
     }
 
-    // Default fallback
+    print('🔍 → Fallback to LOGIN (no token/userId)');
     return const LoginScreen();
   }
 }
