@@ -54,9 +54,9 @@ class MyApp extends StatelessWidget {
           useMaterial3: true,
         ),
         home: const AppRouter(), // ✅ Changed from IntroScreen to AppRouter
-        builder: (context, child) {
+        /*builder: (context, child) {
           return DebugOverlay(child: child ?? const SizedBox.shrink());
-        },
+        },*/
       ),
     );
   }
