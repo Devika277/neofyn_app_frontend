@@ -34,7 +34,6 @@ class _RechargeDetailsScreenState extends State<RechargeDetailsScreen> {
   OperatorItem? _selectedOperator;
   final String _serviceType = 'MBL';
 
-  // Custom amount input (replaces static plan list)
   final TextEditingController _amountController = TextEditingController();
   final FocusNode _amountFocusNode = FocusNode();
 
@@ -51,24 +50,22 @@ class _RechargeDetailsScreenState extends State<RechargeDetailsScreen> {
     super.dispose();
   }
 
-Future<String?> _getValidToken() async {
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('accessToken');
-  if (token == null || token.isEmpty) {
-    if (mounted) {
-      _showSnack('Session expired. Please login again.', isError: true);
-Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (context) => LoginScreen(),
-  ),
-);    }
-    return null;
+  Future<String?> _getValidToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('accessToken');
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        _showSnack('Session expired. Please login again.', isError: true);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => LoginScreen()),
+        );
+      }
+      return null;
+    }
+    return token;
   }
-  return token;
-}
 
-  // ── Fetch operators from backend (no fallback) ───────────────────────────
   Future<void> _fetchOperators() async {
     setState(() {
       _loadingOperators = true;
@@ -76,15 +73,14 @@ Navigator.pushReplacement(
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
       final token = await _getValidToken();
-if (token == null) {
-  setState(() {
-    _loadingOperators = false;
-    _errorMessage = 'Session expired. Please login again.';
-  });
-  return;
-}
+      if (token == null) {
+        setState(() {
+          _loadingOperators = false;
+          _errorMessage = 'Session expired. Please login again.';
+        });
+        return;
+      }
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/recharge/operators'),
@@ -97,7 +93,6 @@ if (token == null) {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> body = jsonDecode(response.body);
-
         if (body['success'] == true && body['data'] is List) {
           final List<dynamic> raw = body['data'];
           final fetched = raw
@@ -132,7 +127,6 @@ if (token == null) {
     }
   }
 
-  // ── Get device location ───────────────────────────────────────────────────
   Future<Map<String, String>> _getLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -153,7 +147,6 @@ if (token == null) {
         desiredAccuracy: LocationAccuracy.medium,
         timeLimit: const Duration(seconds: 5),
       );
-
       return {
         'lat': position.latitude.toString(),
         'long': position.longitude.toString(),
@@ -163,7 +156,6 @@ if (token == null) {
     }
   }
 
-  // ── Process recharge (using user‑entered amount) ──────────────────────────
   Future<void> _processRecharge() async {
     if (_selectedOperator == null) {
       _showSnack('Please select an operator', isError: true);
@@ -185,28 +177,24 @@ if (token == null) {
     setState(() => _processingPayment = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
       final token = await _getValidToken();
-if (token == null) {
-  _showSnack('Session expired. Please login again.', isError: true);
-  setState(() => _processingPayment = false);
-  return;
-}
+      if (token == null) {
+        _showSnack('Session expired. Please login again.', isError: true);
+        setState(() => _processingPayment = false);
+        return;
+      }
 
       final location = await _getLocation();
-      final merchantRefId = const Uuid().v4();
+      final idempotencyKey = const Uuid().v4();
 
       final requestBody = {
         'mobile': widget.mobile,
-        'operatorCode': _selectedOperator!.code,
+        'operator': _selectedOperator!.code,
         'serviceType': _serviceType,
         'amount': amount,
-        'merchantRefId': merchantRefId,
+        'idempotencyKey': idempotencyKey,
         'lat': location['lat'],
         'long': location['long'],
-        'udf1': '',
-        'udf2': '',
-        'udf3': '',
       };
 
       debugPrint('📡 Recharge request: ${jsonEncode(requestBody)}');
@@ -222,41 +210,33 @@ if (token == null) {
 
       final Map<String, dynamic> respBody = jsonDecode(response.body);
       debugPrint('📩 Recharge response: ${jsonEncode(respBody)}');
-      debugPrint('🔍 transactionId from data: ${respBody['data']?['transactionId']}');
-
 
       if (respBody['success'] == true) {
         final data = respBody['data'] as Map<String, dynamic>? ?? {};
-        final statusCode = data['txnStatusCode']?.toString() ?? '';
         final int? transactionId = data['transactionId'];
-        final double amount = (data['amount'] ?? double.tryParse(_amountController.text) ?? 0).toDouble();
-        final String mobile = data['mobile'] ?? widget.mobile;
-        final isQueued = statusCode == '004';
-   
-    if (transactionId != null) {
-        // Navigate to receipt screen
-        if (mounted) {
-            Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => RechargeReceiptScreen(transactionId: transactionId)),
-            );
-        }
-    } else {
-        _showSnack(
-          isQueued
-              ? 'Recharge queued! ₹$amount for ${widget.mobile}'
-              : 'Recharge successful! ₹$amount for ${widget.mobile}',
-          isError: false,
-        );
 
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) Navigator.pop(context);
-      } 
+        if (transactionId != null && transactionId > 0) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => RechargeReceiptScreen(transactionId: transactionId),
+              ),
+            );
+          }
+        } else {
+          // Fallback when transactionId is missing (should not happen)
+          _showSnack(
+            'Recharge ${data['refunded'] == true ? 'failed' : 'processed'}! '
+            '₹${data['amount'] ?? amount} for ${widget.mobile}',
+            isError: data['refunded'] == true,
+          );
+          await Future.delayed(const Duration(seconds: 2));
+          if (mounted) Navigator.pop(context);
+        }
       } else {
         final errorCode = respBody['errorCode']?.toString() ?? '';
         String userMessage;
-
         switch (errorCode) {
           case 'INSUFFICIENT_BALANCE':
             userMessage = 'Insufficient wallet balance. Please add money first.';
@@ -268,7 +248,6 @@ if (token == null) {
             userMessage = respBody['message']?.toString() ??
                 'Recharge failed. Please try again.';
         }
-
         _showSnack(userMessage, isError: true);
       }
     } catch (e) {
@@ -292,7 +271,6 @@ if (token == null) {
     );
   }
 
-  // ── Build UI ──────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -337,7 +315,6 @@ if (token == null) {
       );
     }
 
-    // Operators loaded successfully – show recharge form
     return Column(
       children: [
         _buildMobileHeader(),
