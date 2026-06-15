@@ -1029,7 +1029,7 @@ class AepsService {
 
   AepsService() {
     _dio = Dio(BaseOptions(
-      baseUrl: 'https://neofyn-app-backend.onrender.com/api',
+      baseUrl: 'https://api.myneofyn.com/api',
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
     ));

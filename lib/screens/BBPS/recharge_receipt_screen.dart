@@ -23,7 +23,7 @@ class _RechargeReceiptScreenState extends State<RechargeReceiptScreen> {
 
 Future<void> _fetchReceipt() async {
   try {
-    final baseUrl = 'https://neofyn-app-backend.onrender.com'; // your ngrok URL
+    final baseUrl = 'https://api.myneofyn.com'; // your ngrok URL
     final service = RechargeService(baseUrl: baseUrl); // ✅ named parameter provided
     final response = await service.getReceipt(widget.transactionId);
     setState(() {

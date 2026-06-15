@@ -35,7 +35,7 @@ class _SenderRegistrationFormState extends State<SenderRegistrationForm> {
   @override
   void initState() {
     super.initState();
-    _dmtService = DMTService('https://neofyn-app-backend.onrender.com');
+    _dmtService = DMTService('https://api.myneofyn.com');
     _loadAgentCodeAndProceed();
   }
 

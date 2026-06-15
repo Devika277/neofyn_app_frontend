@@ -8,7 +8,7 @@ class MatmService {
   static const MethodChannel _channel = MethodChannel('com.example.my_app/matm');
 
   // ── Replace with your real base URL or load from env ──────────────────────
-  static const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
+  static const String _baseUrl = 'https://api.myneofyn.com';
 
   // ── Fetch merchantId from AEPS backend ────────────────────────────────────
   static Future<String> _fetchMerchantId(String phone) async {
