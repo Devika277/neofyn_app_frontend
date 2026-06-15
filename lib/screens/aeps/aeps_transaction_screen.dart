@@ -2,10 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../providers/aeps_provider.dart';
+import '../../providers/aeps_provider.dart';   // ✅ uses all models from provider
 import '../../services/AEPS/location_service.dart';
 import 'biometric_service.dart';
-import '../../models/aeps_models.dart';
+import '../../services/AEPS/aeps_service.dart' as aeps;
+
+
+// No import of aeps_models.dart – provider already defines needed types
 
 class AepsTransactionScreen extends StatefulWidget {
   final String serviceType; // 'CW', 'BE', 'MS', 'CD', 'AP'
@@ -31,11 +34,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
 
   final LocationService _locationService = LocationService();
 
-  // Helper: does this service require an amount?
-  bool get _isAmountRequired =>
-      ['CW', 'CD', 'AP'].contains(widget.serviceType);
+  bool get _isAmountRequired => ['CW', 'CD', 'AP'].contains(widget.serviceType);
 
-  // Helper: get service display title
   String _getServiceTitle() {
     switch (widget.serviceType) {
       case 'CW': return 'Cash Withdrawal';
@@ -103,17 +103,14 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   }
 
   Future<void> _processTransaction() async {
-    // Validate bank selection
     if (_selectedBankIIN == null) {
       _showError('Please select a bank');
       return;
     }
-    // Validate Aadhaar
     if (_aadhaarController.text.length != 12) {
       _showError('Please enter valid 12-digit Aadhaar number');
       return;
     }
-    // Validate amount for services that require it
     if (_isAmountRequired) {
       final amount = double.tryParse(_amountController.text) ?? 0;
       if (amount < 100 || amount > 10000) {
@@ -121,12 +118,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         return;
       }
     }
-    // Validate biometric
     if (!_isBiometricCaptured || _pidData == null) {
       _showError('Please capture biometric first');
       return;
     }
-    // Validate location
     if (_location == null) {
       _showError('Location required. Please enable GPS.');
       await _getLocation();
@@ -139,6 +134,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       _showError('User phone not found');
       return;
     }
+
+    // ✅ Use provider's fetchMerchantByPhone (now implemented)
     await provider.fetchMerchantByPhone(userPhone);
     final merchantId = provider.realMerchantId;
     if (merchantId == null) {
@@ -305,7 +302,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                   const SizedBox(height: 16),
                   _buildProcessButton(canProceed && amountValid),
                   const SizedBox(height: 16),
-                  if (_isAmountRequired) _buildInfoNote(), // show note only for financial txns
+                  if (_isAmountRequired) _buildInfoNote(),
                 ],
               ),
             ),
@@ -332,11 +329,12 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     );
   }
 
-  Widget _buildBankDropdown(List<Bank> banks) {
-    final validValue = _selectedBankIIN != null && 
-        banks.any((b) => b.code == _selectedBankIIN) 
-        ? _selectedBankIIN 
-        : null;
+  Widget _buildBankDropdown(List<aeps.Bank> banks) {
+  final validValue = _selectedBankIIN != null && 
+      banks.any((b) => b.code == _selectedBankIIN) 
+      ? _selectedBankIIN 
+      : null;
+
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -346,36 +344,36 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         border: Border.all(color: Colors.grey[800]!),
       ),
       child: DropdownButton<String>(
-        value: validValue,
-        isExpanded: true,
-        hint: const Text('Select Bank', style: TextStyle(color: Colors.grey)),
-        dropdownColor: Colors.grey[900],
-        underline: const SizedBox(),
-        items: banks.isEmpty
-            ? null
-            : banks.map((bank) {
-                return DropdownMenuItem<String>(
-                  value: bank.code,
-                  child: Text(
-                    bank.name,
-                    style: const TextStyle(color: Colors.white),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-        onChanged: (value) {
-          if (value == null) return;
-          final bank = banks.firstWhere((b) => b.code == value);
-          setState(() {
-            _selectedBankIIN = value;
-            _selectedBankName = bank.name;
-            _isBiometricCaptured = false;
-            _pidData = null;
-          });
-        },
-      ),
-    );
-  }
+      value: validValue,
+      isExpanded: true,
+      hint: const Text('Select Bank', style: TextStyle(color: Colors.grey)),
+      dropdownColor: Colors.grey[900],
+      underline: const SizedBox(),
+      items: banks.isEmpty
+          ? null
+          : banks.map((bank) {
+              return DropdownMenuItem<String>(
+                value: bank.code,
+                child: Text(
+                  bank.name ?? 'Unknown', // null safety
+                  style: const TextStyle(color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+      onChanged: (value) {
+        if (value == null) return;
+        final bank = banks.firstWhere((b) => b.code == value);
+        setState(() {
+          _selectedBankIIN = value;
+          _selectedBankName = bank.name ?? 'Unknown';
+          _isBiometricCaptured = false;
+          _pidData = null;
+        });
+      },
+    ),
+  );
+}
 
   Widget _buildAadhaarField() {
     return TextField(

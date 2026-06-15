@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/aeps_provider.dart';
-import '../../models/aeps_models.dart';
+// import '../../models/aeps_models.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../layout/UserHomeScreen.dart';
@@ -62,13 +62,14 @@ String? _selectedBankName;      // for display only
   @override
   void initState() {
     super.initState();
-    // Load states when screen opens
-    context.read<AepsProvider>().getStateList();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AepsProvider>().fetchStates();
+    });
     context.read<AepsProvider>().fetchBanks();   // add this
 
   }
 
-  @override
+  @override 
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
