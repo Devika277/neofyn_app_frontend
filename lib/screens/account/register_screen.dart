@@ -208,7 +208,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://neofyn-app-backend.onrender.com/api/auth/register'),
+        Uri.parse('https://api.myneofyn.com/api/auth/register'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "first_name": _firstNameCtrl.text.trim(),

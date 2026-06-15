@@ -24,7 +24,7 @@ class _SendMoneyScreenState extends State<SendMoneyScreen> {
   String? _beneAccId;
 
   // Define the baseUrl – use same as other DMT screens
-  final String _baseUrl = 'https://neofyn-app-backend.onrender.com'; // Replace with env
+  final String _baseUrl = 'https://api.myneofyn.com'; // Replace with env
 
   late DMTService _dmtService;
 

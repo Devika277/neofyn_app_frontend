@@ -211,7 +211,7 @@ class _SetMpinScreenState extends State<SetMpinScreen> {
             keyboardType: TextInputType.number,
             maxLength: 6,
             showCursor: true,
-            readOnly: true,
+            readOnly: false,
             enableInteractiveSelection: false,
             style: const TextStyle(
               fontSize: 24,

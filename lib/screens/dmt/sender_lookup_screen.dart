@@ -18,7 +18,7 @@ class _SenderLookupScreenState extends State<SenderLookupScreen> {
   late DMTService _dmtService;
   bool _isLoading = false;
   String? _error;
-  final String _baseUrl = 'https://neofyn-app-backend.onrender.com';
+  final String _baseUrl = 'https://api.myneofyn.com';
 
 
 

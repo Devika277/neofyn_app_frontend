@@ -11,7 +11,7 @@ class AuthService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   // Base URL – change to your actual backend URL
-  static const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
+  static const String _baseUrl = 'https://api.myneofyn.com';
 
   // ========== EXISTING MERCHANT METHODS ==========
 

@@ -8,7 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../screens/account/login_screen.dart';
 import 'package:my_app/screens/BBPS/recharge_receipt_screen.dart';
 
-const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
+const String _baseUrl = 'https://api.myneofyn.com';
 
 class OperatorItem {
   final String code;

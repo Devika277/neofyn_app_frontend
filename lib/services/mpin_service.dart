@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MpinService {
-  static const String _baseUrl = 'https://neofyn-app-backend.onrender.com';
+  static const String _baseUrl = 'https://api.myneofyn.com';
   // ✅ Use the SAME key as LoginScreen
   static const String _tokenKey = 'jwt_token';
   // static const String _mpinSetKey = 'mpin_set_local';
