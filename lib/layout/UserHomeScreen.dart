@@ -65,12 +65,19 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   Future<void> _loadSession() async {
     final prefs = await SharedPreferences.getInstance();
     final uid = prefs.getString('userId') ?? '';
+    final name = prefs.getString('name') ?? 'Merchant';  // ✅ ADD THIS LINE
+
     setState(() {
-      _name = prefs.getString('name') ?? 'Merchant';
+      _name = name;
       _phone = prefs.getString('phone') ?? '';
       _userId = uid.isNotEmpty ? uid : 'PN8472193';
     });
-    if (uid.isNotEmpty) _walletProvider.setUserId(uid);
+    if (uid.isNotEmpty) {
+
+      _walletProvider
+          .setUserId(uid);
+      _walletProvider.setUserName(name);
+    }
   }
 
   Future<void> _logout() async {

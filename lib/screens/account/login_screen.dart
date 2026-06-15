@@ -261,6 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
               phone ?? _phoneController.text.trim(),
             );
             await prefs.setString('accessToken', finalToken);
+            await prefs.setString('email', data['user']?['email'] ?? '');  // ✅ ADD THIS LINE
 
             final aeps = Provider.of<AepsProvider>(context, listen: false);
             aeps.setAuthDetails(

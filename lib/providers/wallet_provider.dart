@@ -12,6 +12,7 @@ class WalletProvider extends ChangeNotifier {
   WalletStats? stats;
   bool isLoading = false;
   String? _userId;   // private, set via setUserId
+  String? _userName;  // ✅ ADD THIS
 
 
   List<dynamic> ledger       = [];
@@ -26,7 +27,10 @@ class WalletProvider extends ChangeNotifier {
     WalletProvider() {
       print("WalletProvider instance created");
     }
-
+  void setUserName(String name) {
+    _userName = name;
+    notifyListeners();
+  }
 
   void setUserId(String id) {
       print("setUserId called with id: $id");
@@ -35,6 +39,7 @@ class WalletProvider extends ChangeNotifier {
     fetchAllWalletData();
   }
   String get userId => _userId ?? '';
+  String? get userName => _userName;
 
 Future<void> fetchAllWalletData() async {
   if (_userId == null) {
@@ -133,5 +138,5 @@ Future<void> fetchAllWalletData() async {
 
   double get totalBalance => (mainWallet?.balance ?? 0) + (aepsWallet?.balance ?? 0);
 
-  String? get userName => null;
+  // String? get userName => null;
 }
