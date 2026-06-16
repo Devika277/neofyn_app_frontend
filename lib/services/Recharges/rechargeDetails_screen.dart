@@ -8,6 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import '../../screens/account/login_screen.dart';
 import 'package:my_app/screens/BBPS/recharge_receipt_screen.dart';
 
+import '../api_logger.dart';
+
 const String _baseUrl = 'https://api.myneofyn.com';
 
 class OperatorItem {
@@ -82,7 +84,7 @@ class _RechargeDetailsScreenState extends State<RechargeDetailsScreen> {
         return;
       }
 
-      final response = await http.post(
+      final response = await LoggedHttpClient.post(
         Uri.parse('$_baseUrl/api/recharge/operators'),
         headers: {
           'Content-Type': 'application/json',
@@ -199,7 +201,7 @@ class _RechargeDetailsScreenState extends State<RechargeDetailsScreen> {
 
       debugPrint('📡 Recharge request: ${jsonEncode(requestBody)}');
 
-      final response = await http.post(
+      final response = await LoggedHttpClient.post(
         Uri.parse('$_baseUrl/api/recharge'),
         headers: {
           'Content-Type': 'application/json',

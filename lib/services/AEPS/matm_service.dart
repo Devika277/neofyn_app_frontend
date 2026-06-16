@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import '../api_logger.dart';
+
 class MatmService {
   static const MethodChannel _channel = MethodChannel('com.example.my_app/matm');
 
@@ -13,7 +15,7 @@ class MatmService {
   // ── Fetch merchantId from AEPS backend ────────────────────────────────────
   static Future<String> _fetchMerchantId(String phone) async {
     final uri = Uri.parse('$_baseUrl/api/aeps/merchant/by-phone?phone=$phone');
-    final res = await http.get(uri, headers: {'Content-Type': 'application/json'});
+    final res = await LoggedHttpClient.get(uri, headers: {'Content-Type': 'application/json'});
 
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body);

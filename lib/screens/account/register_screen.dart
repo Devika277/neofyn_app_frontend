@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import '../../services/api_logger.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  NEOFYN FIN TECH BRAND TOKENS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -111,8 +113,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  final _confirmPasswordCtrl = TextEditingController();
 
   // Step 2 Controllers
   final _businessNameCtrl = TextEditingController();
@@ -127,13 +127,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _panCtrl = TextEditingController();
 
   CountryCode _selectedCountry = countryCodes.first;
-  bool _isPasswordVisible = false;
-  bool _isConfirmPasswordVisible = false;
 
   // Focus nodes
   final _phoneFocus = FocusNode();
-  final _passwordFocus = FocusNode();
-  final _confirmPasswordFocus = FocusNode();
 
   // Form keys
   final _formKey1 = GlobalKey<FormState>();
@@ -163,17 +159,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return null;
   }
 
-  String? validatePassword(String? value) {
-    if (value == null || value.isEmpty) return 'Password required';
-    if (value.length < 6) return 'Minimum 6 characters';
-    return null;
-  }
-
-  String? validateConfirmPassword(String? value) {
-    if (value != _passwordCtrl.text) return 'Passwords do not match';
-    return null;
-  }
-
   String? validatePinCode(String? value) {
     if (value == null || value.isEmpty) return 'PIN code required';
     if (!RegExp(r'^\d{6}$').hasMatch(value)) return 'Enter 6-digit PIN';
@@ -199,6 +184,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _register() async {
+    print('🔵 SUBMIT BUTTON TAPPED');
+    print('═══════════════════════════════════════════');
     if (!_agreeToTerms) {
       _showToast('Please accept Terms & Conditions', error: true);
       return;
@@ -207,15 +194,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await LoggedHttpClient.post(
         Uri.parse('https://api.myneofyn.com/api/auth/register'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "first_name": _firstNameCtrl.text.trim(),
           "last_name": _lastNameCtrl.text.trim(),
           "email": _emailCtrl.text.trim(),
-          "phone": "${_selectedCountry.code}${_phoneCtrl.text.trim()}",
-          "password": _passwordCtrl.text.trim(),
+          "phone": _phoneCtrl.text.trim(),
           "business_name": _businessNameCtrl.text.trim(),
           "business_type": _businessTypeCtrl.text.trim(),
           "business_address": _addressCtrl.text.trim(),
@@ -599,29 +585,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 14),
         _buildPhoneField(),
-        const SizedBox(height: 14),
-        _buildTextField(
-          _passwordCtrl,
-          'Password',
-          'Min. 6 characters',
-          validator: validatePassword,
-          isPassword: true,
-          obscure: !_isPasswordVisible,
-          onVisibilityToggle: () =>
-              setState(() => _isPasswordVisible = !_isPasswordVisible),
-        ),
-        const SizedBox(height: 14),
-        _buildTextField(
-          _confirmPasswordCtrl,
-          'Confirm Password',
-          'Retype password',
-          validator: validateConfirmPassword,
-          isPassword: true,
-          obscure: !_isConfirmPasswordVisible,
-          onVisibilityToggle: () => setState(
-            () => _isConfirmPasswordVisible = !_isConfirmPasswordVisible,
-          ),
-        ),
       ],
     ),
   );
@@ -1000,8 +963,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
-    _passwordCtrl.dispose();
-    _confirmPasswordCtrl.dispose();
     _businessNameCtrl.dispose();
     _businessTypeCtrl.dispose();
     _cityCtrl.dispose();
@@ -1011,8 +972,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _aadhaarCtrl.dispose();
     _panCtrl.dispose();
     _phoneFocus.dispose();
-    _passwordFocus.dispose();
-    _confirmPasswordFocus.dispose();
     super.dispose();
   }
 }

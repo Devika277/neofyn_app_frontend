@@ -55,8 +55,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
   String? _selectedDistrictCode;    // abbreviation (e.g., "MAY")
   String _selectedGender = 'M';
   String _accountType = 'Savings Account';  // default, can be dropdown
-String? _selectedBankCode;      // bank IIN to send
-String? _selectedBankName;      // for display only
+  String? _selectedBankCode;      // bank IIN to send
+  String? _selectedBankName;      // for display only
   // Location
   Map<String, double>? _location;
   bool _isGettingLocation = false;
@@ -107,7 +107,7 @@ String? _selectedBankName;      // for display only
 
   }
 
-  @override 
+  @override
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
@@ -165,7 +165,7 @@ String? _selectedBankName;      // for display only
 
     // Find selected state to get the abbreviation (already used as code)
     final selectedState = provider.states.firstWhere(
-      (s) => s.code == _selectedStateCode,
+          (s) => s.code == _selectedStateCode,
       orElse: () => throw Exception('Selected state not found'),
     );
 
@@ -573,28 +573,28 @@ String? _selectedBankName;      // for display only
                     hint: 'e.g. BARB0GEETAP',
                     validator: (v) => v!.isEmpty ? 'IFSC required' : null,
                   ),
-           // Bank dropdown using fetched list
-            if (provider.banks.isEmpty)
-              const CircularProgressIndicator()
-            else
-              DropdownButtonFormField<String>(
-                decoration: _dropdownDecoration('Bank Name *'),
-                value: _selectedBankCode,
-                hint: const Text('Select Bank', style: TextStyle(color: Colors.grey)),
-                items: provider.banks.map((bank) {
-                  return DropdownMenuItem<String>(
-                    value: bank.code,
-                    child: Text('${bank.name} (${bank.code})', style: const TextStyle(color: Colors.white)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedBankCode = value;
-                    _selectedBankName = provider.banks.firstWhere((b) => b.code == value).name;
-                  });
-                },
-                validator: (v) => v == null ? 'Please select a bank' : null,
-              ),
+                  // Bank dropdown using fetched list
+                  if (provider.banks.isEmpty)
+                    const CircularProgressIndicator()
+                  else
+                    DropdownButtonFormField<String>(
+                      decoration: _dropdownDecoration('Bank Name *'),
+                      value: _selectedBankCode,
+                      hint: const Text('Select Bank', style: TextStyle(color: Colors.grey)),
+                      items: provider.banks.map((bank) {
+                        return DropdownMenuItem<String>(
+                          value: bank.code,
+                          child: Text('${bank.name} (${bank.code})', style: const TextStyle(color: Colors.white)),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedBankCode = value;
+                          _selectedBankName = provider.banks.firstWhere((b) => b.code == value).name;
+                        });
+                      },
+                      validator: (v) => v == null ? 'Please select a bank' : null,
+                    ),
                   // Account type dropdown
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,8 +606,8 @@ String? _selectedBankName;      // for display only
                         decoration: _dropdownDecoration('Account Type'),
                         value: _accountType,
                         items: const ['Savings Account', 'Current Account']
-                          .map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(color: Colors.white))))
-                          .toList(),
+                            .map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(color: Colors.white))))
+                            .toList(),
                         onChanged: (v) => setState(() => _accountType = v!),
                       ),
                     ],
@@ -663,7 +663,7 @@ String? _selectedBankName;      // for display only
                           const SizedBox(height: 8),
                           Text(
                             'Lat: ${_location!['latitude']!.toStringAsFixed(6)}, '
-                            'Lng: ${_location!['longitude']!.toStringAsFixed(6)}',
+                                'Lng: ${_location!['longitude']!.toStringAsFixed(6)}',
                             style: const TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                         ],

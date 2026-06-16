@@ -10,6 +10,7 @@ import '../../config/api_config.dart';
 import '../../layout/UserHomeScreen.dart';
 import 'package:my_app/providers/wallet_provider.dart';
 import 'package:my_app/providers/aeps_provider.dart';
+import '../../services/api_logger.dart';
 import 'register_screen.dart';
 import '../../services/mpin_service.dart';
 import 'set_mpin_screen.dart';
@@ -204,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
     HapticFeedback.mediumImpact();
 
     try {
-      final response = await http.post(
+      final response = await LoggedHttpClient.post(
         Uri.parse('${ApiConfig.baseUrl}/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -262,6 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
               phone ?? _phoneController.text.trim(),
             );
             await prefs.setString('accessToken', finalToken);
+            await prefs.setString('email', data['user']?['email'] ?? '');  // ✅ ADD THIS LINE
 
             final aeps = Provider.of<AepsProvider>(context, listen: false);
             aeps.setAuthDetails(
@@ -427,7 +429,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setSheetState(() => _isFpLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await LoggedHttpClient.post(
         Uri.parse('${ApiConfig.baseUrl}/api/auth/forgot-password'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'phone': phone}),
@@ -480,7 +482,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setSheetState(() => _isFpLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await LoggedHttpClient.post(
         Uri.parse('${ApiConfig.baseUrl}/api/auth/reset-password'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'phone': phone, 'otp': otp, 'newPassword': newPass}),
