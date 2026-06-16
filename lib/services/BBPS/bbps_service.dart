@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../models/bbps_models.dart';
+import '../api_logger.dart';
 
 class BBPSService {
   final String baseUrl;
@@ -26,7 +27,7 @@ class BBPSService {
 
   // ── Get Categories ───────────────────────────────────────────────────────
   Future<List<BillerCategory>> getCategories() async {
-    final res = await http.get(
+    final res = await LoggedHttpClient.get(
       Uri.parse('$baseUrl/api/bbps/categories'),
       headers: _headers,
     );
@@ -49,7 +50,7 @@ class BBPSService {
 
   // ── Get States ───────────────────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> getStates() async {
-    final res = await http.get(
+    final res = await LoggedHttpClient.get(
       Uri.parse('$baseUrl/api/bbps/states'),
       headers: _headers,
     );
@@ -59,7 +60,7 @@ class BBPSService {
 
   // ── Get Billers ──────────────────────────────────────────────────────────
   Future<List<Biller>> getBillers(String categoryId) async {
-    final res = await http.get(
+    final res = await LoggedHttpClient.get(
       Uri.parse('$baseUrl/api/bbps/billers?categoryId=$categoryId'),
       headers: _headers,
     );
@@ -74,7 +75,7 @@ class BBPSService {
     required String consumerNumber,
     Map<String, dynamic>? additionalParams,
   }) async {
-    final res = await http.post(
+    final res = await LoggedHttpClient.post(
       Uri.parse('$baseUrl/api/bbps/fetch-bill'),
       headers: _headers,
       body: jsonEncode({
@@ -93,7 +94,7 @@ class BBPSService {
     required Map<String, dynamic> fetchBillResult,
     required double amount,
   }) async {
-    final res = await http.post(
+    final res = await LoggedHttpClient.post(
       Uri.parse('$baseUrl/api/bbps/pay-bill'),
       headers: _headers,
       body: jsonEncode({
@@ -108,7 +109,7 @@ class BBPSService {
 
   // ── Check Status ─────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> checkStatus(String merchantRefId) async {
-    final res = await http.get(
+    final res = await LoggedHttpClient.get(
       Uri.parse('$baseUrl/api/bbps/status/$merchantRefId'),
       headers: _headers,
     );

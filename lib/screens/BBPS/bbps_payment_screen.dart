@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../services/api_logger.dart';
  
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA — categories and billers hardcoded, no API call needed
@@ -181,7 +183,7 @@ class _BBPSPaymentScreenState extends State<BBPSPaymentScreen> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await http.post(
+      final res = await LoggedHttpClient.post(
         Uri.parse('$_base/api/bbps/fetch-bill'),
         headers: _headers,
         body: jsonEncode({
@@ -238,7 +240,7 @@ class _BBPSPaymentScreenState extends State<BBPSPaymentScreen> {
  
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await http.post(
+      final res = await LoggedHttpClient.post(
         Uri.parse('$_base/api/bbps/pay-bill'),
         headers: _headers,
         body: jsonEncode({

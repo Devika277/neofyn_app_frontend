@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api_logger.dart';
+
 class RechargeService {
   final String baseUrl;
 
@@ -13,7 +15,7 @@ class RechargeService {
     final token = prefs.getString('accessToken');
     if (token == null) throw Exception('No auth token');
 
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       Uri.parse('$baseUrl/api/recharge/receipt/$transactionId'),
       headers: {
         'Content-Type': 'application/json',

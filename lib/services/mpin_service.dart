@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'api_logger.dart';
+
 class MpinService {
   static const String _baseUrl = 'https://api.myneofyn.com';
   // ✅ Use the SAME key as LoginScreen
@@ -25,7 +27,7 @@ class MpinService {
     final token = await _getToken();
     if (token == null) throw Exception('User not authenticated');
 
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       Uri.parse('$_baseUrl/api/auth/set-mpin'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -48,7 +50,7 @@ class MpinService {
     final token = await _getToken();
     if (token == null) throw Exception('User not authenticated');
 
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       Uri.parse('$_baseUrl/api/auth/verify-mpin'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -67,7 +69,7 @@ class MpinService {
     final token = await _getToken();
     if (token == null) throw Exception('User not authenticated');
 
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       Uri.parse('$_baseUrl/api/auth/change-mpin'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -89,7 +91,7 @@ class MpinService {
   static Future<bool> isMpinSet() async {
   final token = await _getToken();
   if (token == null) return false;
-  final response = await http.get(
+  final response = await LoggedHttpClient.get(
     Uri.parse('$_baseUrl/api/auth/mpin-status'),
     headers: {'Authorization': 'Bearer $token'},
   );

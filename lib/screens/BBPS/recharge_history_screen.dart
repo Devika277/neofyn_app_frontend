@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../../services/api_logger.dart';
 import 'recharge_receipt_screen.dart'; // your receipt screen
 
 class RechargeHistoryScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
       if (token == null) throw Exception('Not logged in');
 
       final baseUrl = 'https://api.myneofyn.com'; // use your config
-      final response = await http.get(
+      final response = await LoggedHttpClient.get(
         Uri.parse('$baseUrl/api/recharge/history'),
         headers: {
           'Content-Type': 'application/json',

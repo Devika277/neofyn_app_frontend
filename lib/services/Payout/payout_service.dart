@@ -8,6 +8,8 @@ import 'package:my_app/config/api_config.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api_logger.dart';
+
 
 class PayoutService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -72,7 +74,7 @@ class PayoutService {
       
       print('Making request with token: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
       
-      final response = await http.get(
+      final response = await LoggedHttpClient.get(
         Uri.parse('${ApiConfig.baseUrl}${ApiConfig.payoutBanks}'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -101,7 +103,7 @@ class PayoutService {
   Future<Map<String, dynamic>> getPurposeList() async {
     final token = await _getValidToken();
     
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       Uri.parse('${ApiConfig.baseUrl}${ApiConfig.payoutPurposes}'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -119,7 +121,7 @@ class PayoutService {
   Future<Map<String, dynamic>> getStateList() async {
     final token = await _getValidToken();
     
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       Uri.parse('${ApiConfig.baseUrl}${ApiConfig.payoutStates}'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -137,7 +139,7 @@ class PayoutService {
   Future<Map<String, dynamic>> initiatePayout(Map<String, dynamic> payoutData) async {
     final token = await _getValidToken();
     
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       Uri.parse('${ApiConfig.baseUrl}${ApiConfig.payoutInitiate}'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -165,7 +167,7 @@ Future<Map<String, dynamic>> getTransactionStatus(String merchantRefId) async {
     
     print('Fetching status for merchantRefId: $merchantRefId');
     
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       Uri.parse('${ApiConfig.baseUrl}/api/payout/status/$merchantRefId'), // ✅ includes ID in path
       headers: {
         'Authorization': 'Bearer $token',
@@ -204,7 +206,7 @@ Future<List<dynamic>> getTransactionHistory() async {
     if (token == null) {
       throw Exception('No valid token found. Please login again.');
     }
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       Uri.parse('${ApiConfig.baseUrl}/api/payout/history'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -254,7 +256,7 @@ Future<List<Beneficiary>> getBeneficiaries() async {
   
   if (userId == null) throw Exception('User not logged in');
   
-  final response = await http.get(
+  final response = await LoggedHttpClient.get(
     Uri.parse('${ApiConfig.baseUrl}/api/beneficiary/$userId'),
     headers: {'Authorization': 'Bearer $token'},
   );
@@ -299,7 +301,7 @@ Future<Beneficiary> saveBeneficiary(Beneficiary beneficiary) async {
   print('stateName: ${beneficiary.stateName}');
   print('full body: ${json.encode(body)}');
 
-  final response = await http.post(
+  final response = await LoggedHttpClient.post(
     Uri.parse('${ApiConfig.baseUrl}/api/beneficiary'),
     headers: {
       'Authorization': 'Bearer $token',
@@ -334,7 +336,7 @@ Future<Beneficiary> saveBeneficiary(Beneficiary beneficiary) async {
 
 Future<void> deleteBeneficiary(String id) async {
   final token = await _getValidToken();
-  final response = await http.delete(
+  final response = await LoggedHttpClient.delete(
     Uri.parse('${ApiConfig.baseUrl}/api/beneficiary/$id'),
     headers: {'Authorization': 'Bearer $token'},
   );

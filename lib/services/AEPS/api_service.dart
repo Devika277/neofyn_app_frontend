@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/api_config.dart';
 import '../../models/aeps_models.dart';
+import '../api_logger.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -39,13 +40,13 @@ class ApiService {
     late http.Response response;
     try {
       if (isPost) {
-        response = await http.post(
+        response = await LoggedHttpClient.post(
           url,
           headers: headers,
           body: jsonEncode(body),
         ).timeout(const Duration(seconds: 30));
       } else {
-        response = await http.get(
+        response = await LoggedHttpClient.get(
           url,
           headers: headers,
         ).timeout(const Duration(seconds: 30));
@@ -90,7 +91,7 @@ class ApiService {
   
   // 2. Get State List
   Future<List<AepsStateModel>> getStateList() async {
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       Uri.parse('$backendBaseUrl/states'),
       headers: _defaultHeaders(),
     );
@@ -105,7 +106,7 @@ class ApiService {
 
   // 3. Get District List
   Future<List<District>> getDistrictList(String stateCode) async {
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       Uri.parse('$backendBaseUrl/districts'),
       headers: _defaultHeaders(),
       body: json.encode({'stateCode': stateCode}),
@@ -202,7 +203,7 @@ Future<TransactionResponse> aepsTransaction(
 
   final url = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.aepsTransaction}');
 
-  final response = await http.post(
+  final response = await LoggedHttpClient.post(
     url,
     headers: headers,
     body: jsonEncode(body),
@@ -242,7 +243,7 @@ Future<Map<String, dynamic>> getTransactionStatus(String txnRefId, String mercha
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('accessToken') ?? '';
  
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       Uri.parse('${ApiConfig.baseUrl}/api/aeps/transaction/status'),
       headers: {
         'Content-Type': 'application/json',
@@ -287,7 +288,7 @@ Future<Map<String, dynamic>> getAepsHistory({int limit = 20, int offset = 0}) as
       'userId': userId,                 // ✅ send as string
     });
 
-    final response = await http.get(
+    final response = await LoggedHttpClient.get(
       uri,
       headers: {
         'Content-Type': 'application/json',
@@ -311,7 +312,7 @@ Future<Map<String, dynamic>> getAepsHistory({int limit = 20, int offset = 0}) as
 }
 
 Future<Map<String, dynamic>> getMerchantByPhone(String phone) async {
-  final response = await http.get(
+  final response = await LoggedHttpClient.get(
     Uri.parse('${ApiConfig.baseUrl}/api/aeps/merchant/by-phone?phone=$phone'),
     headers: {'Content-Type': 'application/json'},
   );
