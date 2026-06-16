@@ -214,6 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final data = json.decode(response.body);
+      debugPrint('📦 Login response: $data'); // ← add this
 
       if (response.statusCode == 200) {
         String? token;
@@ -352,41 +353,57 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _fetchMerchantData(
-    String token,
-    String userId,
-    String? phone,
-  ) async {
-    try {
-      final response = await http.get(
-        Uri.parse(
-          '${ApiConfig.baseUrl}/api/aeps/merchant/by-phone?phone=${_phoneController.text.trim()}',
-        ),
-        headers: {'Content-Type': 'application/json'},
-      );
+ Future<void> _fetchMerchantData(
+  String token,
+  String userId,
+  String? phone,
+) async {
+  debugPrint('📍 _fetchMerchantData called with userId: $userId, phone: $phone');
+  try {
+    final url = '${ApiConfig.baseUrl}/api/aeps/merchant-status?userId=$userId';
+    debugPrint('🔎 Calling: $url');
+    final response = await http.get(Uri.parse(url), headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    });
+    debugPrint('🔎 Response status: ${response.statusCode}');
+    final body = json.decode(response.body);
+    debugPrint('🔎 Raw response body: $body');
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && data['data'] != null) {
-          final aeps = Provider.of<AepsProvider>(context, listen: false);
-          aeps.setMerchantData({
-            'merchantId': data['data']['merchantId'],
-            'merchantRefId': data['data']['merchantRefId'],
-            'phone': data['data']['phone'] ?? phone,
-            'aadhaarNo': data['data']['aadhaarNo'],
-            'firstName': data['data']['firstName'],
-            'lastName': data['data']['lastName'],
-          });
-          aeps.setAuthDetails(
-            token: token,
-            userId: userId,
-            merchantId: data['data']['merchantId'] ?? '',
-            mobileNo: data['data']['phone'] ?? _phoneController.text.trim(),
-          );
+    if (body is List && body.isNotEmpty) {
+      debugPrint('✅ Body is a non-empty list with ${body.length} items');
+      Map<String, dynamic> bestMatch = body.first;
+      debugPrint('📦 Initial bestMatch: $bestMatch');
+
+      // Choose the most relevant pipe (active/verified first)
+      for (final pipe in body) {
+        debugPrint('🔍 Checking pipe: ${pipe['pipe']} with status ${pipe['registrationStatus']}');
+        if (pipe['registrationStatus'] == 'active' || pipe['registrationStatus'] == 'otp_verified') {
+          bestMatch = pipe;
+          debugPrint('⭐ Found preferred pipe: ${pipe['pipe']} with status ${pipe['registrationStatus']}');
+          break;
         }
       }
-    } catch (_) {}
+
+      final aeps = Provider.of<AepsProvider>(context, listen: false);
+      debugPrint('📦 Setting merchant data with bestMatch: $bestMatch');
+      aeps.setMerchantData({
+        'merchantId': bestMatch['merchantId'],
+        'merchantRefId': bestMatch['merchantRefId'],
+        'pipe': bestMatch['pipe'],
+        'phone': bestMatch['phone'] ?? phone,
+        'registrationStatus': bestMatch['registrationStatus'],
+      });
+      aeps.setAuthDetails(token: token, userId: userId, merchantId: bestMatch['merchantId'] ?? '');
+      debugPrint('✅ Merchant data set successfully');
+    } else {
+      debugPrint('⚠️ Body is not a non-empty list: $body');
+    }
+  } catch (e, stack) {
+    debugPrint('❌ Error in _fetchMerchantData: $e');
+    debugPrint('Stack trace: $stack');
   }
+}
 
   // ─────────────────────────────────────────────────────────────────────────
   //  FORGOT PASSWORD API

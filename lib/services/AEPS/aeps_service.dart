@@ -86,6 +86,7 @@ class RegisterMerchantRequest {
   final String? shopPan;
   final String? aadhaarNo;
   final String? pidData;
+  final String? emailId;
 
   RegisterMerchantRequest({
     required this.stateCode,
@@ -111,6 +112,7 @@ class RegisterMerchantRequest {
     this.shopPan,
     this.aadhaarNo,
     this.pidData,
+    this.emailId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -137,6 +139,7 @@ class RegisterMerchantRequest {
         'shopPan': shopPan,
         'aadhaarNo': aadhaarNo,
         'pidData': pidData,
+        'emailId': emailId,
       };
 }
 

@@ -18,21 +18,27 @@ import 'providers/wallet_provider.dart';
 import 'services/storage_service.dart';
 import 'providers/remitter_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/aeps_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.init(); // Initialize StorageService
-  runApp(MyApp());
+  // Create and load AepsProvider
+  final aepsProvider = AepsProvider();
+  await aepsProvider.loadFromStorage(); // loads token & userId from SharedPreferences
+
+  runApp(MyApp(aepsProvider: aepsProvider));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final AepsProvider aepsProvider;
+  const MyApp({super.key, required this.aepsProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AepsProvider()),
+        ChangeNotifierProvider.value(value: aepsProvider),
         ChangeNotifierProvider(create: (_) => PayoutProvider()),
         ChangeNotifierProvider(create: (_) => BeneficiaryProvider()),
         ChangeNotifierProvider(create: (_) => WalletProvider()),
