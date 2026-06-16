@@ -585,29 +585,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 14),
         _buildPhoneField(),
-        // const SizedBox(height: 14),
-       /* _buildTextField(
-          _passwordCtrl,
-          'Password',
-          'Min. 6 characters',
-          validator: validatePassword,
-          isPassword: true,
-          obscure: !_isPasswordVisible,
-          onVisibilityToggle: () =>
-              setState(() => _isPasswordVisible = !_isPasswordVisible),
-        ),*/
-        /*const SizedBox(height: 14),
-        _buildTextField(
-          _confirmPasswordCtrl,
-          'Confirm Password',
-          'Retype password',
-          validator: validateConfirmPassword,
-          isPassword: true,
-          obscure: !_isConfirmPasswordVisible,
-          onVisibilityToggle: () => setState(
-            () => _isConfirmPasswordVisible = !_isConfirmPasswordVisible,
-          ),
-        ),*/
       ],
     ),
   );
@@ -986,8 +963,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
-    // _passwordCtrl.dispose();
-    // _confirmPasswordCtrl.dispose();
     _businessNameCtrl.dispose();
     _businessTypeCtrl.dispose();
     _cityCtrl.dispose();
