@@ -6,9 +6,22 @@ import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../layout/UserHomeScreen.dart';
 import '../../services/AEPS/location_service.dart';
+import 'aeps_wrapper_screen.dart';
+import 'ekyc_screen.dart';
 
 class MerchantRegistrationScreen extends StatefulWidget {
-  const MerchantRegistrationScreen({super.key});
+    final bool isOtpPending;
+    final Map<String, dynamic>? merchantData;
+    final String? pipe;
+    final String? phone;
+  
+  const MerchantRegistrationScreen({
+    super.key,
+    this.isOtpPending = false,
+    this.merchantData,
+    this.pipe, 
+    this.phone,
+    });
 
   @override
   State<MerchantRegistrationScreen> createState() => _MerchantRegistrationScreenState();
@@ -48,14 +61,24 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
   Map<String, double>? _location;
   bool _isGettingLocation = false;
 
-  // OTP flow
-  bool _isOtpSent = false;
-  bool _isOtpVerified = false;
+
   String? _merchantId;
   String? _merchantRefId;
   final _otpController = TextEditingController();
+
+  // ─── OTP flow (NEW FIELDS) ──────────────────────────────────
+  bool _isOtpSent = false;
+  bool _isOtpVerified = false;
   bool _isSendingOtp = false;
   bool _isVerifyingOtp = false;
+
+
+   // ─── OTP Pending handling ────────────────────────────────────
+  bool get _isOtpPending => widget.isOtpPending;
+  String? get _pendingMerchantId => widget.merchantData?['merchantId']?.toString();
+  String? get _pendingMerchantRefId => widget.merchantData?['merchantRefId']?.toString();
+
+
 
   final LocationService _locationService = LocationService();
 
@@ -64,8 +87,23 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AepsProvider>().fetchStates();
+      context.read<AepsProvider>().fetchBanks();   // add this
+
     });
-    context.read<AepsProvider>().fetchBanks();   // add this
+
+     // If OTP pending, pre‑fill mobile and auto‑send OTP
+      if (_isOtpPending && widget.merchantData != null) {
+    final phone = widget.phone ?? widget.merchantData!['phone']?.toString() ?? '';
+    _mobileController.text = phone;
+    _merchantId = _pendingMerchantId;
+    _merchantRefId = _pendingMerchantRefId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showSuccess('OTP pending – please verify to activate your merchant.');
+      _sendOtp();
+    });
+  }
+
+  
 
   }
 
@@ -162,6 +200,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       merchantRefId: '',                           // backend will generate
       pipe: '1',
       gender: _selectedGender,
+      
     );
 
     final success = await provider.registerMerchant(request);
@@ -179,15 +218,18 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     }
   }
 
+   // ─── OTP Methods ─────────────────────────────────────────────
+
   Future<void> _sendOtp() async {
     if (_mobileController.text.isEmpty) {
-      _showError('Please enter mobile number');
+      _showError('Mobile number not found');
       return;
     }
     setState(() => _isSendingOtp = true);
     try {
       final provider = context.read<AepsProvider>();
-      final success = await provider.sendOtp(_merchantId!, _mobileController.text);
+      final merchantId = _isOtpPending ? _pendingMerchantId! : _merchantId!;
+      final success = await provider.sendOtp(merchantId, _mobileController.text);
       if (success) {
         setState(() => _isOtpSent = true);
         _showSuccess('OTP sent successfully!');
@@ -201,33 +243,69 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     }
   }
 
+  // █████████████████████████████████████████████████████████████
+  // ✅ CORRECTED _verifyOtp (uses the defined getters)
+  // █████████████████████████████████████████████████████████████
   Future<void> _verifyOtp() async {
     if (_otpController.text.length != 6) {
-      _showError('Please enter valid 6-digit OTP');
+      _showError('Enter valid 6‑digit OTP');
       return;
     }
+
+    // Use the getters we defined above
+    final merchantId = _isOtpPending ? _pendingMerchantId : _merchantId;
+    final merchantRefId = _isOtpPending ? _pendingMerchantRefId : _merchantRefId;
+    if (merchantId == null || merchantRefId == null) {
+      _showError('Merchant information missing. Please restart.');
+      return;
+    }
+
     setState(() => _isVerifyingOtp = true);
     try {
       final provider = context.read<AepsProvider>();
+
       final success = await provider.verifyOtp(
-        _merchantId!,
+        merchantId,
         _otpController.text,
-        _merchantRefId!,
+        merchantRefId,
       );
+
       if (success) {
         setState(() => _isOtpVerified = true);
-        _showSuccess('Registration completed!');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const UserHomeScreen()),
-        );
+        _showSuccess('OTP verified!');
+
+        final updatedStatus = await provider.fetchPipeStatus(widget.pipe ?? '1');
+        final regStatus = updatedStatus?['registrationStatus'] ?? '';
+
+        if (regStatus == 'active') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
+          );
+        } else if (regStatus == 'otp_verified') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EKYC_Screen(
+                merchantId: merchantId,
+                merchantRefId: merchantRefId,
+                pipe: widget.pipe ?? '1',
+              ),
+            ),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const UserHomeScreen()),
+          );
+        }
       } else {
         _showError(provider.errorMessage ?? 'OTP verification failed');
       }
     } catch (e) {
       _showError(e.toString());
     } finally {
-      setState(() => _isVerifyingOtp = false);
+      if (mounted) setState(() => _isVerifyingOtp = false);
     }
   }
 

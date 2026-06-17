@@ -1,8 +1,13 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  user_home_screen.dart – COMPLETE FIXED VERSION
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:my_app/models/wallet_models.dart';
 import 'package:my_app/providers/aeps_provider.dart';
+import 'package:my_app/screens/aeps/pipe_selection_screen.dart';
 import 'package:my_app/services/Recharges/rechargeFragment.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,11 +95,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
-            (r) => false,
+        (r) => false,
       );
     }
   }
 
+  // ----------------------------------------------------------------------
+  // Micro‑ATM (unchanged)
+  // ----------------------------------------------------------------------
   void _onMicroATMTap() {
     showModalBottomSheet(
       context: context,
@@ -162,10 +170,82 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: const TextStyle(color: Colors.white)),
       backgroundColor: error ? AppColors.error : AppColors.primary,
-      behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), margin: const EdgeInsets.all(16),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      margin: const EdgeInsets.all(16),
     ));
   }
 
+  // ----------------------------------------------------------------------
+  //  SERVICE TAP HANDLER – THE FIX
+  // ----------------------------------------------------------------------
+  void _onServiceTap(String serviceName) {
+    HapticFeedback.selectionClick();
+
+    switch (serviceName) {
+      case 'AEPS':
+      final aeps = Provider.of<AepsProvider>(context, listen: false);
+          // If token is null, try loading from storage again
+          if (aeps.authToken == null) {
+     aeps.loadFromStorage(); // you must implement this
+  }
+  final token = aeps.authToken;
+  final userId = aeps.userId;
+ 
+
+        debugPrint('🔐 _onServiceTap -> token: ${token != null ? "${token.substring(0, 20)}..." : "NULL"}');
+        debugPrint('🔐 _onServiceTap -> userId: $userId');
+
+        if (token == null || userId == null) {
+          _toast('Please login again', error: true);
+          return;
+        }
+      
+        // Ensure provider has the latest auth (optional, but safe)
+        // aeps.setAuthDetails(token: token, userId: userId, merchantId: '');
+
+        debugPrint('➡️ Navigating to PipeSelectionScreen');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const PipeSelectionScreen()),
+        );
+        break;
+
+      case 'DMT':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtHomeScreen()));
+        break;
+      case 'Payout':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider(
+              create: (_) => PayoutProvider(),
+              child: const PayoutHomeScreen(),
+            ),
+          ),
+        );
+        break;
+      case 'mATM':
+        _onMicroATMTap();
+        break;
+      case 'Recharge':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => RechargeCategoryScreen()));
+        break;
+      case 'Bills':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const BillPaymentScreen()));
+        break;
+      case 'PPI DMT':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtPhoneEntryPage()));
+        break;
+      default:
+        _toast('Coming soon!', error: false);
+        break;
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  //  BUILD
+  // ----------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -175,12 +255,21 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         child: Scaffold(
           body: Container(
             decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF0A0E0A), Color(0xFF0F1A0F), Color(0xFF050805)])),
-            child: SafeArea(child: IndexedStack(index: _selectedIndex, children: [
-              HomeDashboard(onLogout: _logout, onMicroATMTap: _onMicroATMTap),
-              const ServicesPage(),
-              const HistoryPage(),
-              ProfilePage(onLogout: _logout),
-            ])),
+            child: SafeArea(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  HomeDashboard(
+                    onLogout: _logout,
+                    onMicroATMTap: _onMicroATMTap,
+                    onServiceTap: _onServiceTap, // ✅ now defined
+                  ),
+                  const ServicesPage(),
+                  const HistoryPage(),
+                  ProfilePage(onLogout: _logout),
+                ],
+              ),
+            ),
           ),
           bottomNavigationBar: _buildNavBar(),
         ),
@@ -213,12 +302,19 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  HOME DASHBOARD
+//  HOME DASHBOARD (must accept onServiceTap)
 // ─────────────────────────────────────────────────────────────────────────────
 class HomeDashboard extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback? onMicroATMTap;
-  const HomeDashboard({super.key, required this.onLogout, this.onMicroATMTap});
+  final void Function(String serviceName) onServiceTap;
+
+  const HomeDashboard({
+    super.key,
+    required this.onLogout,
+    this.onMicroATMTap,
+    required this.onServiceTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -391,28 +487,25 @@ class HomeDashboard extends StatelessWidget {
       children: [
         const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('Services', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white))),
         GridView.builder(
-          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, mainAxisSpacing: 14, crossAxisSpacing: 14, childAspectRatio: 0.85),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4, mainAxisSpacing: 14, crossAxisSpacing: 14, childAspectRatio: 0.85,
+          ),
           itemCount: _svcList.length,
-          itemBuilder: (_, i) => _ServiceItem(_svcList[i], () {
-            HapticFeedback.selectionClick();
-            _navigateService(context, _svcList[i]['name'] as String);
-          }),
+          itemBuilder: (_, i) {
+            final service = _svcList[i];
+            return _ServiceItem(
+              service,
+              () {
+                HapticFeedback.selectionClick();
+                onServiceTap(service['name'] as String); // ✅ uses callback
+              },
+            );
+          },
         ),
       ],
     );
-  }
-
-  void _navigateService(BuildContext context, String name) {
-    switch (name) {
-      case 'AEPS': Navigator.push(context, MaterialPageRoute(builder: (_) => const AepsWrapperScreen())); break;
-      case 'DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => DmtHomeScreen())); break;
-      case 'Payout': Navigator.push(context, MaterialPageRoute(builder: (_) => ChangeNotifierProvider(create: (_) => PayoutProvider(), child: PayoutHomeScreen()))); break;
-      case 'mATM': onMicroATMTap?.call(); break;
-      case 'Recharge': Navigator.push(context, MaterialPageRoute(builder: (_) => RechargeCategoryScreen())); break;
-      case 'Bills': Navigator.push(context, MaterialPageRoute(builder: (_) => const BillPaymentScreen())); break;
-      case 'PPI DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtPhoneEntryPage())); break;
-    }
   }
 
   static const _svcList = [
@@ -442,8 +535,9 @@ class HomeDashboard extends StatelessWidget {
   }
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  AUTO BANNER SLIDER
+//  Reusable widgets (unchanged, just copied for completeness)
 // ─────────────────────────────────────────────────────────────────────────────
 class _BannerSlider extends StatefulWidget {
   const _BannerSlider();
@@ -457,24 +551,9 @@ class _BannerSliderState extends State<_BannerSlider> {
   Timer? _timer;
 
   final List<Map<String, dynamic>> _banners = [
-    {
-      'title': 'Get 5% Cashback',
-      'subtitle': 'On all AEPS transactions',
-      'color': AppColors.primaryLight,
-      'icon': Icons.percent_rounded,
-    },
-    {
-      'title': 'Refer & Earn ₹100',
-      'subtitle': 'Invite your friends today',
-      'color': const Color(0xFF7B9FE0),
-      'icon': Icons.share_rounded,
-    },
-    {
-      'title': 'Zero Fee DMT',
-      'subtitle': 'Unlimited money transfers',
-      'color': const Color(0xFFB58FDB),
-      'icon': Icons.currency_rupee_rounded,
-    },
+    {'title': 'Get 5% Cashback', 'subtitle': 'On all AEPS transactions', 'color': AppColors.primaryLight, 'icon': Icons.percent_rounded},
+    {'title': 'Refer & Earn ₹100', 'subtitle': 'Invite your friends today', 'color': const Color(0xFF7B9FE0), 'icon': Icons.share_rounded},
+    {'title': 'Zero Fee DMT', 'subtitle': 'Unlimited money transfers', 'color': const Color(0xFFB58FDB), 'icon': Icons.currency_rupee_rounded},
   ];
 
   @override
@@ -486,11 +565,8 @@ class _BannerSliderState extends State<_BannerSlider> {
   void _startAutoScroll() {
     _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (!mounted) return;
-      if (_currentPage < _banners.length - 1) {
-        _currentPage++;
-      } else {
-        _currentPage = 0;
-      }
+      if (_currentPage < _banners.length - 1) _currentPage++;
+      else _currentPage = 0;
       if (_pageController.hasClients) {
         _pageController.animateToPage(_currentPage, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
       }
@@ -519,14 +595,17 @@ class _BannerSliderState extends State<_BannerSlider> {
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [(banner['color'] as Color).withOpacity(0.3), (banner['color'] as Color).withOpacity(0.1)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  gradient: LinearGradient(colors: [(banner['color'] as Color).withOpacity(0.3), (banner['color'] as Color).withOpacity(0.1)],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: (banner['color'] as Color).withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
                     const SizedBox(width: 16),
-                    Container(width: 48, height: 48, decoration: BoxDecoration(color: (banner['color'] as Color).withOpacity(0.2), borderRadius: BorderRadius.circular(14)), child: Icon(banner['icon'] as IconData, color: banner['color'] as Color, size: 24)),
+                    Container(width: 48, height: 48,
+                        decoration: BoxDecoration(color: (banner['color'] as Color).withOpacity(0.2), borderRadius: BorderRadius.circular(14)),
+                        child: Icon(banner['icon'] as IconData, color: banner['color'] as Color, size: 24)),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -551,26 +630,16 @@ class _BannerSliderState extends State<_BannerSlider> {
               margin: const EdgeInsets.symmetric(horizontal: 3),
               width: _currentPage == index ? 18 : 6,
               height: 6,
-              decoration: BoxDecoration(color: _currentPage == index ? AppColors.primaryLight : Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
+              decoration: BoxDecoration(
+                color: _currentPage == index ? AppColors.primaryLight : Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(3),
+              ),
             );
           }),
         ),
       ],
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  REUSABLE WIDGETS
-// ─────────────────────────────────────────────────────────────────────────────
-class _HeaderIcon extends StatelessWidget {
-  final IconData icon; final VoidCallback onTap; final Color? color;
-  const _HeaderIcon(this.icon, this.onTap, {this.color});
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(width: 38, height: 38, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color ?? Colors.white54, size: 20)),
-  );
 }
 
 class _ServiceItem extends StatelessWidget {
@@ -580,10 +649,24 @@ class _ServiceItem extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Column(children: [
-      Container(width: 54, height: 54, decoration: BoxDecoration(color: (data['color'] as Color).withOpacity(0.12), borderRadius: BorderRadius.circular(16)), child: Icon(data['icon'] as IconData, color: data['color'] as Color, size: 26)),
+      Container(width: 54, height: 54,
+          decoration: BoxDecoration(color: (data['color'] as Color).withOpacity(0.12), borderRadius: BorderRadius.circular(16)),
+          child: Icon(data['icon'] as IconData, color: data['color'] as Color, size: 26)),
       const SizedBox(height: 6),
       Text(data['name'] as String, style: const TextStyle(fontSize: 10, color: Colors.white60)),
     ]),
+  );
+}
+
+class _HeaderIcon extends StatelessWidget {
+  final IconData icon; final VoidCallback onTap; final Color? color;
+  const _HeaderIcon(this.icon, this.onTap, {this.color});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(width: 38, height: 38,
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: color ?? Colors.white54, size: 20)),
   );
 }
 
@@ -592,7 +675,9 @@ class _MicroAtmOption extends StatelessWidget {
   const _MicroAtmOption(this.icon, this.label, this.onTap);
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: Container(width: 44, height: 44, decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: AppColors.primaryLight)),
+    leading: Container(width: 44, height: 44,
+        decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(14)),
+        child: Icon(icon, color: AppColors.primaryLight)),
     title: Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
     trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
     onTap: onTap,
@@ -606,10 +691,40 @@ class _AmountDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     backgroundColor: AppColors.card, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     title: const Text('Enter Amount', style: TextStyle(color: Colors.white)),
-    content: TextField(controller: controller, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white, fontSize: 24), decoration: InputDecoration(hintText: '₹ 0', hintStyle: const TextStyle(color: Colors.white24), border: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primaryLight)))),
+    content: TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      style: const TextStyle(color: Colors.white, fontSize: 24),
+      decoration: InputDecoration(
+        hintText: '₹ 0',
+        hintStyle: const TextStyle(color: Colors.white24),
+        border: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primaryLight)),
+      ),
+    ),
     actions: [
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
       TextButton(onPressed: onConfirm, child: Text('Proceed', style: TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.w700))),
+    ],
+  );
+}
+
+class _StatCircle extends StatelessWidget {
+  final String emoji; final String label; final double value; final Color color;
+  const _StatCircle(this.emoji, this.label, this.value, this.color);
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Container(
+        width: 64, height: 64,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color.withOpacity(0.12), border: Border.all(color: color.withOpacity(0.3), width: 1.5)),
+        child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 2),
+          Text('₹ ${value.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+        ])),
+      ),
+      const SizedBox(height: 6),
+      Text(label, style: const TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500)),
     ],
   );
 }
@@ -632,5 +747,9 @@ class HistoryPage extends StatelessWidget {
 class BillPaymentScreen extends StatelessWidget {
   const BillPaymentScreen({super.key});
   @override
-  Widget build(BuildContext context) => Scaffold(backgroundColor: AppColors.bg, appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Pay Bills', style: TextStyle(color: Colors.white))), body: const Center(child: Text('Bills', style: TextStyle(color: Colors.white54))));
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.bg,
+    appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Pay Bills', style: TextStyle(color: Colors.white))),
+    body: const Center(child: Text('Bills', style: TextStyle(color: Colors.white54))),
+  );
 }

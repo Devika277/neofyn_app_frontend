@@ -28,9 +28,9 @@ class AepsWrapperScreen extends StatelessWidget {
     }
 
     // 3. Merchant exists but needs daily 2FA → verify
-    // if (provider.needs2FA()) {
-    //   return const TwoFactorAuthScreen();
-    // }
+    if (provider.needs2FA()) {
+      return const TwoFactorAuthScreen();
+    }
 
     // 4. All good → dashboard
     return const AepsDashboardScreen();

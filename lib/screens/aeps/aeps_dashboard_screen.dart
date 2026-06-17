@@ -30,7 +30,7 @@ class AepsDashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
-              await provider.clearMerchantData();
+              provider.clearMerchantData();
               if (context.mounted) {
                 Navigator.pop(context);
               }

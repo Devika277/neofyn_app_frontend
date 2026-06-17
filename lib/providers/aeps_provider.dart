@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'dart:developer' as DebugLogger;
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:my_app/config/api_config.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/AEPS/aeps_service.dart' as aeps;   // ✅ prefix added
@@ -15,6 +18,14 @@ class AepsProvider extends ChangeNotifier {
   List<aeps.District> _districts = [];
   bool _isLoading = false;
   String? _errorMessage;
+  String? get authToken => _authToken;
+
+  bool _isLoadingStates = false;
+  bool _isLoadingBanks = false;
+
+    // 🔽 ADD these getters (and keep isLoading, isLoadingDistricts)
+  bool get isLoadingStates => _isLoadingStates;
+  bool get isLoadingBanks => _isLoadingBanks;
 
   // Merchant data
   String? _merchantId;
@@ -22,14 +33,20 @@ class AepsProvider extends ChangeNotifier {
   String? _mobileNo;
   String? _aadhaarNo;
 
+  String? get userId => _userId;
   // Auth fields
   String? _authToken;
   String? _userId;
   String? _ipAddress;
   String? _pipe = '1';
 
-  static const String _keyAuthToken = 'auth_token';
-  static const String _keyUserId = 'auth_user_id';
+    static const String _keyAuthToken = 'aeps_auth_token';
+  static const String _keyUserId = 'aeps_user_id';
+  static const String _keyMerchantId = 'aeps_merchant_id';
+  static const String _keyMobileNo = 'aeps_mobile_no';
+  static const String _keyPipe = 'aeps_pipe';
+  
+  
   String? _realMerchantId;
 
   // Daily 2FA
@@ -52,13 +69,175 @@ class AepsProvider extends ChangeNotifier {
   String? get realMerchantId => _realMerchantId;
   String? get ipAddress => _ipAddress;
   String? get pipe => _pipe;
+  String _activePipe = '1';
+
+  static const String _keyMerchantRefId = 'aeps_merchant_ref_id';
+
+  static const String _keyAadhaarNo = 'aeps_aadhaar_no';
+
 
   // ----------------------------------------------------------------------
   // Initialization & Persistence
   // ----------------------------------------------------------------------
   Future<void> init() async {
+    debugPrint('🚀 AepsProvider.init() called');
+
     await _loadPersistedData();
+      debugPrint('✅ init() completed');
+
   }
+
+
+  // Call this in main.dart after creating the provider
+  /// Load stored auth data from SharedPreferences
+  Future<void> loadFromStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    _authToken = prefs.getString(_keyAuthToken);
+    _userId = prefs.getString(_keyUserId);
+    _merchantId = prefs.getString(_keyMerchantId);
+    _merchantRefId = prefs.getString(_keyMerchantRefId);
+    _mobileNo = prefs.getString(_keyMobileNo);
+    _aadhaarNo = prefs.getString(_keyAadhaarNo);
+    _pipe = prefs.getString(_keyPipe) ?? '1';
+    _last2FADate = prefs.getString(_keyLast2FADate);
+    _is2FAVerifiedToday = _last2FADate == DateTime.now().toIso8601String().split('T')[0];
+    debugPrint('📂 loadFromStorage: userId=$_userId, token=${_authToken != null ? "${_authToken!.substring(0, 20)}..." : "NULL"}');
+    notifyListeners();
+  }
+
+
+
+
+  
+
+  // Update setAuthDetails to persist token, userId, and merchantId
+  void setAuthDetails({
+    required String token,
+    required String userId,
+    required String merchantId,
+    String? mobileNo,
+    String? aadhaarNo,
+    String? pipe,
+  }) {
+    debugPrint('🔐 setAuthDetails called with userId: $userId, merchantId: $merchantId, pipe: $pipe');
+    debugPrint('🔐 token (first 20): ${token.substring(0, 20)}...');
+    _authToken = token;
+    _userId = userId;
+    _merchantId = merchantId;
+    _merchantRefId = null; // reset
+    _mobileNo = mobileNo;
+    _aadhaarNo = aadhaarNo;
+    _pipe = pipe ?? '1';
+    _getLocalIp();
+    _persistAuthData(token, userId, merchantId, mobileNo, _pipe!);
+    _last2FADate = null;
+    _is2FAVerifiedToday = false;
+    notifyListeners();
+  }
+
+  Future<void> _persistAuthData(String token, String userId, String merchantId, String? mobileNo, String pipe) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAuthToken, token);
+    await prefs.setString(_keyUserId, userId);
+    await prefs.setString(_keyMerchantId, merchantId);
+    if (mobileNo != null) await prefs.setString(_keyMobileNo, mobileNo);
+    await prefs.setString(_keyPipe, pipe);
+    debugPrint('💾 Auth data persisted');
+  }
+
+  // Also update clearMerchantData to clear storage keys
+  void clearMerchantData() {
+    _authToken = null;
+    _userId = null;
+    _merchantId = null;
+    _merchantRefId = null;
+    _mobileNo = null;
+    _aadhaarNo = null;
+    _pipe = null;
+    _last2FADate = null;
+    _is2FAVerifiedToday = false;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.remove(_keyAuthToken);
+      prefs.remove(_keyUserId);
+      prefs.remove(_keyMerchantId);
+      prefs.remove(_keyMobileNo);
+      prefs.remove(_keyPipe);
+    });
+    notifyListeners();
+  }
+
+
+
+
+  void setActivePipe(String pipe) {
+  _activePipe = pipe;
+  // Don't call notifyListeners yet – we'll set merchant data right after
+}
+
+
+
+
+
+
+// Fetch status for a specific pipe
+Future<Map<String, dynamic>?> fetchPipeStatus(String pipe) async {
+  if (_userId == null || _authToken == null) {
+    debugPrint('⚠️ fetchPipeStatus: userId or authToken is null');
+    return null;
+  }
+
+  final url = '${ApiConfig.baseUrl}/api/aeps/merchant-status?userId=$_userId&pipe=$pipe';
+  debugPrint('🔎 Calling: $url');
+
+  try {
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_authToken',
+      },
+    );
+    debugPrint('🔎 Response status: ${response.statusCode}');
+
+    final body = json.decode(response.body);
+    debugPrint('🔎 Raw response for pipe $pipe: $body');
+
+    if (response.statusCode == 200) {
+      // Response can be a List (all merchants) or a Map (single merchant)
+      if (body is List) {
+        // Find the first entry where 'pipe' matches (as string)
+        final match = body.firstWhere(
+          (item) => item['pipe']?.toString() == pipe,
+          orElse: () => null,
+        );
+        if (match != null && match['merchantId'] != null) {
+          debugPrint('✅ Found merchant for pipe $pipe: ${match['merchantId']}');
+          return match as Map<String, dynamic>;
+        } else {
+          debugPrint('⚠️ No merchant found for pipe $pipe');
+          return null;
+        }
+      } else if (body is Map<String, dynamic>) {
+        // If it's a direct map, return it (but ensure merchantId exists)
+        if (body['merchantId'] != null) {
+          return body;
+        } else {
+          return null;
+        }
+      } else {
+        debugPrint('⚠️ Unexpected response type for pipe $pipe');
+        return null;
+      }
+    } else {
+      debugPrint('❌ Error response: ${response.body}');
+      return null;
+    }
+  } catch (e, stack) {
+    debugPrint('❌ fetchPipeStatus error: $e');
+    debugPrint('Stack trace: $stack');
+    return null;
+  }
+}
 
   Future<void> _loadPersistedData() async {
     try {
@@ -114,23 +293,24 @@ class AepsProvider extends ChangeNotifier {
   // ----------------------------------------------------------------------
   // Auth & Merchant Data
   // ----------------------------------------------------------------------
-  void setAuthDetails({
-    required String token,
-    required String userId,
-    required String merchantId,
-    String? mobileNo,
-    String? pipe,
-  }) {
-    DebugLogger.log('🔐 setAuthDetails called');
-    _authToken = token;
-    _userId = userId;
-    _merchantId = merchantId;
-    _mobileNo = mobileNo;
-    _pipe = pipe ?? '1';
-    _getLocalIp();
-    _persistAuthToken(token, userId);
-    notifyListeners();
-  }
+//   void setAuthDetails({
+//   required String token,
+//   required String userId,
+//   required String merchantId,
+//   String? mobileNo,
+//   String? pipe,
+// }) {
+//   debugPrint('🔐 setAuthDetails called with userId: $userId, merchantId: $merchantId, pipe: $pipe');
+//   _authToken = token;
+//   _userId = userId;
+//   _merchantId = merchantId;
+//   _mobileNo = mobileNo;
+//   _pipe = pipe ?? '1';
+//   _getLocalIp();
+//   _persistAuthToken(token, userId);
+//   notifyListeners();
+//   debugPrint('✅ setAuthDetails completed');
+// }
 
   Future<void> loadMerchantData() async {
     final data = await _authService.getMerchantData();
@@ -142,20 +322,22 @@ class AepsProvider extends ChangeNotifier {
   }
 
   void setMerchantData(Map<String, dynamic> merchant) {
-    _merchantId = merchant['merchantId']?.toString();
-    _merchantRefId = merchant['merchantRefId']?.toString();
-    _mobileNo = merchant['phone']?.toString();
-    _aadhaarNo = merchant['aadhaarNo']?.toString();
-    _last2FADate = null;
-    _is2FAVerifiedToday = false;
-    _authService.saveMerchantData(
-      merchantId: _merchantId ?? '',
-      merchantRefId: _merchantRefId ?? '',
-      mobileNo: _mobileNo ?? '',
-      aadhaarNo: _aadhaarNo,
-    );
-    notifyListeners();
-  }
+  debugPrint('📥 setMerchantData called with: $merchant');
+  _merchantId = merchant['merchantId']?.toString();
+  _merchantRefId = merchant['merchantRefId']?.toString();
+  _mobileNo = merchant['phone']?.toString();
+  _aadhaarNo = merchant['aadhaarNo']?.toString();
+  _last2FADate = null;
+  _is2FAVerifiedToday = false;
+  _authService.saveMerchantData(
+    merchantId: _merchantId ?? '',
+    merchantRefId: _merchantRefId ?? '',
+    mobileNo: _mobileNo ?? '',
+    aadhaarNo: _aadhaarNo,
+  );
+  notifyListeners();
+  debugPrint('✅ setMerchantData completed: merchantId=$_merchantId, pipe=$_pipe');
+}
 
   Future<void> fetchMerchantByPhone(String phone) async {
     DebugLogger.log('fetchMerchantByPhone not implemented in AepsService');
@@ -212,23 +394,23 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> clearMerchantData() async {
-    await _authService.clearMerchantData();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyAuthToken);
-    await prefs.remove(_keyUserId);
-    _merchantId = null;
-    _merchantRefId = null;
-    _mobileNo = null;
-    _aadhaarNo = null;
-    _is2FAVerifiedToday = false;
-    _last2FADate = null;
-    _authToken = null;
-    _userId = null;
-    _ipAddress = null;
-    _pipe = '1';
-    notifyListeners();
-  }
+  // Future<void> clearMerchantData() async {
+  //   await _authService.clearMerchantData();
+  //   final prefs = await SharedPreferences.getInstance();
+  //   await prefs.remove(_keyAuthToken);
+  //   await prefs.remove(_keyUserId);
+  //   _merchantId = null;
+  //   _merchantRefId = null;
+  //   _mobileNo = null;
+  //   _aadhaarNo = null;
+  //   _is2FAVerifiedToday = false;
+  //   _last2FADate = null;
+  //   _authToken = null;
+  //   _userId = null;
+  //   _ipAddress = null;
+  //   _pipe = '1';
+  //   notifyListeners();
+  // }
 
   void clearError() {
     _errorMessage = null;
@@ -239,7 +421,7 @@ class AepsProvider extends ChangeNotifier {
   // AEPS Data Fetching (using AepsService)
   // ----------------------------------------------------------------------
   Future<void> fetchBanks() async {
-    _isLoading = true;
+    _isLoadingBanks = true;
     notifyListeners();
     try {
       _banks = await _aepsService.getBanks();
@@ -254,7 +436,7 @@ class AepsProvider extends ChangeNotifier {
   }
 
   Future<void> fetchStates() async {
-    _isLoading = true;
+    _isLoadingStates = true;
     notifyListeners();
     try {
       _states = await _aepsService.getStates();
@@ -302,7 +484,7 @@ class AepsProvider extends ChangeNotifier {
         bankIfsc: request.bankIfscCode,
         bankNameCode: request.bankName,
         pipe: _pipe,
-        merchantRefId: request.mobileNo,
+        merchantRefId: '',
         ipAddress: _ipAddress ?? '127.0.0.1',
         lat: request.lat.toString(),
         long: request.long.toString(),
@@ -317,20 +499,41 @@ class AepsProvider extends ChangeNotifier {
         shopPan: request.shopPan,
         aadhaarNo: request.aadhaarNo,
         pidData: null,
+        emailId: request.emailId,
       );
       final response = await _aepsService.registerMerchant(regRequest);
+       // response.merchantId is a String? – backend returns it on success
+    if (response.merchantId != null && response.merchantId!.isNotEmpty) {
       _merchantId = response.merchantId;
-      _merchantRefId = response.merchantRefId ?? request.mobileNo;
+      _merchantRefId = response.merchantRefId ?? '';
       _mobileNo = request.mobileNo;
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    } finally {
+      _aadhaarNo = request.aadhaarNo;
+
+      // 🔒 Persist immediately so the wrapper can read it later
+      await _authService.saveMerchantData(
+        merchantId: _merchantId!,
+        merchantRefId: _merchantRefId!,
+        mobileNo: _mobileNo!,
+        aadhaarNo: _aadhaarNo,
+      );
+
+      DebugLogger.log('✅ Merchant saved. ID: $_merchantId');
       _isLoading = false;
       notifyListeners();
+      return true;
+    } else {
+      _errorMessage = 'Registration failed: No merchant ID returned';
+      _isLoading = false;
+      notifyListeners();
+      return false;
     }
+  } catch (e) {
+    _errorMessage = e.toString();
+    _isLoading = false;
+    notifyListeners();
+    return false;
   }
+}
 
   Future<bool> sendOtp(String merchantId, String mobileNo) async {
     _isLoading = true;
@@ -374,6 +577,155 @@ class AepsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+  
+
+  Future<void> fetchMerchantByUserId(String userId, {String pipe = '1'}) async {
+  try {
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/aeps/merchant-status?userId=$userId&pipe=$pipe'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $_authToken'},
+    );
+    final body = json.decode(res.body);
+    if (body['isRegistered'] == true) {
+      setMerchantData({
+        'merchantId': body['merchantId'],
+        'merchantRefId': body['merchantRefId'],
+        'phone': body['mobileNo'] ?? _mobileNo,   // you may need to adjust field names
+        'aadhaarNo': _aadhaarNo,
+        'firstName': '',
+        'lastName': '',
+      });
+    }
+  } catch (e) {
+    debugPrint('Failed to fetch merchant by userId: $e');
+  }
+}
+
+
+
+// ──────────────────────────────────────────────
+  // Resend OTP (new)
+  // ──────────────────────────────────────────────
+  Future<bool> resendOtp(String merchantId, String merchantRefId, {String? pipe}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _aepsService.resendOTP(
+        aeps.OtpRequest(
+          merchantId: merchantId,
+          merchantRefId: merchantRefId,
+          pipe: pipe ?? _pipe ?? '1',
+        ),
+      );
+      return response.status == '000';
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // E‑KYC (new)
+  // ──────────────────────────────────────────────
+  Future<bool> startEkyc({
+    required String merchantId,
+    required String merchantRefId,
+    required String pipe,
+    String? pidData,
+    String? deviceType,
+    String? aadhaarNumber,
+    String? ipAddress,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      // Use the service method (ensure it exists in aeps_service.dart)
+      final response = await _aepsService.merchantEkyc(
+        aeps.MerchantEkycRequest(
+          merchantId: merchantId,
+          merchantRefId: merchantRefId,
+          pipe: pipe,
+          pidData: pidData ?? '',
+          deviceType: deviceType ?? 'mantra',
+          aadhaarNumber: aadhaarNumber ?? '',
+          // The backend expects these; if your service doesn't have them, add optional fields
+          // ipAddress: ipAddress ?? _ipAddress ?? '127.0.0.1',
+        ),
+      );
+      if (response.status == '000') {
+        // Optionally update local merchant status (backend will set to 'active')
+        return true;
+      } else {
+        _errorMessage = response.statusDescription ?? 'EKYC failed';
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // Daily 2FA (improved, using the same service)
+  // ──────────────────────────────────────────────
+  Future<bool> perform2FA({
+    required String merchantId,
+    required String merchantRefId,
+    required String pipe,
+    required String aadhaarNumber,
+    String? pidData,
+    String? deviceType,
+    double? lat,
+    double? long,
+    String? ipAddress,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _aepsService.perform2FA(
+        aeps.Perform2FARequest(
+          merchantId: merchantId,
+          merchantRefId: merchantRefId,
+          aadhaarNumber: aadhaarNumber,
+          pipe: pipe,
+          deviceType: deviceType ?? 'mantra',
+          pidData: pidData ?? '',
+          lat: lat?.toString(),
+          long: long?.toString(),
+        ),
+      );
+      if (response.status == '000') {
+        final today = DateTime.now().toIso8601String().split('T')[0];
+        _last2FADate = today;
+        _is2FAVerifiedToday = true;
+        await _saveLast2FADate(today);
+        return true;
+      } else {
+        _errorMessage = response.statusDescription ?? '2FA failed';
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
+
+
+
 
   // ----------------------------------------------------------------------
   // Transactions
