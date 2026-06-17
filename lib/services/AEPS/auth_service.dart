@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:my_app/services/api_logger.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -112,7 +113,7 @@ class AuthService {
     final url = Uri.parse('$_baseUrl/api/auth/set-tpin');
     final headers = await _getAuthHeaders();
 
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       url,
       headers: headers,
       body: jsonEncode({'newTpin': newTpin}),
@@ -135,7 +136,7 @@ class AuthService {
     final url = Uri.parse('$_baseUrl/api/auth/change-tpin');
     final headers = await _getAuthHeaders();
 
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       url,
       headers: headers,
       body: jsonEncode({
@@ -159,7 +160,7 @@ class AuthService {
     final url = Uri.parse('$_baseUrl/api/auth/verify-tpin');
     final headers = await _getAuthHeaders();
 
-    final response = await http.post(
+    final response = await LoggedHttpClient.post(
       url,
       headers: headers,
       body: jsonEncode({'tpin': tpin}),

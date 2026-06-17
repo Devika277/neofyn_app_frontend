@@ -15,6 +15,7 @@ import 'register_screen.dart';
 import '../../services/mpin_service.dart';
 import 'set_mpin_screen.dart';
 import 'mpin_verify_screen.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  NEOFYN FIN TECH BRAND TOKENS - Clean Professional UI
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ class CountryCode {
   final String flag;
   final String code;
   final String name;
+
   const CountryCode(this.flag, this.code, this.name);
 }
 
@@ -229,9 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
           token = data['accessToken'];
         }
 
-      if (token != null && token != 'null' && token.isNotEmpty) {
-        await _storage.write(key: 'jwt_token', value: token);
-        final prefs = await SharedPreferences.getInstance();
+        if (token != null && token != 'null' && token.isNotEmpty) {
+          await _storage.write(key: 'jwt_token', value: token);
+          final prefs = await SharedPreferences.getInstance();
 
           String? userId, name, phone;
           if (data['user'] != null) {
@@ -262,8 +264,18 @@ class _LoginScreenState extends State<LoginScreen> {
               phone ?? _phoneController.text.trim(),
             );
             await prefs.setString('accessToken', finalToken);
-            await prefs.setString('email', data['user']?['email'] ?? '');  // ✅ ADD THIS LINE
-
+            await prefs.setString(
+              'email',
+              data['user']?['email'] ?? '',
+            ); // ✅ ADD THIS LINE
+            await prefs.setString(
+              'member_id',
+              data['user']?['member_id'] ?? '',
+            );
+            await prefs.setBool(
+              'tpin',
+              data['user']?['tpin'] ?? '',
+            );
             final aeps = Provider.of<AepsProvider>(context, listen: false);
             aeps.setAuthDetails(
               token: finalToken,

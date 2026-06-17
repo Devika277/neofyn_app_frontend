@@ -106,7 +106,7 @@ class BiometricService {
   /// 
   /// Returns the PID XML data on success
   /// Throws Exception on failure with error details
-  static Future<String> capturePid({String clientKey = 'NEOFYN'}) async {
+  static Future<String> capturePid({String clientKey = 'NEOFYN',String wadh = '18f4CEiXeXcfGXvgWA/blxD+w2pw7hfQPY45JMytkPw=',  }) async {
     final baseUrl = await _getBaseUrl();
     print('📤 Capturing fingerprint from: $baseUrl');
 

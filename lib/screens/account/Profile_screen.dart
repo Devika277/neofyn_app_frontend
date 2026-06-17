@@ -43,6 +43,8 @@ class _ProfilePageState extends State<ProfilePage> {
   String _email = '';
   String _userId = '';
   String _selectedLanguage = 'English';
+  String _memberId = '';
+  bool tpin = false;
   bool _isDarkTheme = true;
   File? _profileImage;
 
@@ -97,13 +99,20 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final imagePath = prefs.getString('profile_image');
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final user = auth.user;
     if (!mounted) return;
     setState(() {
       _name = prefs.getString('name') ?? 'Merchant';
       _phone = prefs.getString('phone') ?? '';
       _email = prefs.getString('email') ?? 'merchant@neofyn.com';
-      _userId = prefs.getString('userId') ?? 'PN8472193';
-      _selectedLanguage = prefs.getString('language') ?? 'English';
+      // ✅ Get member_id directly from SharedPreferences
+      _memberId = prefs.getString('member_id') ?? '';
+      _userId = prefs.getString('userId') ?? '';
+      tpin = prefs.getBool('tpin') ?? false;
+      // _userId = prefs.getString('userId') ?? 'PN8472193';
+          _selectedLanguage =
+          prefs.getString('language') ?? 'English';
       if (imagePath != null && File(imagePath).existsSync()) {
         _profileImage = File(imagePath);
       }
@@ -445,10 +454,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _navigateToTpin() {
-    final auth = context.read<AuthProvider>();
-    final hasTpin = auth.user?.tpinSet ?? false;
-
-    if (hasTpin) {
+    // Use the class variable directly - no need for async
+    if (tpin) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const ChangeTpinScreen()),
@@ -573,11 +580,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
               return _buildMenuItem(
                 icon: Icons.security_rounded,
-                title: hasTpin ? 'Change TPIN' : 'Set TPIN',
-                subtitle: hasTpin
+                title: tpin  ? 'Change TPIN' : 'Set TPIN',
+                subtitle: tpin
                     ? 'Transaction PIN is set'
                     : 'Transaction PIN not set',
-                trailing: hasTpin
+                trailing: tpin
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -613,7 +620,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         size: _iconSize * 0.8,
                       ),
                 onTap: () {
-                  if (hasTpin) {
+                  if (tpin ) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -630,55 +637,7 @@ class _ProfilePageState extends State<ProfilePage> {
               );
             },
           ),
-
-          /*_buildMenuItem(
-            icon: Icons.security_rounded,
-            title: 'Set TPIN',
-            subtitle: 'Transaction PIN',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SetTPINScreen()),
-              );
-            },
-          ),*/
-          SizedBox(height: _spacing * 2),
-
-          // ── Preferences Section ──
-          _buildSectionHeader('Preferences'),
-          SizedBox(height: _spacing),
-
-          _buildMenuItem(
-            icon: Icons.language_rounded,
-            title: 'Language',
-            subtitle: _selectedLanguage,
-            onTap: _changeLanguage,
-          ),
           SizedBox(height: _spacing * 0.5),
-          _buildMenuItem(
-            icon: _isDarkTheme
-                ? Icons.dark_mode_rounded
-                : Icons.light_mode_rounded,
-            title: 'Theme',
-            subtitle: _isDarkTheme ? 'Dark Mode' : 'Light Mode',
-            trailing: Switch(
-              value: _isDarkTheme,
-              onChanged: (val) {
-                setState(() => _isDarkTheme = val);
-                _showToast(val ? 'Dark theme applied' : 'Light theme applied');
-              },
-              activeColor: AppColors.primaryLight,
-            ),
-          ),
-          SizedBox(height: _spacing * 0.5),
-          _buildMenuItem(
-            icon: Icons.notifications_rounded,
-            title: 'Notifications',
-            subtitle: 'Manage alerts',
-            onTap: () {},
-          ),
-
-          SizedBox(height: _spacing * 2),
 
           // ── Support Section ──
           _buildSectionHeader('Support'),
@@ -691,14 +650,14 @@ class _ProfilePageState extends State<ProfilePage> {
             onTap: () {},
             isCompact: true,
           ),
-          SizedBox(height: _spacing * 0.5),
+          /*SizedBox(height: _spacing * 0.5),
           _buildMenuItem(
             icon: Icons.info_rounded,
             title: 'About',
             subtitle: 'Version 1.0.0',
             onTap: () {},
             isCompact: true,
-          ),
+          ),*/
           SizedBox(height: _spacing * 0.5),
           _buildMenuItem(
             icon: Icons.description_rounded,
@@ -714,6 +673,19 @@ class _ProfilePageState extends State<ProfilePage> {
           _buildSignOutButton(),
 
           SizedBox(height: _spacing * 2),
+          SizedBox(height: _spacing * 1.5),
+
+          // ── Version Info (just text, no button) ──
+          Center(
+            child: Text(
+              'Version 1.0.0',
+              style: TextStyle(
+                fontSize: _fontSizeSubtitle * 0.9,
+                color: Colors.white38, // Light white color
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -839,12 +811,23 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: AppColors.primary.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(_cardRadius * 0.4),
                     ),
-                    child: Text(
-                      'ID: $_userId',
-                      style: TextStyle(
-                        fontSize: _fontSizeSubtitle * 0.8,
-                        color: Colors.white70,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        /*Icon(
+                          Icons.badge_rounded,
+                          color: AppColors.primaryLight,
+                          size: _fontSizeSubtitle * 0.8,
+                        ),
+                        SizedBox(width: 4),*/
+                        Text(
+                          'Member ID: ${_memberId.isNotEmpty ? _memberId : 'Not assigned'}',
+                          style: TextStyle(
+                            fontSize: _fontSizeSubtitle * 0.8,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
