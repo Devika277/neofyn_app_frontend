@@ -327,6 +327,7 @@ Future<Map<String, dynamic>?> fetchPipeStatus(String pipe) async {
   _merchantRefId = merchant['merchantRefId']?.toString();
   _mobileNo = merchant['phone']?.toString();
   _aadhaarNo = merchant['aadhaarNo']?.toString();
+  _pipe = merchant['pipe']?.toString() ?? _pipe;
   _last2FADate = null;
   _is2FAVerifiedToday = false;
   _authService.saveMerchantData(
@@ -334,6 +335,7 @@ Future<Map<String, dynamic>?> fetchPipeStatus(String pipe) async {
     merchantRefId: _merchantRefId ?? '',
     mobileNo: _mobileNo ?? '',
     aadhaarNo: _aadhaarNo,
+    
   );
   notifyListeners();
   debugPrint('✅ setMerchantData completed: merchantId=$_merchantId, pipe=$_pipe');
@@ -349,50 +351,59 @@ Future<Map<String, dynamic>?> fetchPipeStatus(String pipe) async {
     return _last2FADate != today;
   }
 
-  Future<bool> performDaily2FA(
-    String pidData, {
-    String deviceType = 'mantra',
-    String? aadhaarNumber,
-    String? merchantRefId,
-  }) async {
-    if (_merchantId == null) return false;
-    final aadhaar = aadhaarNumber ?? _aadhaarNo;
-    if (aadhaar == null || aadhaar.isEmpty) {
-      _errorMessage = 'Aadhaar number is required';
-      return false;
-    }
+  // In aeps_provider.dart, update the performDaily2FA method:
 
-    _isLoading = true;
-    notifyListeners();
+Future<bool> performDaily2FA(
+  String pidData, {
+  String deviceType = 'mantra',
+  String? aadhaarNumber,
+  String? merchantRefId,
+}) async {
+  if (_merchantId == null) return false;
+  final aadhaar = aadhaarNumber ?? _aadhaarNo;
+  if (aadhaar == null || aadhaar.isEmpty) {
+    _errorMessage = 'Aadhaar number is required';
+    return false;
+  }
 
-    try {
-      await _aepsService.perform2FA(
-        aeps.Perform2FARequest(
-          merchantId: _merchantId!,
-          merchantRefId: merchantRefId ?? '2FA_${DateTime.now().millisecondsSinceEpoch}',
-          aadhaarNumber: aadhaar,
-          pipe: _pipe,
-          deviceType: deviceType,
-          pidData: pidData,
-          lat: null,
-          long: null,
-        ),
-      );
+  _isLoading = true;
+  notifyListeners();
 
+  try {
+    // ✅ Call the service WITHOUT lat/long
+    final response = await _aepsService.perform2FA(
+      aeps.Perform2FARequest(
+        merchantId: _merchantId!,
+        merchantRefId: merchantRefId ?? '2FA_${DateTime.now().millisecondsSinceEpoch}',
+        aadhaarNumber: aadhaar,
+        pipe: _pipe,
+        deviceType: deviceType,
+        pidData: pidData,
+        // ❌ DO NOT send lat/long
+        // lat: null,
+        // long: null,
+      ),
+    );
+
+    if (response.status == '000') {
       final today = DateTime.now().toIso8601String().split('T')[0];
       _last2FADate = today;
       _is2FAVerifiedToday = true;
       _errorMessage = null;
       await _saveLast2FADate(today);
       return true;
-    } catch (e) {
-      _errorMessage = e.toString();
+    } else {
+      _errorMessage = response.statusDescription ?? '2FA failed with status: ${response.status}';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
+  } catch (e) {
+    _errorMessage = e.toString();
+    return false;
+  } finally {
+    _isLoading = false;
+    notifyListeners();
   }
+}
 
   // Future<void> clearMerchantData() async {
   //   await _authService.clearMerchantData();

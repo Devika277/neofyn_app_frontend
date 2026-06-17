@@ -200,7 +200,7 @@ Future<void> _registerSender() async {
       'address': _addressController.text.trim(),
       'aadhaar': _aadhaarController.text.trim(),
       'pinCode': _pincodeController.text.trim(),
-      'pidData': '<?xml version="1.0" encoding="UTF-8"?><PidOptions ver="1.0"><Opts fCount="1" fType="0" format="0" pidVer="2.0" timeout="10000" otp="" posh="UNKNOWN" env="P" wadh=""/></PidOptions>',
+      'pidData': '<?xml version="1.0" encoding="UTF-8"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" format="0" pidVer="2.0" timeout="10000" otp="" posh="UNKNOWN" env="P" wadh=""/></PidOptions>',
     };
 ;
     final result = await _dmtService.registerSender(payload);
