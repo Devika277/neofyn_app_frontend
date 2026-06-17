@@ -2,87 +2,71 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:network_info_plus/network_info_plus.dart';
 
-/// BiometricService - Handles communication with Mantra RD Service
-/// 
-/// This service discovers and communicates with the Mantra RD Service
-/// for fingerprint capture using the non-standard HTTP protocol.
-///
 class BiometricService {
-  // ─────────────────────────────────────────────────────────────────────────
-  // Configuration
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Default port for Mantra RD Service
   static const int defaultPort = 11100;
-
-  /// Known hosts to check for RD Service
   static const List<String> knownHosts = [
-    '127.0.0.1',   // Localhost
-    'localhost',   // Localhost alternative
-    '10.0.2.2',    // Android emulator localhost
-    '10.0.3.2',    // Android emulator alternative
+    '127.0.0.1',
+    'localhost',
+    '10.0.2.2',
+    '10.0.3.2',
   ];
 
-  /// Cached base URL to avoid repeated discovery
   static String? _cachedBaseUrl;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Public Methods
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Discover and return the RD Service URL
-  /// 
-  /// Scans known hosts and returns the first working RD Service URL.
-  /// Results are cached for subsequent calls.
+  /// Discover RD Service URL with logging
   static Future<String?> findRdServiceUrl() async {
-    // Return cached if already found
-    if (_cachedBaseUrl != null) return _cachedBaseUrl;
+    if (_cachedBaseUrl != null) {
+      print('📱 RD Service: Using cached URL: $_cachedBaseUrl');
+      return _cachedBaseUrl;
+    }
 
     final deviceIp = await _getDeviceIp();
     final allHosts = [...knownHosts, if (deviceIp != null) deviceIp];
 
-    print('🔍 Scanning for RD Service on hosts: $allHosts');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🔍 RD Service: Scanning for device...');
+    print('📡 Hosts to check: $allHosts');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     for (var host in allHosts) {
       final testUrl = 'http://$host:$defaultPort/rd/info';
-      print('🔗 Testing: $testUrl');
 
       try {
-        // Use http.Request with custom 'DEVICEINFO' method
+        // ✅ Use LoggedHttpClient for DEVICEINFO (custom method)
+        // Since LoggedHttpClient doesn't have custom methods,
+        // we log manually for this special case
+        print('📤 BIOMETRIC | DEVICEINFO | $testUrl');
+
         final request = http.Request('DEVICEINFO', Uri.parse(testUrl));
         final response = await request.send().timeout(
           const Duration(seconds: 2),
-          onTimeout: () {
-            print('⏱️ Timeout checking $host');
-            throw TimeoutException('Timeout');
-          },
+          onTimeout: () => throw TimeoutException('Timeout'),
         );
 
         if (response.statusCode == 200) {
           _cachedBaseUrl = 'http://$host:$defaultPort';
-          print('✅ RD Service found at: $_cachedBaseUrl');
+          print('✅ BIOMETRIC | DEVICE FOUND | $_cachedBaseUrl');
+          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           return _cachedBaseUrl;
         } else {
-          print('⚠️ $host returned status: ${response.statusCode}');
+          print('⚠️ BIOMETRIC | $host | Status: ${response.statusCode}');
         }
       } catch (e) {
-        print('❌ Error checking $host: $e');
-        // Ignore and try next host
-        continue;
+        print('❌ BIOMETRIC | $host | Error: $e');
       }
     }
 
-    print('❌ RD Service not found on any known host');
+    print('❌ RD Service: Device not found');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     return null;
   }
 
-  /// Check if RD Service is available and responding
+  /// Check device status with logging
   static Future<bool> checkDevice() async {
     try {
       final baseUrl = await _getBaseUrl();
-      print('📱 Checking device at: $baseUrl');
+      print('📱 BIOMETRIC | CHECK | $baseUrl/rd/info');
 
-      // Use http.Request with custom 'DEVICEINFO' method
       final request = http.Request('DEVICEINFO', Uri.parse('$baseUrl/rd/info'));
       final response = await request.send().timeout(
         const Duration(seconds: 3),
@@ -90,86 +74,76 @@ class BiometricService {
       );
 
       final isAvailable = response.statusCode == 200;
-      print('📱 Device check result: $isAvailable (status: ${response.statusCode})');
+      print('${isAvailable ? '✅' : '❌'} BIOMETRIC | CHECK | Available: $isAvailable (${response.statusCode})');
       return isAvailable;
     } catch (e) {
-      print('❌ Device check failed: $e');
-      // Clear cache to force rediscovery next time
+      print('❌ BIOMETRIC | CHECK FAILED | $e');
       _cachedBaseUrl = null;
       return false;
     }
   }
 
-  /// Capture fingerprint/PID data from RD Service
-  /// 
-  /// [clientKey] - Optional client key for authentication
-  /// 
-  /// Returns the PID XML data on success
-  /// Throws Exception on failure with error details
-  static Future<String> capturePid({String clientKey = 'NEOFYN',String wadh = '18f4CEiXeXcfGXvgWA/blxD+w2pw7hfQPY45JMytkPw=',  }) async {
+  /// Capture fingerprint with logging
+  static Future<String> capturePid({
+    String clientKey = 'NEOFYN',
+    String wadh = 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=',
+  }) async {
     final baseUrl = await _getBaseUrl();
-    print('📤 Capturing fingerprint from: $baseUrl');
-
-    // Build the PID options XML
     final String xml = _buildPidOptionsXml(clientKey);
 
-    // ✅ KEY FIX: Use http.Request with custom 'CAPTURE' method
-    // DO NOT use http.post() - it sends standard HTTP POST which RD Service rejects
-    final request = http.Request('CAPTURE', Uri.parse('$baseUrl/rd/capture'));
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('📤 BIOMETRIC | CAPTURE | $baseUrl/rd/capture');
+    print('📦 Body: ${xml.substring(0, 100)}...');
+    print('⏱️ Timeout: 15 seconds');
 
-    // Set required headers
+    final request = http.Request('CAPTURE', Uri.parse('$baseUrl/rd/capture'));
     request.headers['Content-Type'] = 'text/xml';
     request.headers['Accept'] = 'text/xml';
-
-    // Set the request body
     request.body = xml;
 
-    print('📤 Request body: $xml');
+    final startTime = DateTime.now();
 
     try {
-      // Send the request
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 15),
         onTimeout: () {
-          print('⏱️ Capture timeout');
+          print('⏱️ BIOMETRIC | CAPTURE TIMEOUT');
           throw TimeoutException('Capture timeout - device not responding');
         },
       );
 
-      // Convert streaming response to regular response
       final response = await http.Response.fromStream(streamedResponse);
+      final duration = DateTime.now().difference(startTime);
 
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response body: ${response.body}');
+      print('📥 BIOMETRIC | CAPTURE RESPONSE | ${response.statusCode} | ${duration.inMilliseconds}ms');
+      print('📦 Response: ${response.body.substring(0, 200)}...');
 
       if (response.statusCode == 405) {
-        throw Exception(
-          'Method Not Allowed (405). '
-          'This usually means the RD Service endpoint does not support this method. '
-          'Verify the RD Service is running and properly configured.',
-        );
+        print('❌ BIOMETRIC | ERROR 405 | Method Not Allowed');
+        throw Exception('Method Not Allowed (405). Verify RD Service is running.');
       }
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'RD Service error: ${response.statusCode} - ${response.body}',
-        );
+        print('❌ BIOMETRIC | ERROR | ${response.statusCode}');
+        throw Exception('RD Service error: ${response.statusCode}');
       }
 
       final pidData = response.body;
 
-      // Check for success (errCode="0" or errCode="10" for no fingerprint)
-      // errCode="10" typically means fingerprint not detected yet, which is still a valid response
       if (_isSuccessResponse(pidData)) {
-        print('✅ Fingerprint captured successfully');
+        print('✅ BIOMETRIC | CAPTURE SUCCESS');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return pidData;
       }
 
-      // Extract error message
       final errMsg = _extractErrorMessage(pidData);
+      print('❌ BIOMETRIC | CAPTURE FAILED | $errMsg');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       throw Exception(errMsg);
 
     } catch (e) {
+      print('💥 BIOMETRIC | CAPTURE ERROR | $e');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       if (e is TimeoutException) {
         throw Exception('Capture timeout - please ensure the device is connected');
       }
@@ -177,88 +151,59 @@ class BiometricService {
     }
   }
 
-  /// Reset cached URL (call after device disconnect)
   static void resetDiscovery() {
-    print('🔄 Resetting RD Service discovery');
+    print('🔄 BIOMETRIC | RESET | Clearing cached URL');
     _cachedBaseUrl = null;
   }
 
-  /// Get the current cached base URL
   static String? get cachedBaseUrl => _cachedBaseUrl;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Private Helper Methods
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Get the device's Wi-Fi IP address
   static Future<String?> _getDeviceIp() async {
     try {
       final networkInfo = NetworkInfo();
       final ip = await networkInfo.getWifiIP();
       final result = ip?.isNotEmpty == true ? ip : null;
-      print('📡 Device Wi-Fi IP: $result');
+      print('📡 BIOMETRIC | Device IP: ${result ?? "Not available"}');
       return result;
     } catch (e) {
-      print('❌ Failed to get Wi-Fi IP: $e');
+      print('❌ BIOMETRIC | IP Error: $e');
       return null;
     }
   }
 
-  /// Get the base URL, discovering if necessary
   static Future<String> _getBaseUrl() async {
     if (_cachedBaseUrl != null) return _cachedBaseUrl!;
-
     final url = await findRdServiceUrl();
     if (url == null) {
-      throw Exception(
-        'RD Service not reachable. '
-        'Please ensure:\n'
-        '1. Mantra RD Service APK is installed\n'
-        '2. RD Service app is running\n'
-        '3. Network connectivity is available',
-      );
+      throw Exception('RD Service not reachable. Ensure RD Service app is running.');
     }
     return url;
   }
 
-  /// Build PID Options XML
   static String _buildPidOptionsXml(String clientKey) {
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <PidOptions ver="1.0">
-  <Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" env="P"/>
+  <Opts fCount="1" fType="2" format="0" pidVer="2.0" timeout="30000" otp="" posh="UNKNOWN" env="P" wadh="E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc="/>
   <CustOpts>
-    <Param name="clientKey" value="$clientKey"/>
+    <Param name="clientKey" value="NEOFYN"/>
   </CustOpts>
 </PidOptions>''';
   }
 
-  /// Check if response indicates success
   static bool _isSuccessResponse(String response) {
-    // errCode="0" = success
-    // errCode="10" = no fingerprint found (but still valid response from device)
     return response.contains('errCode="0"') ||
         response.contains("errCode='0'") ||
         response.contains('errCode="10"') ||
         response.contains("errCode='10'");
   }
 
-  /// Extract error message from PID response
   static String _extractErrorMessage(String response) {
-    // Try different patterns for error info
     RegExp errInfoRegex = RegExp(r'errInfo="([^"]*)"');
     RegExp errCodeRegex = RegExp(r'errCode="([^"]*)"');
-
     String? errInfo = errInfoRegex.firstMatch(response)?.group(1);
     String? errCode = errCodeRegex.firstMatch(response)?.group(1);
-
-    if (errInfo != null && errInfo.isNotEmpty) {
-      return 'Error $errCode: $errInfo';
-    }
-
-    if (errCode != null && errCode != '0' && errCode != '10') {
-      return 'Capture failed with error code: $errCode';
-    }
-
+    if (errInfo != null && errInfo.isNotEmpty) return 'Error $errCode: $errInfo';
+    if (errCode != null && errCode != '0' && errCode != '10') return 'Capture failed with error code: $errCode';
     return 'Fingerprint capture failed - unknown error';
   }
 }

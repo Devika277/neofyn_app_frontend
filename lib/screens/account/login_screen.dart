@@ -408,8 +408,14 @@ class _LoginScreenState extends State<LoginScreen> {
         'phone': bestMatch['phone'] ?? phone,
         'registrationStatus': bestMatch['registrationStatus'],
       });
-      aeps.setAuthDetails(token: token, userId: userId, merchantId: bestMatch['merchantId'] ?? '');
-      debugPrint('✅ Merchant data set successfully');
+      aeps.setAuthDetails(
+          token: token,
+          userId: userId,
+          merchantId: bestMatch['merchantId'] ?? '',
+          mobileNo: bestMatch['phone'] ?? phone,
+          aadhaarNo: bestMatch['aadhaarNo'],
+          pipe: bestMatch['pipe']?.toString()
+      );      debugPrint('✅ Merchant data set successfully');
     } else {
       debugPrint('⚠️ Body is not a non-empty list: $body');
     }
