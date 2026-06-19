@@ -1171,7 +1171,7 @@ class AepsService {
 
   Future<Perform2FAResponse> perform2FA(Perform2FARequest data) {
     return _handleResponse(
-      _dio.post('/aepsapi/api/payment/merchant2FAPipe', data: data.toJson()),
+      _dio.post('/aeps/2fa', data: data.toJson()),
       (data) => Perform2FAResponse.fromJson(data),
     );
   }

@@ -142,8 +142,10 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     });
 
     try {
-      final pidXml = await BiometricService.capturePid();
-      
+      final pidXml = await BiometricService.capturePid(isFor2FA: true);
+      print('✅ PID captured: ${pidXml?.substring(0, 100)}...');   // add this
+      print('✅ PID captured for 2FA: ${pidXml?.substring(0, 100)}...');
+
       setState(() {
         _pidXml = pidXml;
         _isCaptured = true;
@@ -178,14 +180,25 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
 
     final provider = context.read<AepsProvider>();
     final aadhaar = _aadhaarController.text.trim();
-    final merchantRefId = '2FA_${DateTime.now().millisecondsSinceEpoch}';
+    // final merchantRefId = '2FA_${DateTime.now().millisecondsSinceEpoch}';
+    // final merchantRefId = provider.getMerchantRefIdForPipe('1') ??
+    //     'NEO_${provider.userId}_${DateTime.now().millisecondsSinceEpoch}';
 
+    final currentPipe = provider.pipe ?? '1';
+    final merchantRefId = provider.getMerchantRefIdForPipe(currentPipe);
+
+    // ✅ If merchantRefId is null, use the one from registration
+    final refId = merchantRefId ?? provider.merchantRefId ??
+        'NEO_${provider.userId}_${DateTime.now().millisecondsSinceEpoch}';
+    print('🔵 Using merchantRefId: $refId');
+    print('🔵 For pipe: $currentPipe');
+    print('🔵 Merchant ID: ${provider.merchantId}');
     try {
       final bool success = await provider.performDaily2FA(
         _pidXml!,
         deviceType: 'mantra',
         aadhaarNumber: aadhaar,
-        merchantRefId: merchantRefId,
+        merchantRefId: refId,
       );
 
       if (!mounted) return;

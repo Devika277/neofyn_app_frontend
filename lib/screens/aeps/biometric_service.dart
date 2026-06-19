@@ -87,10 +87,16 @@ class BiometricService {
   static Future<String> capturePid({
     String clientKey = 'NEOFYN',
     String wadh = 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=',
+    bool isFor2FA = false,
+    String pipe = '1',
   }) async {
     final baseUrl = await _getBaseUrl();
-    final String xml = _buildPidOptionsXml(clientKey);
+    final actualWadh = isFor2FA ? '' : _getWadhForPipe(pipe);
 
+    // final String xml = _buildPidOptionsXml(clientKey);
+    final String xml = isFor2FA
+        ? _buildPidOptionsXml(clientKey, wadh: '')  // Empty for 2FA
+        : _buildPidOptionsXml(clientKey, wadh: actualWadh);
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     print('📤 BIOMETRIC | CAPTURE | $baseUrl/rd/capture');
     print('📦 Body: ${xml.substring(0, 100)}...');
@@ -180,16 +186,15 @@ class BiometricService {
     return url;
   }
 
-  static String _buildPidOptionsXml(String clientKey) {
+  static String _buildPidOptionsXml(String clientKey, {String wadh = 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc='}) {
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <PidOptions ver="1.0">
-  <Opts fCount="1" fType="2" format="0" pidVer="2.0" timeout="30000" otp="" posh="UNKNOWN" env="P" wadh="E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc="/>
+  <Opts fCount="1" fType="2" format="0" pidVer="2.0" timeout="30000" otp="" posh="UNKNOWN" env="P" wadh="$wadh"/>
   <CustOpts>
-    <Param name="clientKey" value="NEOFYN"/>
+    <Param name="clientKey" value="$clientKey"/>
   </CustOpts>
 </PidOptions>''';
   }
-
   static bool _isSuccessResponse(String response) {
     return response.contains('errCode="0"') ||
         response.contains("errCode='0'") ||
@@ -205,5 +210,18 @@ class BiometricService {
     if (errInfo != null && errInfo.isNotEmpty) return 'Error $errCode: $errInfo';
     if (errCode != null && errCode != '0' && errCode != '10') return 'Capture failed with error code: $errCode';
     return 'Fingerprint capture failed - unknown error';
+  }
+  // ✅ Add this helper
+  static String _getWadhForPipe(String pipe) {
+    switch (pipe) {
+      case '1':
+        return 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=';
+      case '2':
+        return '18f4CEiXeXcfGXvgWA/blxD+w2pw7hfQPY45JMytkPw=';
+      case '3':
+        return 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc='; // Default
+      default:
+        return 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=';
+    }
   }
 }

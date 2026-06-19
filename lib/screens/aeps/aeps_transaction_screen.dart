@@ -2,13 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../providers/aeps_provider.dart';   // ✅ uses all models from provider
+import '../../providers/aeps_provider.dart';
 import '../../services/AEPS/location_service.dart';
 import 'biometric_service.dart';
 import '../../services/AEPS/aeps_service.dart' as aeps;
-
-
-// No import of aeps_models.dart – provider already defines needed types
 
 class AepsTransactionScreen extends StatefulWidget {
   final String serviceType; // 'CW', 'BE', 'MS', 'CD', 'AP'
@@ -38,12 +35,18 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
 
   String _getServiceTitle() {
     switch (widget.serviceType) {
-      case 'CW': return 'Cash Withdrawal';
-      case 'BE': return 'Balance Enquiry';
-      case 'MS': return 'Mini Statement';
-      case 'CD': return 'Cash Deposit';
-      case 'AP': return 'Aadhaar Pay';
-      default: return 'AEPS Transaction';
+      case 'CW':
+        return 'Cash Withdrawal';
+      case 'BE':
+        return 'Balance Enquiry';
+      case 'MS':
+        return 'Mini Statement';
+      case 'CD':
+        return 'Cash Deposit';
+      case 'AP':
+        return 'Aadhaar Pay';
+      default:
+        return 'AEPS Transaction';
     }
   }
 
@@ -54,6 +57,9 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       final provider = context.read<AepsProvider>();
       if (provider.banks.isEmpty) {
         provider.fetchBanks();
+      }
+      if (provider.bankIINs.isEmpty) {
+        provider.fetchBankIINs();
       }
     });
     _getLocation();
@@ -88,7 +94,9 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     }
     setState(() => _isCapturingBiometric = true);
     try {
-      final pidXml = await BiometricService.capturePid(clientKey: 'NEOFYN');
+      final provider = context.read<AepsProvider>();
+      final currentPipe = provider.pipe ?? '1';
+      final pidXml = await BiometricService.capturePid(clientKey: 'NEOFYN',pipe: currentPipe,);
       setState(() {
         _pidData = pidXml;
         _isBiometricCaptured = true;
@@ -129,24 +137,19 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     }
 
     final provider = context.read<AepsProvider>();
-    final userPhone = provider.mobileNo;
-    if (userPhone == null || userPhone.isEmpty) {
-      _showError('User phone not found');
-      return;
-    }
+    final currentPipe = provider.pipe ?? '1';
 
-    // ✅ Use provider's fetchMerchantByPhone (now implemented)
-    await provider.fetchMerchantByPhone(userPhone);
-    final merchantId = provider.realMerchantId;
+    final merchantId = provider.getMerchantIdForPipe(currentPipe) ?? provider.merchantId;
+    final merchantRefId = provider.getMerchantRefIdForPipe(currentPipe) ?? provider.merchantRefId;
+
     if (merchantId == null) {
-      _showError('Merchant not registered. Please complete registration first.');
+      _showError('Merchant not registered for pipe $currentPipe. Please complete registration first.');
       return;
     }
 
     final confirmed = await _showConfirmationDialog();
     if (!confirmed) return;
 
-    final merchantRefId = 'TXN_${DateTime.now().millisecondsSinceEpoch}';
     try {
       final response = await provider.performAepsTransaction(
         merchantId: merchantId,
@@ -156,9 +159,12 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         amount: _isAmountRequired ? _amountController.text : '0',
         pidData: _pidData!,
         deviceType: 'mantra',
-        merchantRefId: merchantRefId,
+        merchantRefId: merchantRefId ?? 'TXN_${DateTime.now().millisecondsSinceEpoch}',
         mobileNo: provider.mobileNo ?? '',
+        lat: _location!['latitude']?.toString() ?? '0.0',
+        long: _location!['longitude']?.toString() ?? '0.0',
       );
+
       if (mounted && response != null) {
         _showResultDialog(response);
       } else if (mounted) {
@@ -188,15 +194,21 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6200EE)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6200EE),
+            ),
             child: const Text('Confirm'),
           ),
         ],
       ),
-    ) ?? false;
+    ) ??
+        false;
   }
 
   void _showResultDialog(TransactionResponse response) {
@@ -207,8 +219,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(isSuccess ? Icons.check_circle : Icons.error,
-                color: isSuccess ? Colors.green : Colors.red),
+            Icon(
+              isSuccess ? Icons.check_circle : Icons.error,
+              color: isSuccess ? Colors.green : Colors.red,
+            ),
             const SizedBox(width: 8),
             Text(isSuccess ? 'Success' : 'Failed'),
           ],
@@ -242,7 +256,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(width: 100, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500))),
+          SizedBox(
+            width: 100,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
           Expanded(child: Text(value)),
         ],
       ),
@@ -250,30 +267,38 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   }
 
   String _maskAadhaar(String aadhaar) {
-    if (aadhaar.length >= 8) return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
+    if (aadhaar.isEmpty) return '';
+    if (aadhaar.length < 4) return aadhaar;
+    if (aadhaar.length >= 8) {
+      return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
+    }
     return aadhaar;
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
   }
 
   void _showSuccess(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.green),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AepsProvider>();
-    final banks = provider.banks;
+    final bankIINs = provider.bankIINs;
 
     final canProceed = _selectedBankIIN != null &&
         _aadhaarController.text.length == 12 &&
         _isBiometricCaptured &&
         _location != null &&
         (!_isAmountRequired || _amountController.text.isNotEmpty);
-    final amountValid = !_isAmountRequired ||
-        (double.tryParse(_amountController.text) ?? 0) >= 100;
+    final amountValid =
+        !_isAmountRequired || (double.tryParse(_amountController.text) ?? 0) >= 100;
 
     return Scaffold(
       appBar: AppBar(
@@ -281,31 +306,31 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         backgroundColor: const Color(0xFF6200EE),
         foregroundColor: Colors.white,
       ),
-      body: provider.isLoading
+      body: provider.isLoading || provider.isLoadingBankIINs
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildLocationCard(),
-                  const SizedBox(height: 16),
-                  _buildBankDropdown(banks),
-                  const SizedBox(height: 16),
-                  _buildAadhaarField(),
-                  const SizedBox(height: 16),
-                  if (_isAmountRequired) _buildAmountField(),
-                  const SizedBox(height: 16),
-                  _buildBiometricCard(),
-                  const SizedBox(height: 24),
-                  if (!amountValid && _isAmountRequired) _buildAmountError(),
-                  const SizedBox(height: 16),
-                  _buildProcessButton(canProceed && amountValid),
-                  const SizedBox(height: 16),
-                  if (_isAmountRequired) _buildInfoNote(),
-                ],
-              ),
-            ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildLocationCard(),
+            const SizedBox(height: 16),
+            _buildBankDropdown(bankIINs),
+            const SizedBox(height: 16),
+            _buildAadhaarField(),
+            const SizedBox(height: 16),
+            if (_isAmountRequired) _buildAmountField(),
+            const SizedBox(height: 16),
+            _buildBiometricCard(),
+            const SizedBox(height: 24),
+            if (!amountValid && _isAmountRequired) _buildAmountError(),
+            const SizedBox(height: 16),
+            _buildProcessButton(canProceed && amountValid),
+            const SizedBox(height: 16),
+            if (_isAmountRequired) _buildInfoNote(),
+          ],
+        ),
+      ),
     );
   }
 
@@ -316,64 +341,81 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       color: (hasLocation ? Colors.green : Colors.orange).withOpacity(0.1),
       child: ListTile(
         leading: _isGettingLocation
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(hasLocation ? Icons.location_on : Icons.location_off,
-                color: hasLocation ? Colors.green : Colors.orange),
-        title: Text(hasLocation ? 'Location Ready' : 'Location Required',
-            style: TextStyle(color: hasLocation ? Colors.green : Colors.orange, fontWeight: FontWeight.bold)),
-        subtitle: Text(hasLocation
-            ? 'Lat: ${_location!['latitude']!.toStringAsFixed(4)}, Lng: ${_location!['longitude']!.toStringAsFixed(4)}'
-            : 'Enable location to proceed'),
-        trailing: IconButton(icon: const Icon(Icons.refresh), onPressed: _getLocation),
+            ? const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )
+            : Icon(
+          hasLocation ? Icons.location_on : Icons.location_off,
+          color: hasLocation ? Colors.green : Colors.orange,
+        ),
+        title: Text(
+          hasLocation ? 'Location Ready' : 'Location Required',
+          style: TextStyle(
+            color: hasLocation ? Colors.green : Colors.orange,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          hasLocation
+              ? 'Lat: ${_location!['latitude']!.toStringAsFixed(4)}, Lng: ${_location!['longitude']!.toStringAsFixed(4)}'
+              : 'Enable location to proceed',
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _getLocation,
+        ),
       ),
     );
   }
 
-  Widget _buildBankDropdown(List<aeps.Bank> banks) {
-  final validValue = _selectedBankIIN != null && 
-      banks.any((b) => b.code == _selectedBankIIN) 
-      ? _selectedBankIIN 
-      : null;
-
+  Widget _buildBankDropdown(List<aeps.BankIIN> bankIINs) {
+    final validValue = _selectedBankIIN != null &&
+        bankIINs.any((b) => b.iin == _selectedBankIIN)
+        ? _selectedBankIIN
+        : null;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[800]!),
       ),
       child: DropdownButton<String>(
-      value: validValue,
-      isExpanded: true,
-      hint: const Text('Select Bank', style: TextStyle(color: Colors.grey)),
-      dropdownColor: Colors.grey[900],
-      underline: const SizedBox(),
-      items: banks.isEmpty
-          ? null
-          : banks.map((bank) {
-              return DropdownMenuItem<String>(
-                value: bank.code,
-                child: Text(
-                  bank.name ?? 'Unknown', // null safety
-                  style: const TextStyle(color: Colors.white),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
-      onChanged: (value) {
-        if (value == null) return;
-        final bank = banks.firstWhere((b) => b.code == value);
-        setState(() {
-          _selectedBankIIN = value;
-          _selectedBankName = bank.name ?? 'Unknown';
-          _isBiometricCaptured = false;
-          _pidData = null;
-        });
-      },
-    ),
-  );
-}
+        value: validValue,
+        isExpanded: true,
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54),
+        hint: const Text('Select Bank', style: TextStyle(color: Colors.white38, fontSize: 14)),
+        dropdownColor: Colors.grey[900],
+        underline: const SizedBox(),
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        items: bankIINs.isEmpty
+            ? [const DropdownMenuItem(value: null, child: Text('Loading...', style: TextStyle(color: Colors.white54)))]
+            : bankIINs.map((bankIIN) {
+          return DropdownMenuItem<String>(
+            value: bankIIN.iin,
+            child: Text(
+              bankIIN.description ?? bankIIN.iin,
+              style: const TextStyle(color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          if (value == null) return;
+          final bankIIN = bankIINs.firstWhere((b) => b.iin == value);
+          setState(() {
+            _selectedBankIIN = value;
+            _selectedBankName = bankIIN.description ?? bankIIN.iin;
+            _isBiometricCaptured = false;
+            _pidData = null;
+          });
+        },
+      ),
+    );
+  }
 
   Widget _buildAadhaarField() {
     return TextField(
@@ -406,7 +448,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Text('Min: ₹100 | Max: ₹10,000', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        Text(
+          'Min: ₹100 | Max: ₹10,000',
+          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+        ),
       ],
     );
   }
@@ -419,11 +464,17 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           : (bankSelected ? Colors.blue.shade50 : Colors.grey.shade100),
       child: ListTile(
         leading: _isCapturingBiometric
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(_isBiometricCaptured ? Icons.check_circle : Icons.fingerprint,
-                color: _isBiometricCaptured
-                    ? Colors.green
-                    : (bankSelected ? Colors.blue : Colors.grey)),
+            ? const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )
+            : Icon(
+          _isBiometricCaptured ? Icons.check_circle : Icons.fingerprint,
+          color: _isBiometricCaptured
+              ? Colors.green
+              : (bankSelected ? Colors.blue : Colors.grey),
+        ),
         title: Text(
           _isBiometricCaptured ? 'Biometric Captured ✓' : 'Biometric Required',
           style: TextStyle(
@@ -431,11 +482,16 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        subtitle: Text(_isBiometricCaptured
-            ? 'Ready for transaction'
-            : 'Tap to capture customer fingerprint'),
+        subtitle: Text(
+          _isBiometricCaptured
+              ? 'Ready for transaction'
+              : 'Tap to capture customer fingerprint',
+        ),
         trailing: bankSelected && !_isBiometricCaptured
-            ? ElevatedButton(onPressed: _captureBiometric, child: const Text('Capture'))
+            ? ElevatedButton(
+          onPressed: _captureBiometric,
+          child: const Text('Capture'),
+        )
             : null,
       ),
     );
@@ -444,7 +500,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   Widget _buildAmountError() {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: const Row(
         children: [
           Icon(Icons.warning, color: Colors.red, size: 20),
@@ -473,22 +532,21 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     switch (widget.serviceType) {
       case 'CW':
         noteText = '• Customer must be present physically\n'
-                   '• Biometric authentication required\n'
-                   '• Cash will be dispensed after success';
+            '• Biometric authentication required\n'
+            '• Cash will be dispensed after success';
         break;
       case 'CD':
         noteText = '• Customer deposits cash into their own bank account\n'
-                   '• Biometric authentication required\n'
-                   '• Amount will be credited after success';
+            '• Biometric authentication required\n'
+            '• Amount will be credited after success';
         break;
       case 'AP':
         noteText = '• Customer pays the merchant (debit from customer)\n'
-                   '• Biometric authentication required\n'
-                   '• Merchant will receive the credited amount';
+            '• Biometric authentication required\n'
+            '• Merchant will receive the credited amount';
         break;
       default:
-        noteText = '• Ensure biometric is captured\n'
-                   '• Location must be enabled';
+        noteText = '• Ensure biometric is captured\n• Location must be enabled';
     }
     return Container(
       padding: const EdgeInsets.all(12),

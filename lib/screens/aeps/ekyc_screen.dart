@@ -12,6 +12,7 @@ class EKYC_Screen extends StatefulWidget {
   final String merchantRefId;
   final String pipe;
   final String aadhaarNumber;
+
   const EKYC_Screen({
     super.key,
     required this.merchantId,
@@ -37,6 +38,8 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
   bool _useSampleWadh = false;
   bool _skipEkyc = false; // NEW: bypass EKYC for testing
   List<String> _debugLogs = [];
+  final TextEditingController _aadhaarController = TextEditingController();
+  String _aadhaarNumber = '';
 
   // ─── Debug logging ──────────────────────────────────────────
 
@@ -59,9 +62,24 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
   @override
   void initState() {
     super.initState();
+    _aadhaarNumber = widget.aadhaarNumber;
+    _aadhaarController.text = widget.aadhaarNumber;
     _addDebugLog('🔄 EKYC screen initialized');
+    _addDebugLog(
+      '📝 Initial Aadhaar: ${_aadhaarNumber.isNotEmpty ? "${_aadhaarNumber.substring(0, _aadhaarNumber.length > 4 ? 4 : _aadhaarNumber.length)}XXXX" : "Not provided"}',
+    );
     _checkDeviceAvailability();
   }
+
+  @override
+  void dispose() {
+    _aadhaarController.dispose();
+    super.dispose();
+  }
+
+  bool get _isAadhaarValid =>
+      _aadhaarNumber.length == 12 &&
+      RegExp(r'^\d{12}$').hasMatch(_aadhaarNumber);
 
   Future<void> _checkDeviceAvailability() async {
     _addDebugLog('🔍 Checking RD Service availability...');
@@ -75,7 +93,9 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       });
       if (!available) {
         _addDebugLog('❌ RD Service not reachable');
-        _showError('Mantra RD Service not reachable. Please ensure the app is installed and running.');
+        _showError(
+          'Mantra RD Service not reachable. Please ensure the app is installed and running.',
+        );
       } else {
         _addDebugLog('✅ RD Service is reachable');
       }
@@ -95,6 +115,17 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
     _addDebugLog('🚀 Starting EKYC flow...');
     _clearLogs();
 
+    // Validate Aadhaar
+    if (!_isAadhaarValid) {
+      _addDebugLog('❌ Invalid Aadhaar: ${_aadhaarNumber.length} digits');
+      _showError('Please enter a valid 12-digit Aadhaar number');
+      return;
+    }
+
+    // Log masked Aadhaar for debugging
+    final maskedAadhaar = _aadhaarNumber.substring(0, 4) + 'XXXX' + _aadhaarNumber.substring(8);
+    _addDebugLog('📝 Aadhaar validated: $maskedAadhaar');
+
     // 🟢 SKIP EKYC if debug toggle is ON
     if (kDebugMode && _skipEkyc) {
       _addDebugLog('⏭️ SKIP EKYC enabled – bypassing EKYC call');
@@ -108,20 +139,7 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       );
       return;
     }
-    /*void _printFull(String label, String data) {
-      const int chunkSize = 4000; // Bigger chunks
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📦 $label (Total: ${data.length} chars)');
-      print('📦 First 200: ${data.substring(0, 200)}');
-      print('📦 Last 200: ${data.substring(data.length - 200)}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      // Print in 4000 char chunks
-      for (int i = 0; i < data.length; i += chunkSize) {
-        final end = (i + chunkSize < data.length) ? i + chunkSize : data.length;
-        print('[CHUNK ${i~/chunkSize + 1}] ${data.substring(i, end)}');
-      }
-    }*/
     if (!_deviceAvailable) {
       _addDebugLog('❌ Device not available. Aborting.');
       _showError('RD Service not available. Please check your Mantra device.');
@@ -137,26 +155,18 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       _lastPidData = pidData;
       _addDebugLog('✅ PID captured successfully (${pidData.length} chars)');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      // print('📦 FULL PID RESPONSE:');
-      // _printFull('FULL PID RESPONSE:',pidData);
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      // _printFull('📏 PID Length: ',${pidData.length} );
-
 
       // 2. Extract WADH
       _extractedWadh = _extractWadh(pidData);
       if (_extractedWadh.isNotEmpty) {
-        _addDebugLog('🔍 Extracted WADH: ${_extractedWadh.substring(0, _extractedWadh.length > 10 ? 10 : _extractedWadh.length)}... (length: ${_extractedWadh.length})');
+        _addDebugLog(
+          '🔍 Extracted WADH: ${_extractedWadh.substring(0, _extractedWadh.length > 10 ? 10 : _extractedWadh.length)}... (length: ${_extractedWadh.length})',
+        );
       } else {
         _addDebugLog('⚠️ No WADH found in PID response');
       }
-// ✅ Print FULL WADH (no truncation)
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      // print('📦 FULL WADH DATA:');
-      // print(_extractedWadh);
-      // _printFull('EXTRACTED WADH', _extractedWadh);
 
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       // 3. Optionally inject sample WADH
       if (kDebugMode && _useSampleWadh) {
         const sampleWadh = "E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=";
@@ -179,15 +189,22 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       }
 
       // 4. Log the final PID being sent (truncated)
-      _addDebugLog('📦 Final PID (first 500 chars): ${pidData.substring(0, pidData.length > 500 ? 500 : pidData.length)}...');
+      _addDebugLog(
+        '📦 Final PID (first 500 chars): ${pidData.substring(0, pidData.length > 500 ? 500 : pidData.length)}...',
+      );
 
       // 5. Call backend
       _addDebugLog('📤 Sending EKYC request to backend...');
       final provider = context.read<AepsProvider>();
-      _addDebugLog('🔑 Auth token: ${provider.authToken != null ? "present" : "MISSING"}');
+      _addDebugLog(
+        '🔑 Auth token: ${provider.authToken != null ? "present" : "MISSING"}',
+      );
       _addDebugLog('📦 Merchant ID: ${widget.merchantId}');
       _addDebugLog('📦 Merchant Ref: ${widget.merchantRefId}');
       _addDebugLog('📦 Pipe: ${widget.pipe}');
+      _addDebugLog('📦 Aadhaar: $maskedAadhaar');
+      _addDebugLog('📦 IP: ${provider.ipAddress}');
+
       print('🔍 Aadhaar Number from provider: ${provider.aadhaarNo}');
       final success = await provider.startEkyc(
         merchantId: widget.merchantId,
@@ -195,11 +212,13 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
         pipe: widget.pipe,
         pidData: pidData,
         deviceType: 'mantra',
-        aadhaarNumber: '812936347028',
+        aadhaarNumber: _aadhaarNumber,
         ipAddress: provider.ipAddress,
       );
 
-      _addDebugLog('📥 Backend response status: ${success ? "SUCCESS" : "FAILED"}');
+      _addDebugLog(
+        '📥 Backend response status: ${success ? "SUCCESS" : "FAILED"}',
+      );
       if (success) {
         _backendResponse = 'Success (status: 000)';
       } else {
@@ -266,15 +285,15 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
   // ─── UI helpers ─────────────────────────────────────────────
 
   void _showSuccess(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.green),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   // ─── Build ──────────────────────────────────────────────────
@@ -284,7 +303,10 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('EKYC Verification', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'EKYC Verification',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF1A1A1A),
         actions: [
           if (kDebugMode)
@@ -304,135 +326,360 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
           // Main content
           Expanded(
             child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _ekycDone ? Icons.verified : Icons.fingerprint,
-                      size: 80,
-                      color: _ekycDone ? Colors.green : const Color(0xFF2ECC71),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      _ekycDone ? 'EKYC Completed' : 'Complete your EKYC',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _ekycDone
-                          ? 'You can now perform AEPS transactions.'
-                          : 'Please place your finger on the Mantra scanner to capture PID data.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 20),
-                    if (!_ekycDone && !_isCheckingDevice) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _deviceAvailable ? Icons.check_circle : Icons.error,
-                            color: _deviceAvailable ? Colors.green : Colors.red,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _deviceAvailable ? 'RD Service connected' : 'RD Service unavailable',
-                            style: TextStyle(
-                              color: _deviceAvailable ? Colors.green : Colors.red,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _ekycDone ? Icons.verified : Icons.fingerprint,
+                        size: 80,
+                        color: _ekycDone ? Colors.green : const Color(0xFF2ECC71),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        _ekycDone ? 'EKYC Completed' : 'Complete your EKYC',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      if (!_deviceAvailable)
-                        TextButton(
-                          onPressed: _checkDeviceAvailability,
-                          child: const Text('Retry connection', style: TextStyle(color: Color(0xFF2ECC71))),
-                        ),
-                    ],
-                    const SizedBox(height: 40),
-                    if (_ekycDone)
-                      CustomButton(
-                        text: 'Go to AEPS',
-                        onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
-                          );
-                        },
-                        backgroundColor: const Color(0xFF2ECC71),
-                        textColor: Colors.black,
-                      )
-                    else if (_isCheckingDevice)
-                      const Center(child: CircularProgressIndicator())
-                    else
-                      CustomButton(
-                        text: _deviceAvailable ? 'Scan Fingerprint & Start EKYC' : 'RD Service Unavailable',
-                        onPressed: _deviceAvailable ? _initiateEKYC : () {},
-                        isLoading: _isLoading,
-                        backgroundColor: _deviceAvailable ? const Color(0xFF2ECC71) : Colors.grey,
-                        textColor: Colors.black,
+                      Text(
+                        _ekycDone
+                            ? 'You can now perform AEPS transactions.'
+                            : 'Please enter your Aadhaar number and place your finger on the Mantra scanner.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70),
                       ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const UserHomeScreen()),
-                        );
-                      },
-                      child: const Text('Skip for now', style: TextStyle(color: Colors.red)),
-                    ),
-                    // Debug info panel
-                    if (kDebugMode && _lastPidData.isNotEmpty) ...[
-                      const Divider(color: Colors.grey, height: 30),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.info_outline, color: Colors.orange, size: 16),
-                                const SizedBox(width: 8),
-                                const Text('Debug Info', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 20),
+
+                      // Aadhaar Input Field
+                      if (!_ekycDone && !_isCheckingDevice) ...[
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Aadhaar Number',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _aadhaarController,
+                                keyboardType: TextInputType.number,
+                                maxLength: 12,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  letterSpacing: 2,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: Colors.grey[850],
+                                  hintText: 'Enter 12-digit Aadhaar number',
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 16,
+                                  ),
+                                  counterStyle: const TextStyle(
+                                    color: Colors.white54,
+                                  ),
+                                  prefixIcon: const Icon(
+                                    Icons.credit_card,
+                                    color: Color(0xFF2ECC71),
+                                  ),
+                                  suffixIcon: _aadhaarNumber.isNotEmpty
+                                      ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Colors.white54,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      _aadhaarController.clear();
+                                      setState(() => _aadhaarNumber = '');
+                                    },
+                                  )
+                                      : null,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF2ECC71),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _aadhaarNumber = value;
+                                  });
+                                  if (value.length == 12) {
+                                    _addDebugLog('📝 Aadhaar entered: ${value.substring(0, 4)}XXXX${value.substring(8)}');
+                                  }
+                                },
+                              ),
+                              // Validation messages
+                              if (_aadhaarNumber.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                if (_aadhaarNumber.length < 12)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.info_outline,
+                                        color: Colors.orange,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '${12 - _aadhaarNumber.length} more digits required',
+                                        style: const TextStyle(
+                                          color: Colors.orange,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else if (_isAadhaarValid)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.check_circle,
+                                        color: Colors.green,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Valid Aadhaar number',
+                                        style: TextStyle(
+                                          color: Colors.green,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.error,
+                                        color: Colors.red,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Please enter only digits (0-9)',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                               ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Device Status
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _deviceAvailable ? Icons.check_circle : Icons.error,
+                              color: _deviceAvailable ? Colors.green : Colors.red,
+                              size: 20,
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(width: 8),
                             Text(
-                              'WADH: ${_extractedWadh.isNotEmpty ? _extractedWadh.substring(0, _extractedWadh.length > 10 ? 10 : _extractedWadh.length) + "..." : "❌ NOT FOUND"}',
-                              style: TextStyle(color: _extractedWadh.isNotEmpty ? Colors.green : Colors.red),
-                            ),
-                            Text(
-                              'Backend: $_backendResponse',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                            const SizedBox(height: 8),
-                            GestureDetector(
-                              onTap: _showFullPidDialog,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: const Text('📄 Tap to view full PID data',
-                                    style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
+                              _deviceAvailable
+                                  ? 'RD Service connected'
+                                  : 'RD Service unavailable',
+                              style: TextStyle(
+                                color: _deviceAvailable
+                                    ? Colors.green
+                                    : Colors.red,
+                                fontSize: 14,
                               ),
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        if (!_deviceAvailable)
+                          TextButton(
+                            onPressed: _checkDeviceAvailability,
+                            child: const Text(
+                              'Retry connection',
+                              style: TextStyle(color: Color(0xFF2ECC71)),
+                            ),
+                          ),
+                      ],
+
+                      const SizedBox(height: 32),
+
+                      // Action Button
+                      if (_ekycDone)
+                        CustomButton(
+                          text: 'Go to AEPS',
+                          onPressed: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AepsWrapperScreen(),
+                              ),
+                            );
+                          },
+                          backgroundColor: const Color(0xFF2ECC71),
+                          textColor: Colors.black,
+                        )
+                      else if (_isCheckingDevice)
+                        const Column(
+                          children: [
+                            CircularProgressIndicator(
+                              color: Color(0xFF2ECC71),
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              'Checking device...',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        )
+                      else
+                        CustomButton(
+                          text: _deviceAvailable
+                              ? (_isAadhaarValid
+                              ? 'Scan Fingerprint & Start EKYC'
+                              : _aadhaarNumber.isEmpty
+                              ? 'Enter Aadhaar Number First'
+                              : 'Enter Valid 12-digit Aadhaar')
+                              : 'RD Service Unavailable',
+                          onPressed: (_deviceAvailable && _isAadhaarValid)
+                              ? _initiateEKYC
+                              : () {
+                            if (!_isAadhaarValid && _aadhaarNumber.isNotEmpty) {
+                              _showError('Please enter a valid 12-digit Aadhaar number');
+                            }
+                          },
+                          isLoading: _isLoading,
+                          backgroundColor: (_deviceAvailable && _isAadhaarValid)
+                              ? const Color(0xFF2ECC71)
+                              : Colors.grey,
+                          textColor: Colors.black,
+                        ),
+
+                      const SizedBox(height: 20),
+
+                      // Skip Button
+                      if (!_isLoading)
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const UserHomeScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Skip for now',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+
+                      // Debug info panel
+                      if (kDebugMode && _lastPidData.isNotEmpty) ...[
+                        const Divider(color: Colors.grey, height: 30),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.info_outline,
+                                    color: Colors.orange,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Debug Info',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'WADH: ${_extractedWadh.isNotEmpty ? _extractedWadh.substring(0, _extractedWadh.length > 10 ? 10 : _extractedWadh.length) + "..." : "❌ NOT FOUND"}',
+                                style: TextStyle(
+                                  color: _extractedWadh.isNotEmpty
+                                      ? Colors.green
+                                      : Colors.red,
+                                ),
+                              ),
+                              Text(
+                                'Backend: $_backendResponse',
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: _showFullPidDialog,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: const Text(
+                                    '📄 Tap to view full PID data',
+                                    style: TextStyle(
+                                      color: Colors.blueAccent,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
+
           // Debug logs
           if (kDebugMode && _debugLogs.isNotEmpty) ...[
             Container(
@@ -442,15 +689,31 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     color: Colors.grey[900],
                     child: Row(
                       children: [
-                        const Icon(Icons.terminal, color: Colors.green, size: 16),
+                        const Icon(
+                          Icons.terminal,
+                          color: Colors.green,
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
-                        const Text('Debug Logs', style: TextStyle(color: Colors.green, fontSize: 12)),
+                        const Text(
+                          'Debug Logs',
+                          style: TextStyle(color: Colors.green, fontSize: 12),
+                        ),
                         const Spacer(),
-                        Text('${_debugLogs.length} entries', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                        Text(
+                          '${_debugLogs.length} entries',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -462,16 +725,29 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
                       itemBuilder: (context, index) {
                         final log = _debugLogs[index];
                         Color color;
-                        if (log.contains('✅') || log.contains('SUCCESS')) color = Colors.green;
-                        else if (log.contains('❌') || log.contains('FAILED') || log.contains('error')) color = Colors.red;
-                        else if (log.contains('⚠️')) color = Colors.orange;
-                        else if (log.contains('🔍') || log.contains('📤') || log.contains('📥')) color = Colors.cyan;
-                        else color = Colors.white70;
+                        if (log.contains('✅') || log.contains('SUCCESS'))
+                          color = Colors.green;
+                        else if (log.contains('❌') ||
+                            log.contains('FAILED') ||
+                            log.contains('error'))
+                          color = Colors.red;
+                        else if (log.contains('⚠️'))
+                          color = Colors.orange;
+                        else if (log.contains('🔍') ||
+                            log.contains('📤') ||
+                            log.contains('📥'))
+                          color = Colors.cyan;
+                        else
+                          color = Colors.white70;
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 1),
                           child: Text(
                             log,
-                            style: TextStyle(color: color, fontSize: 10, fontFamily: 'monospace'),
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -487,7 +763,6 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       ),
     );
   }
-
   // ─── Debug Dialog ──────────────────────────────────────────
 
   void _showDebugDialog() {
@@ -495,7 +770,10 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text('Debug Settings', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Debug Settings',
+          style: TextStyle(color: Colors.white),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -503,12 +781,17 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
               children: [
                 Checkbox(
                   value: _useSampleWadh,
-                  onChanged: (val) => setState(() => _useSampleWadh = val ?? false),
+                  onChanged: (val) =>
+                      setState(() => _useSampleWadh = val ?? false),
                   activeColor: const Color(0xFF2ECC71),
                 ),
-                const Text('Inject sample WADH', style: TextStyle(color: Colors.white)),
+                const Text(
+                  'Inject sample WADH',
+                  style: TextStyle(color: Colors.white),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Checkbox(
@@ -516,8 +799,42 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
                   onChanged: (val) => setState(() => _skipEkyc = val ?? false),
                   activeColor: const Color(0xFF2ECC71),
                 ),
-                const Text('Skip EKYC (force success)', style: TextStyle(color: Colors.white)),
+                const Text(
+                  'Skip EKYC (force success)',
+                  style: TextStyle(color: Colors.white),
+                ),
               ],
+            ),
+            const SizedBox(height: 16),
+            // Show current Aadhaar in debug dialog
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[850],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Current Aadhaar:',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _isAadhaarValid
+                        ? '${_aadhaarNumber.substring(0, 4)} XXXX ${_aadhaarNumber.substring(8)}'
+                        : _aadhaarNumber.isEmpty
+                        ? 'Not entered'
+                        : 'Invalid (${_aadhaarNumber.length} digits)',
+                    style: TextStyle(
+                      color: _isAadhaarValid ? Colors.green : Colors.orange,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -544,7 +861,10 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text('Full PID Data', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Full PID Data',
+          style: TextStyle(color: Colors.white),
+        ),
         content: Container(
           constraints: const BoxConstraints(maxHeight: 400),
           child: SingleChildScrollView(

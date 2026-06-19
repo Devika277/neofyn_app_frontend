@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:my_app/layout/UserHomeScreen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/aeps_provider.dart';
 import 'aeps_wrapper_screen.dart';
@@ -92,13 +93,14 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
 
     final provider = context.read<AepsProvider>();
     provider.setActivePipe(pipe);
+    final aadhaarNumber = provider.aadhaarNo ?? '';
 
     if (status != null && status['merchantId'] != null) {
       provider.setMerchantData({
         'merchantId': status['merchantId'],
         'merchantRefId': status['merchantRefId'],
         'phone': provider.mobileNo,
-        'aadhaarNo': provider.aadhaarNo,
+        'aadhaarNo': aadhaarNumber,
         'pipe': pipe,
       });
 
@@ -131,7 +133,7 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
               _createRoute(EKYC_Screen(
                 merchantId: status['merchantId'],
                 merchantRefId: status['merchantRefId'],
-                pipe: pipe, aadhaarNumber: '812936347028',
+                pipe: pipe, aadhaarNumber: '',
 
               )),
             );
@@ -248,59 +250,75 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0A0E0A),
-              Color(0xFF0F1A0F),
-              Color(0xFF0A0E0A),
-              Color(0xFF050805),
-            ],
-            stops: [0.0, 0.3, 0.7, 1.0],
+    return WillPopScope(
+      onWillPop: () async {
+        // Navigate to home screen instead of closing app
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const UserHomeScreen()),
+        );
+        return false; // Prevent default back behavior
+      },
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF0A0E0A),
+                Color(0xFF0F1A0F),
+                Color(0xFF0A0E0A),
+                Color(0xFF050805),
+              ],
+              stops: [0.0, 0.3, 0.7, 1.0],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // App Bar
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Select AEPS Pipe',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // App Bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white70,
+                          size: 20,
                         ),
-                        textAlign: TextAlign.center,
+                        onPressed:(){
+                          // Navigate to home instead of popping
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const UserHomeScreen()),
+                          );
+                      },
                       ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
+                      const Expanded(
+                        child: Text(
+                          'Select AEPS Pipe',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 18,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
                 ),
-              ),
-
-              Expanded(
-                child: isLoading
-                    ? _buildLoadingState()
-                    : _buildPipeList(),
-              ),
-            ],
+      
+                Expanded(
+                  child: isLoading
+                      ? _buildLoadingState()
+                      : _buildPipeList(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
