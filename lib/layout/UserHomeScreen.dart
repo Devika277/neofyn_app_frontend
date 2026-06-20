@@ -341,23 +341,54 @@ class HomeDashboard extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context, WalletProvider wp) {
+    // Get the first letter of the name dynamically
+    String initial = '?';
+    final userName = wp.userName ?? 'Devika M S';
+    if (userName.isNotEmpty) {
+      initial = userName[0].toUpperCase();
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         children: [
           Container(
             width: 48, height: 48,
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryLight]), borderRadius: BorderRadius.circular(16)),
-            child: const Center(child: Text('N', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold))),
+            decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [AppColors.primary, AppColors.primaryLight]
+                ),
+                borderRadius: BorderRadius.circular(16)
+            ),
+            child: Center(
+                child: Text(
+                    initial,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold
+                    )
+                )
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Welcome Back 👋', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                const Text(
+                    'Welcome Back 👋',
+                    style: TextStyle(fontSize: 11, color: Colors.white54)
+                ),
                 const SizedBox(height: 2),
-                Text(wp.userName ?? 'Devika M S', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                Text(
+                    userName,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white
+                    )
+                ),
               ],
             ),
           ),
@@ -365,7 +396,11 @@ class HomeDashboard extends StatelessWidget {
           const SizedBox(width: 8),
           _HeaderIcon(Icons.qr_code_scanner_rounded, () {}),
           const SizedBox(width: 8),
-          _HeaderIcon(Icons.logout_rounded, () => _showLogout(context, onLogout), color: AppColors.error),
+          _HeaderIcon(
+              Icons.logout_rounded,
+                  () => _showLogout(context, onLogout),
+              color: AppColors.error
+          ),
         ],
       ),
     );

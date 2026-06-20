@@ -84,7 +84,81 @@ class BiometricService {
   }
 
   /// Capture fingerprint with logging
+  /// Capture fingerprint with logging
   static Future<String> capturePid({
+    String clientKey = 'NEOFYN',
+    String? wadh,
+    String pipe = '1',
+    bool skipWadh = false,
+  }) async {
+    final baseUrl = await _getBaseUrl();
+
+    // Determine if WADH should be included
+    final actualWadh = skipWadh ? '' : (wadh ?? _getWadhForPipe(pipe));
+
+    final String xml = _buildPidOptionsXml(clientKey, wadh: actualWadh);
+
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('📤 BIOMETRIC | CAPTURE | $baseUrl/rd/capture');
+    print('📦 WADH: ${skipWadh ? "SKIPPED (Not needed for this transaction)" : actualWadh.substring(0, 20)}...');
+    print('📦 Body: ${xml.substring(0, 100)}...');
+    print('⏱️ Timeout: 15 seconds');
+
+    final request = http.Request('CAPTURE', Uri.parse('$baseUrl/rd/capture'));
+    request.headers['Content-Type'] = 'text/xml';
+    request.headers['Accept'] = 'text/xml';
+    request.body = xml;
+
+    final startTime = DateTime.now();
+
+    try {
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          print('⏱️ BIOMETRIC | CAPTURE TIMEOUT');
+          throw TimeoutException('Capture timeout - device not responding');
+        },
+      );
+
+      final response = await http.Response.fromStream(streamedResponse);
+      final duration = DateTime.now().difference(startTime);
+
+      print('📥 BIOMETRIC | CAPTURE RESPONSE | ${response.statusCode} | ${duration.inMilliseconds}ms');
+      print('📦 Response: ${response.body.substring(0, 200)}...');
+
+      if (response.statusCode == 405) {
+        print('❌ BIOMETRIC | ERROR 405 | Method Not Allowed');
+        throw Exception('Method Not Allowed (405). Verify RD Service is running.');
+      }
+
+      if (response.statusCode != 200) {
+        print('❌ BIOMETRIC | ERROR | ${response.statusCode}');
+        throw Exception('RD Service error: ${response.statusCode}');
+      }
+
+      final pidData = response.body;
+
+      if (_isSuccessResponse(pidData)) {
+        print('✅ BIOMETRIC | CAPTURE SUCCESS');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        return pidData;
+      }
+
+      final errMsg = _extractErrorMessage(pidData);
+      print('❌ BIOMETRIC | CAPTURE FAILED | $errMsg');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      throw Exception(errMsg);
+
+    } catch (e) {
+      print('💥 BIOMETRIC | CAPTURE ERROR | $e');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (e is TimeoutException) {
+        throw Exception('Capture timeout - please ensure the device is connected');
+      }
+      rethrow;
+    }
+  }
+  /*static Future<String> capturePid({
     String clientKey = 'NEOFYN',
     String wadh = 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=',
     bool isFor2FA = false,
@@ -155,7 +229,7 @@ class BiometricService {
       }
       rethrow;
     }
-  }
+  }*/
 
   static void resetDiscovery() {
     print('🔄 BIOMETRIC | RESET | Clearing cached URL');

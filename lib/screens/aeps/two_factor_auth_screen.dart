@@ -142,7 +142,21 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     });
 
     try {
-      final pidXml = await BiometricService.capturePid(isFor2FA: true);
+      // final pidXml = await BiometricService.capturePid(isFor2FA: true);
+      // ✅ NEW - 2FA needs WADH, so skipWadh: false
+    /*  final pidXml = await BiometricService.capturePid(
+        clientKey: 'NEOFYN',
+        skipWadh: false,  // 2FA requires WADH
+        pipe: '1',
+      );*/
+      final provider = context.read<AepsProvider>();
+      final currentPipe = provider.pipe ?? '1';
+
+      final pidXml = await BiometricService.capturePid(
+        clientKey: 'NEOFYN',
+        skipWadh: true,    // 2FA requires WADH
+        pipe: currentPipe,
+      );
       print('✅ PID captured: ${pidXml?.substring(0, 100)}...');   // add this
       print('✅ PID captured for 2FA: ${pidXml?.substring(0, 100)}...');
 
