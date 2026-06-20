@@ -44,7 +44,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
 
   bool _isDeviceConnected = false;
   bool _isCheckingDevice = false;
-
+  String _searchQuery = '';
   final LocationService _locationService = LocationService();
 
   bool get _isAmountRequired => ['CW', 'CD', 'AP'].contains(widget.serviceType);
@@ -147,26 +147,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     }
   }
 
- /* Future<void> _captureBiometric() async {
-    if (_selectedBankIIN == null) {
-      _showError('Please select a bank first');
-      return;
-    }
-    setState(() => _isCapturingBiometric = true);
-    try {
-      final pidXml = await BiometricService.capturePid(clientKey: 'NEOFYN');
-      setState(() {
-        _pidData = pidXml;
-        _isBiometricCaptured = true;
-      });
-      _showSuccess('Biometric captured! Ready for transaction');
-    } catch (e) {
-      _showError('Biometric capture failed: $e');
-      BiometricService.resetDiscovery();
-    } finally {
-      setState(() => _isCapturingBiometric = false);
-    }
-  }*/
   Future<void> _captureBiometric() async {
     if (_selectedBankIIN == null) {
       _showError('Please select a bank first');
@@ -763,48 +743,259 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         ? _selectedBankIIN
         : null;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: TxnColors.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: DropdownButton<String>(
-        value: validValue,
-        isExpanded: true,
-        icon: const Icon(
-            Icons.keyboard_arrow_down_rounded, color: Colors.white54),
-        hint: const Text('Select Bank',
-            style: TextStyle(color: Colors.white38, fontSize: 14)),
-        dropdownColor: TxnColors.cardColor,
-        underline: const SizedBox(),
-        style: const TextStyle(color: Colors.white, fontSize: 14),
-        items: bankIINs.isEmpty
-            ? [
-          const DropdownMenuItem(value: null,
-              child: Text(
-                  'Loading...', style: TextStyle(color: Colors.white54)))
-        ]
-            : bankIINs.map((b) =>
-            DropdownMenuItem(value: b.iin,
-                child: Text(b.description ?? b.iin,
-                    style: const TextStyle(color: Colors.white),
-                    overflow: TextOverflow.ellipsis))).toList(),
-        onChanged: (value) {
-          if (value == null) return;
-          final bankIIN = bankIINs.firstWhere((b) => b.iin == value);
-          setState(() {
-            _selectedBankIIN = value;
-            _selectedBankName = bankIIN.description ?? bankIIN.iin;
-            _isBiometricCaptured = false;
-            _pidData = null;
-          });
-        },
+    // Filter banks based on search query
+    final filteredBanks = _searchQuery.isEmpty
+        ? bankIINs
+        : bankIINs.where((bank) {
+      final searchLower = _searchQuery.toLowerCase();
+      final description = (bank.description ?? '').toLowerCase();
+      final iin = (bank.iin ?? '').toLowerCase();
+      return description.contains(searchLower) || iin.contains(searchLower);
+    }).toList();
+
+    return GestureDetector(
+      onTap: () => _showBankSearchDialog(bankIINs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: TxnColors.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  validValue != null
+                      ? (_selectedBankName ?? 'Selected Bank')
+                      : 'Select Bank',
+                  style: TextStyle(
+                    color: validValue != null ? Colors.white : Colors.white38,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (validValue != null)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedBankIIN = null;
+                    _selectedBankName = null;
+                    _isBiometricCaptured = false;
+                    _pidData = null;
+                  });
+                },
+                child: const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Icon(Icons.close, color: Colors.white38, size: 18),
+                ),
+              ),
+            const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54),
+          ],
+        ),
       ),
     );
   }
+// Add this method to show the search dialog
+  void _showBankSearchDialog(List<aeps.BankIIN> bankIINs) {
+    String localSearchQuery = '';
 
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredBanks = localSearchQuery.isEmpty
+                ? bankIINs
+                : bankIINs.where((bank) {
+              final searchLower = localSearchQuery.toLowerCase();
+              final description = (bank.description ?? '').toLowerCase();
+              final iin = (bank.iin ?? '').toLowerCase();
+              return description.contains(searchLower) || iin.contains(searchLower);
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              decoration: const BoxDecoration(
+                color: TxnColors.cardColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+
+                  // Title
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Text(
+                      'Select Bank',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                  // Search field
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: TxnColors.primary.withOpacity(0.3)),
+                      ),
+                      child: TextField(
+                        autofocus: true,
+                        onChanged: (value) {
+                          setModalState(() {
+                            localSearchQuery = value;
+                          });
+                        },
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        decoration: const InputDecoration(
+                          hintText: 'Search bank name or IIN...',
+                          hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
+                          prefixIcon: Icon(Icons.search_rounded, color: TxnColors.primaryLight, size: 22),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bank count
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${filteredBanks.length} banks found',
+                          style: const TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                        const Spacer(),
+                        if (_selectedBankIIN != null)
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedBankIIN = null;
+                                _selectedBankName = null;
+                                _isBiometricCaptured = false;
+                                _pidData = null;
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text('Clear', style: TextStyle(color: TxnColors.error, fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // Bank list
+                  Expanded(
+                    child: filteredBanks.isEmpty
+                        ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.search_off_rounded, color: Colors.white24, size: 48),
+                          SizedBox(height: 12),
+                          Text('No banks found', style: TextStyle(color: Colors.white38, fontSize: 14)),
+                        ],
+                      ),
+                    )
+                        : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: filteredBanks.length,
+                      itemBuilder: (context, index) {
+                        final bank = filteredBanks[index];
+                        final isSelected = bank.iin == _selectedBankIIN;
+
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: isSelected ? TxnColors.primary.withOpacity(0.15) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: isSelected
+                                ? Border.all(color: TxnColors.primary.withOpacity(0.3))
+                                : null,
+                          ),
+                          child: ListTile(
+                            onTap: () {
+                              setState(() {
+                                _selectedBankIIN = bank.iin;
+                                _selectedBankName = bank.description ?? bank.iin;
+                                _isBiometricCaptured = false;
+                                _pidData = null;
+                              });
+                              Navigator.pop(context);
+                            },
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? TxnColors.primary.withOpacity(0.2)
+                                    : Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                isSelected ? Icons.check_circle : Icons.account_balance_rounded,
+                                color: isSelected ? TxnColors.primary : Colors.white38,
+                                size: 20,
+                              ),
+                            ),
+                            title: Text(
+                              bank.description ?? bank.iin ?? 'Unknown Bank',
+                              style: TextStyle(
+                                color: isSelected ? TxnColors.primaryLight : Colors.white,
+                                fontSize: 14,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              'IIN: ${bank.iin}',
+                              style: TextStyle(
+                                color: isSelected ? TxnColors.primary.withOpacity(0.7) : Colors.white38,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: isSelected
+                                ? const Icon(Icons.check_circle, color: TxnColors.primary, size: 22)
+                                : const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
   Widget _buildInputField({
     required TextEditingController controller,
     required String hint,

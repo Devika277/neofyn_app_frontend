@@ -25,6 +25,7 @@ class AppColors {
   static const Color success = Color(0xFF008169);
   static const Color error = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
+  static const Color pipePending = Color(0xFFF39C12); // ✅ Added this
   static const Color borderLight = Color(0xFFE5E7EB);
   static const Color borderFocus = Color(0xFF008169);
 }
@@ -36,7 +37,7 @@ class AppTheme {
   }) {
     return InputDecoration(
       hintText: hintText,
-      hintStyle: TextStyle(color: Colors.white30, fontSize: 14),
+      hintStyle: const TextStyle(color: Colors.white30, fontSize: 14),
       filled: true,
       fillColor: Colors.white.withOpacity(0.05),
       border: OutlineInputBorder(
@@ -174,6 +175,15 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
   String? get _pendingMerchantRefId =>
       widget.merchantData?['merchantRefId']?.toString();
 
+  // ✅ Get current pipe
+  String get _currentPipe {
+    if (widget.pipe != null && widget.pipe!.isNotEmpty) {
+      return widget.pipe!;
+    }
+    final provider = context.read<AepsProvider>();
+    return provider.pipe ?? '1';
+  }
+
   final LocationService _locationService = LocationService();
 
   @override
@@ -188,15 +198,18 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       context.read<AepsProvider>().fetchBanks();
     });
 
+    // ✅ If OTP is pending, show OTP popup immediately
     if (_isOtpPending && widget.merchantData != null) {
       final phone =
           widget.phone ?? widget.merchantData!['phone']?.toString() ?? '';
       _mobileController.text = phone;
       _merchantId = _pendingMerchantId;
       _merchantRefId = _pendingMerchantRefId;
+
+      // Auto-send OTP and show popup
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showSuccess('OTP pending – please verify to activate your merchant.');
-        _sendOtp();
+        _sendOtp(); // Send OTP automatically
+        _showOtpPopup(); // Show OTP popup immediately
       });
     }
   }
@@ -501,6 +514,9 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     }
 
     final provider = context.read<AepsProvider>();
+    final currentPipe = _currentPipe; // ✅ Use dynamic pipe
+
+    print('📝 Registering merchant for Pipe: $currentPipe');
 
     final request = MerchantRegistrationRequest(
       firstName: _firstNameController.text.trim(),
@@ -531,7 +547,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       long: _location!['longitude']!,
       ipAddress: '',
       merchantRefId: '',
-      pipe: '1',
+      pipe: currentPipe, // ✅ Use dynamic pipe instead of hardcoded '1'
       gender: _selectedGender,
     );
 
@@ -542,16 +558,18 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         _merchantId = provider.merchantId;
         _merchantRefId = provider.merchantRefId;
       });
-      print('✅ Registration success, merchantId: $_merchantId');
-      _showOtpPopup();
+      print('✅ Registration success for Pipe $currentPipe, merchantId: $_merchantId');
+      _showOtpPopup(); // ✅ Show OTP popup after successful registration
     } else {
       _showError(provider.errorMessage ?? 'Registration failed');
     }
   }
 
-  // ─── OTP Popup ───────────────────────────────────────────────
+  // ─── OTP Popup (MODAL) ───────────────────────────────────────
   void _showOtpPopup() {
     _otpController.clear();
+    final currentPipe = _currentPipe; // ✅ Capture pipe value
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -561,86 +579,125 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
             return Dialog(
               backgroundColor: const Color(0xFF1A1F1A),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+                  borderRadius: BorderRadius.circular(24)),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 400),
+                padding: const EdgeInsets.all(28),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Header with icon
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [AppColors.primary, AppColors.primaryLight],
                         ),
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withOpacity(0.4),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
                       ),
-                      child: const Icon(Icons.sms,
-                          size: 32, color: Colors.white),
+                      child: const Icon(
+                        Icons.sms_outlined,
+                        size: 40,
+                        color: Colors.white,
+                      ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
+
+                    // Title
                     const Text(
-                      'OTP Verification',
+                      'Verify Your Mobile',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Enter the 6-digit OTP sent to ${_mobileController.text}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
+
+                    // Description
+                    const Text(
+                      'Enter the 6-digit OTP sent to',
+                      style: TextStyle(
                         color: Colors.white60,
                         fontSize: 14,
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: _otpController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
                       textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _mobileController.text,
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        letterSpacing: 8,
+                        color: AppColors.primaryLight,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(6),
-                      ],
-                      decoration: InputDecoration(
-                        counterText: '',
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // OTP Input
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.primary.withOpacity(0.3),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: AppColors.primary, width: 2),
+                      ),
+                      child: TextField(
+                        controller: _otpController,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 12,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        decoration: InputDecoration(
+                          counterText: '',
+                          border: InputBorder.none,
+                          hintText: '••••••',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.2),
+                            fontSize: 28,
+                            letterSpacing: 12,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    // Verify Button
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
+                      height: 56,
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [AppColors.primary, AppColors.primaryLight],
                           ),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
                               color: AppColors.primary.withOpacity(0.3),
                               blurRadius: 12,
-                              offset: const Offset(0, 4),
+                              offset: const Offset(0, 6),
                             ),
                           ],
                         ),
@@ -649,19 +706,17 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                               ? null
                               : () async {
                             if (_otpController.text.length != 6) {
-                              _showError('Enter valid 6‑digit OTP');
+                              _showError('Please enter complete 6-digit OTP');
                               return;
                             }
-                            setDialogState(
-                                    () => _isVerifyingOtp = true);
+                            setDialogState(() => _isVerifyingOtp = true);
                             setState(() => _isVerifyingOtp = true);
 
                             final merchantId = _merchantId!;
                             final merchantRefId = _merchantRefId!;
 
                             try {
-                              final provider =
-                              context.read<AepsProvider>();
+                              final provider = context.read<AepsProvider>();
                               final success = await provider.verifyOtp(
                                 merchantId,
                                 _otpController.text,
@@ -669,38 +724,31 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                               );
 
                               if (success) {
-                                setState(
-                                        () => _isOtpVerified = true);
-                                Navigator.pop(context);
-                                _showSuccess('OTP verified!');
+                                setState(() => _isOtpVerified = true);
+                                Navigator.pop(context); // Close popup
+                                _showSuccess('OTP verified successfully!');
 
-                                final updatedStatus =
-                                await provider.fetchPipeStatus(
-                                    widget.pipe ?? '1');
-                                final regStatus =
-                                    updatedStatus?[
-                                    'registrationStatus'] ??
-                                        '';
+                                // ✅ Fetch pipe status for current pipe
+                                final updatedStatus = await provider.fetchPipeStatus(currentPipe);
+                                final regStatus = updatedStatus?['registrationStatus'] ?? '';
 
+                                // Navigate based on status
                                 if (regStatus == 'active') {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                      const AepsWrapperScreen(),
+                                      builder: (_) => const AepsWrapperScreen(),
                                     ),
                                   );
-                                } else if (regStatus ==
-                                    'otp_verified') {
+                                } else if (regStatus == 'otp_verified') {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => EKYC_Screen(
                                         merchantId: merchantId,
                                         merchantRefId: merchantRefId,
-                                        pipe: widget.pipe ?? '1',
-                                        aadhaarNumber: provider.aadhaarNo ?? '',  // ✅ Pass aadhaar
-
+                                        pipe: currentPipe, // ✅ Pass correct pipe
+                                        aadhaarNumber: provider.aadhaarNo ?? '',
                                       ),
                                     ),
                                   );
@@ -708,75 +756,77 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                      const UserHomeScreen(),
+                                      builder: (_) => const UserHomeScreen(),
                                     ),
                                   );
                                 }
                               } else {
-                                _showError(
-                                    provider.errorMessage ??
-                                        'OTP verification failed');
+                                _showError(provider.errorMessage ?? 'OTP verification failed');
                               }
                             } catch (e) {
                               _showError(e.toString());
                             } finally {
                               if (mounted) {
-                                setDialogState(
-                                        () => _isVerifyingOtp = false);
-                                setState(
-                                        () => _isVerifyingOtp = false);
+                                setDialogState(() => _isVerifyingOtp = false);
+                                setState(() => _isVerifyingOtp = false);
                               }
                             }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.transparent,
                             shadowColor: Colors.transparent,
+                            disabledBackgroundColor: Colors.transparent,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                           ),
                           child: _isVerifyingOtp
                               ? const SizedBox(
-                            height: 24,
-                            width: 24,
+                            height: 28,
+                            width: 28,
                             child: CircularProgressIndicator(
                               color: Colors.white,
-                              strokeWidth: 2,
+                              strokeWidth: 3,
                             ),
                           )
-                              : const Text(
-                            'Verify OTP',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                              : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.white, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Verify OTP',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
+
+                    // Resend OTP
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text(
                           "Didn't receive OTP? ",
-                          style: TextStyle(color: Colors.white60),
+                          style: TextStyle(color: Colors.white54),
                         ),
-                        TextButton(
-                          onPressed: _isSendingOtp
+                        GestureDetector(
+                          onTap: _isSendingOtp
                               ? null
                               : () async {
-                            setDialogState(
-                                    () => _isSendingOtp = true);
+                            setDialogState(() => _isSendingOtp = true);
                             setState(() => _isSendingOtp = true);
                             await _sendOtp();
                             if (mounted) {
-                              setDialogState(
-                                      () => _isSendingOtp = false);
-                              setState(
-                                      () => _isSendingOtp = false);
+                              setDialogState(() => _isSendingOtp = false);
+                              setState(() => _isSendingOtp = false);
                             }
                           },
                           child: _isSendingOtp
@@ -792,11 +842,30 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                             'Resend OTP',
                             style: TextStyle(
                               color: AppColors.primaryLight,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
                       ],
+                    ),
+
+                    // Timer
+                    const SizedBox(height: 12),
+                    TweenAnimationBuilder<Duration>(
+                      duration: const Duration(seconds: 30),
+                      tween: Tween(begin: const Duration(seconds: 30), end: Duration.zero),
+                      onEnd: () {},
+                      builder: (context, Duration value, child) {
+                        final seconds = value.inSeconds;
+                        return Text(
+                          'OTP expires in ${seconds}s',
+                          style: TextStyle(
+                            color: seconds <= 10 ? AppColors.error : Colors.white38,
+                            fontSize: 12,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -821,9 +890,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     setState(() => _isSendingOtp = true);
     try {
       final provider = context.read<AepsProvider>();
+      final currentPipe = _currentPipe;
       final merchantId = _isOtpPending ? _pendingMerchantId! : _merchantId!;
-      final success =
-      await provider.sendOtp(merchantId, _mobileController.text.trim());
+
+      print('📤 Sending OTP for Pipe: $currentPipe, MerchantId: $merchantId');
+
+      final success = await provider.sendOtp(merchantId, _mobileController.text.trim());
       if (success) {
         setState(() => _isOtpSent = true);
         _showSuccess('OTP sent successfully!');
@@ -843,9 +915,10 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       return;
     }
 
+    final currentPipe = _currentPipe;
     final merchantId = _isOtpPending ? _pendingMerchantId : _merchantId;
-    final merchantRefId =
-    _isOtpPending ? _pendingMerchantRefId : _merchantRefId;
+    final merchantRefId = _isOtpPending ? _pendingMerchantRefId : _merchantRefId;
+
     if (merchantId == null || merchantRefId == null) {
       _showError('Merchant information missing. Please restart.');
       return;
@@ -854,6 +927,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     setState(() => _isVerifyingOtp = true);
     try {
       final provider = context.read<AepsProvider>();
+
+      print('🔐 Verifying OTP for Pipe: $currentPipe, MerchantId: $merchantId');
 
       final success = await provider.verifyOtp(
         merchantId,
@@ -865,8 +940,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         setState(() => _isOtpVerified = true);
         _showSuccess('OTP verified!');
 
-        final updatedStatus =
-        await provider.fetchPipeStatus(widget.pipe ?? '1');
+        // ✅ Fetch status for current pipe
+        final updatedStatus = await provider.fetchPipeStatus(currentPipe);
         final regStatus = updatedStatus?['registrationStatus'] ?? '';
 
         if (regStatus == 'active') {
@@ -881,9 +956,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
               builder: (_) => EKYC_Screen(
                 merchantId: merchantId,
                 merchantRefId: merchantRefId,
-                pipe: widget.pipe ?? '1',
-                aadhaarNumber: provider.aadhaarNo ?? '',  // ✅ Pass aadhaar
-
+                pipe: currentPipe, // ✅ Pass correct pipe
+                aadhaarNumber: context.read<AepsProvider>().aadhaarNo ?? '',
               ),
             ),
           );
@@ -894,7 +968,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
           );
         }
       } else {
-        _showError(provider.errorMessage ?? 'OTP verification failed');
+        _showError(context.read<AepsProvider>().errorMessage ?? 'OTP verification failed');
       }
     } catch (e) {
       _showError(e.toString());
@@ -942,6 +1016,54 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
   }
 
   // ─── Build Methods ───────────────────────────────────────────
+  Widget _buildBackgroundDecorations() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -80,
+          right: -60,
+          child: Container(
+            width: 280,
+            height: 280,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.primary.withOpacity(0.12),
+                  AppColors.primary.withOpacity(0.04),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -60,
+          left: -40,
+          child: Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.primaryLight.withOpacity(0.08),
+                  AppColors.primaryDark.withOpacity(0.04),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.6, 1.0],
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: CustomPaint(painter: GridDotPainter()),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSearchableDropdownField({
     required String label,
     required String? value,
@@ -1041,7 +1163,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
               ),
             ),
           ).copyWith(
-            counterStyle: TextStyle(color: Colors.white30, fontSize: 10),
+            counterStyle: const TextStyle(color: Colors.white30, fontSize: 10),
           ),
           validator: (v) {
             if (v == null || v.isEmpty) return 'DOB is required';
@@ -1140,50 +1262,142 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     );
   }
 
-  // ─── Background Decorations ──────────────────────────────────
-  Widget _buildBackgroundDecorations() {
-    return Stack(
+  Widget _buildTextField({
+    required String label,
+    required TextEditingController controller,
+    required String hint,
+    String? Function(String?)? validator,
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+    int? maxLength,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Positioned(
-          top: -80,
-          right: -60,
-          child: Container(
-            width: 280,
-            height: 280,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  AppColors.primary.withOpacity(0.12),
-                  AppColors.primary.withOpacity(0.04),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.5, 1.0],
-              ),
-            ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.white70,
           ),
         ),
-        Positioned(
-          bottom: -60,
-          left: -40,
-          child: Container(
-            width: 200,
-            height: 200,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  AppColors.primaryLight.withOpacity(0.08),
-                  AppColors.primaryDark.withOpacity(0.04),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.6, 1.0],
-              ),
-            ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          maxLength: maxLength,
+          style: const TextStyle(fontSize: 15, color: Colors.white),
+          decoration:
+          AppTheme.inputDecoration(hintText: hint).copyWith(
+            counterStyle: const TextStyle(color: Colors.white30, fontSize: 10),
+          ),
+          validator: validator,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGenderSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Gender *',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            color: Colors.white70,
           ),
         ),
-        Positioned.fill(
-          child: CustomPaint(painter: GridDotPainter()),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _selectedGender == 'M'
+                      ? AppColors.primary.withOpacity(0.15)
+                      : Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _selectedGender == 'M'
+                        ? AppColors.primary.withOpacity(0.5)
+                        : Colors.white.withOpacity(0.1),
+                  ),
+                ),
+                child: RadioListTile<String>(
+                  title: const Text('Male',
+                      style: TextStyle(color: Colors.white, fontSize: 14)),
+                  value: 'M',
+                  groupValue: _selectedGender,
+                  onChanged: (v) => setState(() => _selectedGender = v!),
+                  activeColor: AppColors.primary,
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8),
+                  dense: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _selectedGender == 'F'
+                      ? AppColors.primary.withOpacity(0.15)
+                      : Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _selectedGender == 'F'
+                        ? AppColors.primary.withOpacity(0.5)
+                        : Colors.white.withOpacity(0.1),
+                  ),
+                ),
+                child: RadioListTile<String>(
+                  title: const Text('Female',
+                      style: TextStyle(color: Colors.white, fontSize: 14)),
+                  value: 'F',
+                  groupValue: _selectedGender,
+                  onChanged: (v) => setState(() => _selectedGender = v!),
+                  activeColor: AppColors.primary,
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8),
+                  dense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccountTypeDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Account Type *',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          decoration: _dropdownDecoration('Account Type'),
+          value: _accountType,
+          dropdownColor: const Color(0xFF1A1F1A),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          items: const ['Savings Account', 'Current Account']
+              .map((type) => DropdownMenuItem(
+              value: type,
+              child: Text(type,
+                  style: TextStyle(color: Colors.white))))
+              .toList(),
+          onChanged: (v) => setState(() => _accountType = v!),
         ),
       ],
     );
@@ -1210,14 +1424,13 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         ),
         child: Stack(
           children: [
-            _buildBackgroundDecorations(),
+            _buildBackgroundDecorations(), // ✅ Added this method
             SafeArea(
               child: Column(
                 children: [
                   // App Bar
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       children: [
                         IconButton(
@@ -1228,21 +1441,80 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                           ),
                           onPressed: () => Navigator.pop(context),
                         ),
-                        const Expanded(
-                          child: Text(
-                            'Merchant Registration',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 18,
-                            ),
-                            textAlign: TextAlign.center,
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text(
+                                'Merchant Registration',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 18,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              // ✅ Show current pipe
+                              Text(
+                                'Pipe $_currentPipe',
+                                style: const TextStyle(
+                                  color: AppColors.primaryLight,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 48),
                       ],
                     ),
                   ),
+
+                  // ✅ Show OTP pending notice at top (NOT as form section)
+                  if (_isOtpPending && !_isOtpVerified)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.warning.withOpacity(0.15),
+                            AppColors.warning.withOpacity(0.05),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.warning.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.sms_failed,
+                              color: AppColors.warning,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'OTP verification pending - Please verify to complete registration',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
@@ -1253,63 +1525,63 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                           children: [
                             const SizedBox(height: 20),
 
-                            // Header
-                            Center(
-                              child: Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          AppColors.primary,
-                                          AppColors.primaryLight
+                            // Header (only show if not OTP pending)
+                            if (!_isOtpPending) ...[
+                              Center(
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            AppColors.primary,
+                                            AppColors.primaryLight
+                                          ],
+                                        ),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.3),
+                                            blurRadius: 20,
+                                            spreadRadius: 5,
+                                          ),
                                         ],
                                       ),
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.primary
-                                              .withOpacity(0.3),
-                                          blurRadius: 20,
-                                          spreadRadius: 5,
-                                        ),
-                                      ],
+                                      child: const Icon(Icons.storefront,
+                                          size: 50, color: Colors.white),
                                     ),
-                                    child: const Icon(Icons.storefront,
-                                        size: 50, color: Colors.white),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  const Text(
-                                    'Register as Merchant',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary
-                                          .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Text(
-                                      'Complete your registration to start AEPS services',
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      'Register as Merchant',
                                       style: TextStyle(
-                                        color: AppColors.primaryLight,
-                                        fontSize: 13,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
                                       ),
-                                      textAlign: TextAlign.center,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        'Complete your registration to start AEPS services',
+                                        style: TextStyle(
+                                          color: AppColors.primaryLight,
+                                          fontSize: 13,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 30),
+                              const SizedBox(height: 30),
+                            ],
 
                             // Personal Details Section
                             _buildSectionContainer(
@@ -1718,34 +1990,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
 
                             const SizedBox(height: 30),
 
-                            // OTP Section (for OTP pending flow)
-                            if (_isOtpSent && _isOtpPending) ...[
-                              _buildSectionContainer(
-                                icon: Icons.sms,
-                                title: 'OTP Verification',
-                                children: [
-                                  _buildTextField(
-                                    label: 'Enter OTP',
-                                    controller: _otpController,
-                                    keyboardType: TextInputType.number,
-                                    hint: 'Enter 6-digit OTP',
-                                    maxLength: 6,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  CustomButton(
-                                    text: 'Verify OTP',
-                                    onPressed: _verifyOtp,
-                                    isLoading: _isVerifyingOtp,
-                                    backgroundColor: AppColors.primary,
-                                    textColor: Colors.white,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 30),
-                            ],
-
-                            // Register Button
-                            if (!_isOtpSent)
+                            // Register Button (only if not OTP pending)
+                            if (!_isOtpPending && !_isOtpSent)
                               Container(
                                 height: 50,
                                 margin: const EdgeInsets.only(bottom: 50),
@@ -1759,8 +2005,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color:
-                                      AppColors.primary.withOpacity(0.3),
+                                      color: AppColors.primary.withOpacity(0.3),
                                       blurRadius: 12,
                                       offset: const Offset(0, 4),
                                     ),
@@ -1773,8 +2018,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.transparent,
                                     shadowColor: Colors.transparent,
-                                    disabledBackgroundColor:
-                                    Colors.transparent,
+                                    disabledBackgroundColor: Colors.transparent,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
@@ -1798,6 +2042,59 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                   ),
                                 ),
                               ),
+
+                            // ✅ Show "Verify OTP" button for OTP pending
+                            if (_isOtpPending && !_isOtpVerified)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 50, top: 30),
+                                child: Container(
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        AppColors.warning,
+                                        AppColors.warning.withOpacity(0.8),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.warning.withOpacity(0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      _sendOtp();
+                                      _showOtpPopup();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.sms, color: Colors.white, size: 20),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Verify OTP Now',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -1809,148 +2106,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
           ],
         ),
       ),
-    );
-  }
-
-  // ─── Helper Build Methods ────────────────────────────────────
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    required String hint,
-    String? Function(String?)? validator,
-    TextInputType keyboardType = TextInputType.text,
-    int maxLines = 1,
-    int? maxLength,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.white70,
-          ),
-        ),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          maxLines: maxLines,
-          maxLength: maxLength,
-          style: const TextStyle(fontSize: 15, color: Colors.white),
-          decoration:
-          AppTheme.inputDecoration(hintText: hint).copyWith(
-            counterStyle: TextStyle(color: Colors.white30, fontSize: 10),
-          ),
-          validator: validator,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGenderSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Gender *',
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-            color: Colors.white70,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _selectedGender == 'M'
-                      ? AppColors.primary.withOpacity(0.15)
-                      : Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _selectedGender == 'M'
-                        ? AppColors.primary.withOpacity(0.5)
-                        : Colors.white.withOpacity(0.1),
-                  ),
-                ),
-                child: RadioListTile<String>(
-                  title: const Text('Male',
-                      style: TextStyle(color: Colors.white, fontSize: 14)),
-                  value: 'M',
-                  groupValue: _selectedGender,
-                  onChanged: (v) => setState(() => _selectedGender = v!),
-                  activeColor: AppColors.primary,
-                  contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8),
-                  dense: true,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _selectedGender == 'F'
-                      ? AppColors.primary.withOpacity(0.15)
-                      : Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _selectedGender == 'F'
-                        ? AppColors.primary.withOpacity(0.5)
-                        : Colors.white.withOpacity(0.1),
-                  ),
-                ),
-                child: RadioListTile<String>(
-                  title: const Text('Female',
-                      style: TextStyle(color: Colors.white, fontSize: 14)),
-                  value: 'F',
-                  groupValue: _selectedGender,
-                  onChanged: (v) => setState(() => _selectedGender = v!),
-                  activeColor: AppColors.primary,
-                  contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8),
-                  dense: true,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAccountTypeDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Account Type *',
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-            color: Colors.white70,
-          ),
-        ),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          decoration: _dropdownDecoration('Account Type'),
-          value: _accountType,
-          dropdownColor: const Color(0xFF1A1F1A),
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          items: const ['Savings Account', 'Current Account']
-              .map((type) => DropdownMenuItem(
-              value: type,
-              child: Text(type,
-                  style: const TextStyle(color: Colors.white))))
-              .toList(),
-          onChanged: (v) => setState(() => _accountType = v!),
-        ),
-      ],
     );
   }
 }

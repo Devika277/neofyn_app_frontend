@@ -38,7 +38,7 @@ class PipeSelectionScreen extends StatefulWidget {
 }
 
 class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
-  final List<String> pipes = ['1', '2', '3'];
+  final List<String> pipes = ['1', '2', '3', '4'];
   Map<String, Map<String, dynamic>?> pipeStatus = {};
   bool isLoading = true;
   String? _selectedPipe;
@@ -133,15 +133,17 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
               _createRoute(EKYC_Screen(
                 merchantId: status['merchantId'],
                 merchantRefId: status['merchantRefId'],
-                pipe: pipe, aadhaarNumber: '',
-
+                pipe: pipe,
+                aadhaarNumber: aadhaarNumber,
               )),
             );
             break;
           default:
             Navigator.push(
               context,
-              _createRoute(const MerchantRegistrationScreen()),
+              _createRoute(MerchantRegistrationScreen(
+                pipe: pipe,
+              )),
             );
         }
       });
@@ -150,7 +152,9 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
         if (!mounted) return;
         Navigator.push(
           context,
-          _createRoute(const MerchantRegistrationScreen()),
+          _createRoute(MerchantRegistrationScreen(
+            pipe: pipe,
+          )),
         );
       });
     }
@@ -288,13 +292,13 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
                           color: Colors.white70,
                           size: 20,
                         ),
-                        onPressed:(){
+                        onPressed: (){
                           // Navigate to home instead of popping
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(builder: (_) => const UserHomeScreen()),
                           );
-                      },
+                        },
                       ),
                       const Expanded(
                         child: Text(
@@ -311,7 +315,7 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
                     ],
                   ),
                 ),
-      
+
                 Expanded(
                   child: isLoading
                       ? _buildLoadingState()
