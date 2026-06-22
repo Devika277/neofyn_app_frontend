@@ -30,6 +30,9 @@ const _textSec   = Color(0xFF888888);
 // ─────────────────────────────────────────────────────────────────────────────
 // DmtBeneficiaryDashboard – uses PPI balance from WalletProvider
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DmtBeneficiaryDashboard – uses PPI balance from WalletProvider
+// ─────────────────────────────────────────────────────────────────────────────
 class DmtBeneficiaryDashboard extends StatefulWidget {
   final String remitterPhone;
 
@@ -50,23 +53,29 @@ class DmtBeneficiaryDashboardState extends State<DmtBeneficiaryDashboard> {
     _loadPpiBalance();
     // Load beneficiaries after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BeneficiaryProvider>().loadBeneficiaries();
+      if (mounted) {
+        context.read<BeneficiaryProvider>().loadBeneficiaries();
+      }
     });
   }
 
   Future<void> _loadPpiBalance() async {
     try {
       final walletProvider = context.read<WalletProvider>();
-      // Ensure wallet data is fetched (setUserId should be called earlier, e.g., after login)
+      // Ensure wallet data is fetched
       if (walletProvider.mainWallet == null && !walletProvider.isLoading) {
         await walletProvider.fetchAllWalletData();
       }
-      setState(() {
-        _ppiBalance = walletProvider.mainWallet?.balance ?? 0.0;
-        _loadingBalance = false;
-      });
+      if (mounted) {
+        setState(() {
+          _ppiBalance = walletProvider.mainWallet?.balance ?? 0.0;
+          _loadingBalance = false;
+        });
+      }
     } catch (e) {
-      setState(() => _loadingBalance = false);
+      if (mounted) {
+        setState(() => _loadingBalance = false);
+      }
     }
   }
 
@@ -126,7 +135,11 @@ class DmtBeneficiaryDashboardState extends State<DmtBeneficiaryDashboard> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await context.read<BeneficiaryProvider>().deleteBeneficiary(beneficiary.id!);
+              // ✅ FIXED: Convert int? to String
+              final id = beneficiary.id?.toString() ?? '';
+              if (id.isNotEmpty) {
+                await context.read<BeneficiaryProvider>().deleteBeneficiary(id);
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
           ),
@@ -169,7 +182,7 @@ class DmtBeneficiaryDashboardState extends State<DmtBeneficiaryDashboard> {
                       ),
                     ),
                     const Spacer(),
-                    // Optional: show PPI balance chip (helps user)
+                    // Show PPI balance chip
                     if (!_loadingBalance)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -263,6 +276,7 @@ class DmtBeneficiaryDashboardState extends State<DmtBeneficiaryDashboard> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Beneficiary Card – updated to use Beneficiary model fields
 // ─────────────────────────────────────────────────────────────────────────────
+// _BeneficiaryCard - Fixed version with null safety
 class _BeneficiaryCard extends StatelessWidget {
   final Beneficiary beneficiary;
   final VoidCallback onTap;
@@ -270,8 +284,10 @@ class _BeneficiaryCard extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _BeneficiaryCard({
-    required this.beneficiary, required this.onTap,
-    required this.onEdit, required this.onDelete,
+    required this.beneficiary,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -292,7 +308,8 @@ class _BeneficiaryCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: _blue.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -300,8 +317,11 @@ class _BeneficiaryCard extends StatelessWidget {
                   child: Center(
                     child: Text(
                       beneficiary.name.isNotEmpty ? beneficiary.name[0].toUpperCase() : '?',
-                      style: const TextStyle(color: _blue, fontSize: 18,
-                          fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: _blue,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -310,26 +330,39 @@ class _BeneficiaryCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(beneficiary.name,
-                          style: const TextStyle(color: _textPrim,
-                              fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        beneficiary.name,
+                        style: const TextStyle(
+                          color: _textPrim,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text(beneficiary.bankName,
-                          style: const TextStyle(color: _textSec, fontSize: 12)),
+                      // ✅ FIX: Handle null bankName
+                      Text(
+                        beneficiary.bankName ?? 'Unknown Bank',
+                        style: const TextStyle(color: _textSec, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
                 IconButton(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_rounded, color: _textSec, size: 18),
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 12),
                 IconButton(
                   onPressed: onDelete,
-                  icon: const Icon(Icons.delete_rounded,
-                      color: Colors.redAccent, size: 18),
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                  icon: const Icon(
+                    Icons.delete_rounded,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -342,7 +375,11 @@ class _BeneficiaryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 _chip(Icons.code_rounded, beneficiary.ifsc),
                 const Spacer(),
-                _chip(Icons.location_on_rounded, beneficiary.stateName ?? beneficiary.stateCode),
+                // ✅ FIX: Handle null stateName
+                _chip(
+                  Icons.location_on_rounded,
+                  beneficiary.stateName ?? beneficiary.stateCode ?? 'Unknown',
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -350,8 +387,10 @@ class _BeneficiaryCard extends StatelessWidget {
               children: [
                 const Icon(Icons.arrow_forward_rounded, color: _blue, size: 14),
                 const SizedBox(width: 4),
-                const Text('Tap to transfer',
-                    style: TextStyle(color: _blue, fontSize: 11)),
+                const Text(
+                  'Tap to transfer',
+                  style: TextStyle(color: _blue, fontSize: 11),
+                ),
               ],
             ),
           ],
@@ -361,13 +400,16 @@ class _BeneficiaryCard extends StatelessWidget {
   }
 
   Widget _chip(IconData icon, String label) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(icon, size: 12, color: _textSec),
-      const SizedBox(width: 3),
-      Text(label, style: const TextStyle(color: _textSec, fontSize: 11)),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: _textSec),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: const TextStyle(color: _textSec, fontSize: 11),
+          ),
+        ],
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -393,11 +435,12 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _accCtrl;
   late final TextEditingController _ifscCtrl;
-  late final TextEditingController _mobileCtrl;          // new – required for payout
+  late final TextEditingController _mobileCtrl;
   String? _selectedBankCode;
   String? _selectedPurposeCode;
   String? _selectedStateCode;
-  String? _selectedPaymentMode = 'IMPS';
+
+  String _selectedPaymentMode = 'IMPS';
   bool _loading = false;
 
   bool get _isEdit => widget.existing != null;
@@ -406,13 +449,13 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
   void initState() {
     super.initState();
     final e = widget.existing;
-    _nameCtrl    = TextEditingController(text: e?.name   ?? '');
-    _accCtrl     = TextEditingController(text: e?.accountNumber ?? '');
-    _ifscCtrl    = TextEditingController(text: e?.ifsc      ?? '');
-    _mobileCtrl  = TextEditingController(text: e?.mobile    ?? '');
-    _selectedBankCode   = e?.bankCode;
-    _selectedPurposeCode = e?.purposeCode;
-    _selectedStateCode   = e?.stateCode;
+    _nameCtrl = TextEditingController(text: e?.name ?? '');
+    _accCtrl = TextEditingController(text: e?.accountNumber ?? '');
+    _ifscCtrl = TextEditingController(text: e?.ifsc ?? '');
+    _mobileCtrl = TextEditingController(text: e?.mobile ?? '');
+    _selectedBankCode = e?.bankCode;
+    // _selectedPurposeCode = e?.purposeCode;
+    _selectedStateCode = e?.stateCode;
     _selectedPaymentMode = e?.paymentMode ?? 'IMPS';
 
     // Load master data if not already loaded
@@ -426,13 +469,14 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose(); _accCtrl.dispose(); _ifscCtrl.dispose(); _mobileCtrl.dispose();
+    _nameCtrl.dispose();
+    _accCtrl.dispose();
+    _ifscCtrl.dispose();
+    _mobileCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-
-    // In _save(), add prints before creating Beneficiary object:
     print('_selectedBankCode: $_selectedBankCode');
     print('_selectedPurposeCode: $_selectedPurposeCode');
     print('_selectedStateCode: $_selectedStateCode');
@@ -440,13 +484,16 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
     
     if (!_formKey.currentState!.validate()) return;
     if (_selectedBankCode == null) {
-      _showSnack('Please select a bank'); return;
+      _showSnack('Please select a bank');
+      return;
     }
     if (_selectedPurposeCode == null) {
-      _showSnack('Please select a purpose'); return;
+      _showSnack('Please select a purpose');
+      return;
     }
     if (_selectedStateCode == null) {
-      _showSnack('Please select a state'); return;
+      _showSnack('Please select a state');
+      return;
     }
     setState(() => _loading = true);
 
@@ -458,15 +505,16 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
         ifsc: _ifscCtrl.text.trim().toUpperCase(),
         mobile: _mobileCtrl.text.trim(),
         bankCode: _selectedBankCode!,
-        bankName: context.read<PayoutProvider>().getBankName(_selectedBankCode!),
-        purposeCode: _selectedPurposeCode!,
-        purposeDesc: context.read<PayoutProvider>().getPurposeName(_selectedPurposeCode!),
+        bankName: context.read<PayoutProvider>().getBankName(_selectedBankCode!) ?? 'Unknown Bank',
+        // purposeCode: _selectedPurposeCode!,
+        // purposeDesc: context.read<PayoutProvider>().getPurposeName(_selectedPurposeCode!) ?? '',
         stateCode: _selectedStateCode!,
-        stateName: context.read<PayoutProvider>().getStateName(_selectedStateCode!),
-        paymentMode: _selectedPaymentMode!,
+        stateName: context.read<PayoutProvider>().getStateName(_selectedStateCode!) ?? '',
+        paymentMode: _selectedPaymentMode,
       );
 
       if (_isEdit) {
+        // For edit, we need update method in provider
         await context.read<BeneficiaryProvider>().updateBeneficiary(beneficiary);
       } else {
         await context.read<BeneficiaryProvider>().addBeneficiary(beneficiary);
@@ -516,86 +564,101 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
                   const SizedBox(height: 16),
                   _label('Account Number *'),
                   const SizedBox(height: 8),
-                  _validatedField(_accCtrl, 'Enter account number',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) => (v == null || v.length < 9) ? 'Enter valid account number' : null),
+                  _validatedField(
+                    _accCtrl,
+                    'Enter account number',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) => (v == null || v.length < 9) ? 'Enter valid account number' : null,
+                  ),
                   const SizedBox(height: 16),
                   _label('IFSC Code *'),
                   const SizedBox(height: 8),
-                  _validatedField(_ifscCtrl, 'e.g. SBIN0001234',
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-                        LengthLimitingTextInputFormatter(11),
-                      ],
-                      validator: (v) => (v == null || v.length != 11) ? 'IFSC must be 11 characters' : null),
+                  _validatedField(
+                    _ifscCtrl,
+                    'e.g. SBIN0001234',
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    validator: (v) => (v == null || v.length != 11) ? 'IFSC must be 11 characters' : null,
+                  ),
                   const SizedBox(height: 16),
                   _label('Mobile Number *'),
                   const SizedBox(height: 8),
-                  _validatedField(_mobileCtrl, '10-digit mobile number',
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                      validator: (v) => (v == null || v.length != 10) ? 'Enter 10 digits' : null),
+                  _validatedField(
+                    _mobileCtrl,
+                    '10-digit mobile number',
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10)
+                    ],
+                    validator: (v) => (v == null || v.length != 10) ? 'Enter 10 digits' : null,
+                  ),
                   const SizedBox(height: 16),
 
-               _label('Bank *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: provider.banks.any((b) => b.code == _selectedBankCode)
-                      ? _selectedBankCode
-                      : null,  // ← reset to null if value not in list
-                  decoration: _inputDecoration('Select bank', prefix: null),
-                  dropdownColor: _surface,
-                  style: const TextStyle(color: _textPrim, fontSize: 14),
-                  items: provider.banks
-                      .map((b) => DropdownMenuItem(value: b.code, child: Text(b.description)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedBankCode = v),
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
+                  _label('Bank *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedBankCode,
+                    decoration: _inputDecoration('Select bank', prefix: null),
+                    dropdownColor: _surface,
+                    style: const TextStyle(color: _textPrim, fontSize: 14),
+                    items: provider.banks.map<DropdownMenuItem<String>>((bank) {
+                      return DropdownMenuItem<String>(
+                        value: bank['code'] as String?,
+                        child: Text(bank['description'] as String? ?? ''),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedBankCode = v),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
 
-                _label('Payment Purpose *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: provider.purposes.any((p) => p.code == _selectedPurposeCode)
-                      ? _selectedPurposeCode
-                      : null,
-                  decoration: _inputDecoration('Select purpose', prefix: null),
-                  dropdownColor: _surface,
-                  style: const TextStyle(color: _textPrim, fontSize: 14),
-                  items: provider.purposes
-                      .map((p) => DropdownMenuItem(value: p.code, child: Text(p.description)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedPurposeCode = v),
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
+                  _label('Payment Purpose *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedPurposeCode,
+                    decoration: _inputDecoration('Select purpose', prefix: null),
+                    dropdownColor: _surface,
+                    style: const TextStyle(color: _textPrim, fontSize: 14),
+                    items: provider.purposes.map<DropdownMenuItem<String>>((purpose) {
+                      return DropdownMenuItem<String>(
+                        value: purpose['code'] as String?,
+                        child: Text(purpose['description'] as String? ?? ''),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedPurposeCode = v),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
 
-                _label('State *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: provider.states.any((s) => s.code == _selectedStateCode)
-                      ? _selectedStateCode
-                      : null,
-                  decoration: _inputDecoration('Select state', prefix: null),
-                  dropdownColor: _surface,
-                  style: const TextStyle(color: _textPrim, fontSize: 14),
-                  items: provider.states
-                      .map((s) => DropdownMenuItem(value: s.code, child: Text(s.description)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedStateCode = v),
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
+                  _label('State *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedStateCode,
+                    decoration: _inputDecoration('Select state', prefix: null),
+                    dropdownColor: _surface,
+                    style: const TextStyle(color: _textPrim, fontSize: 14),
+                    items: provider.states.map<DropdownMenuItem<String>>((state) {
+                      return DropdownMenuItem<String>(
+                        value: state['code'] as String?,
+                        child: Text(state['description'] as String? ?? ''),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedStateCode = v),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
                   const SizedBox(height: 16),
 
                   _label('Payment Mode'),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      _modeChip('IMPS', Icons.bolt_rounded, _selectedPaymentMode!, (v) => setState(() => _selectedPaymentMode = v)),
+                      _modeChip('IMPS', Icons.bolt_rounded, _selectedPaymentMode, (v) => setState(() => _selectedPaymentMode = v)),
                       const SizedBox(width: 12),
-                      _modeChip('NEFT', Icons.account_balance_rounded, _selectedPaymentMode!, (v) => setState(() => _selectedPaymentMode = v)),
+                      _modeChip('NEFT', Icons.account_balance_rounded, _selectedPaymentMode, (v) => setState(() => _selectedPaymentMode = v)),
                     ],
                   ),
                   const SizedBox(height: 32),
@@ -616,7 +679,14 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
   }
 
   String? _notEmpty(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
-  Widget _validatedField(TextEditingController ctrl, String hint, {String? Function(String?)? validator, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters}) {
+  
+  Widget _validatedField(
+    TextEditingController ctrl,
+    String hint, {
+    String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
     return TextFormField(
       controller: ctrl,
       validator: validator,
@@ -645,7 +715,14 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
             children: [
               Icon(icon, color: selected ? _blue : _textSec, size: 18),
               const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: selected ? _blue : _textSec, fontWeight: selected ? FontWeight.w600 : FontWeight.normal, fontSize: 14)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? _blue : _textSec,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  fontSize: 14,
+                ),
+              ),
             ],
           ),
         ),
@@ -659,7 +736,7 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
 // ─────────────────────────────────────────────────────────────────────────────
 class DmtTransferPage extends StatefulWidget {
   final Beneficiary beneficiary;
-  final double ppiBalance; // was aepsBalance
+  final double ppiBalance;
 
   const DmtTransferPage({
     required this.beneficiary,
@@ -695,6 +772,14 @@ class DmtTransferPageState extends State<DmtTransferPage> {
       _showSnack('Invalid amount');
       return;
     }
+    if (amount < 100) {
+      _showSnack('Minimum DMT amount is ₹100');
+      return;
+    }
+    if (amount > 50000) {
+      _showSnack('Maximum per transaction is ₹50,000');
+      return;
+    }
     if (_tpinCtrl.text.length < 4) {
       _showSnack('Enter 4-digit TPIN');
       return;
@@ -716,30 +801,43 @@ class DmtTransferPageState extends State<DmtTransferPage> {
       final payoutProvider = context.read<PayoutProvider>();
       final beneficiary = widget.beneficiary;
 
+      // Get userId from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+      if (userId == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Build DMT payout request matching backend format
       final payoutRequest = {
+        'userId': int.parse(userId),
         'amount': amount,
-        'type': 'DMT', // Important: distinguish from normal payout
-        'merchantRefId': 'DMT${DateTime.now().millisecondsSinceEpoch}',
-        'beneficiaryBank': beneficiary.bankCode,
-        'paymentPurpose': beneficiary.purposeCode,
-        'paymentMode': _mode,
-        'beneficiaryAccountNumber': beneficiary.accountNumber,
-        'beneficiaryIFSC': beneficiary.ifsc,
-        'beneficiaryMobileNumber': beneficiary.mobile,
-        'beneficiaryName': beneficiary.name,
-        'beneficiaryLocation': beneficiary.stateCode,
-        'tpin': _tpinCtrl.text,
+        'mode': _mode,
+        'tpin': _tpinCtrl.text.trim(),
+        'ip_address': '192.168.1.1',
+        'fee': 3,
+        'lat': '28.7041',
+        'long': '77.1025',
+        // Note: Backend gets bank details from agent_bank_accounts table
+        // The beneficiary is just for display, backend uses user's own bank
       };
+
+      print('📤 Sending DMT payout request: $payoutRequest');
 
       final response = await payoutProvider.initiatePayout(payoutRequest);
 
       if (response['success'] == true) {
-        final merchantRefId = response['data']['merchantRefId'];
+        final merchantRefId = response['transactionId'] ?? 
+                             response['data']?['merchantRefId'] ?? 
+                             response['merchantRefId'];
+
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => PayoutStatusScreen(merchantRefId: merchantRefId),
+              builder: (_) => PayoutStatusScreen(
+                merchantRefId: merchantRefId?.toString() ?? '',
+              ),
             ),
           );
         }
@@ -747,6 +845,7 @@ class DmtTransferPageState extends State<DmtTransferPage> {
         _showSnack(response['message'] ?? 'DMT transfer failed');
       }
     } catch (e) {
+      print('❌ DMT error: $e');
       _showSnack(e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -758,6 +857,42 @@ class DmtTransferPageState extends State<DmtTransferPage> {
       content: Text(msg),
       backgroundColor: success ? _green : Colors.redAccent,
     ));
+  }
+
+  Widget _modeChip(String label, IconData icon) {
+    final selected = _mode == label;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _mode = label),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? _blue.withOpacity(0.15) : _card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? _blue : _border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: selected ? _blue : _textSec, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? _blue : _textSec,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -790,7 +925,7 @@ class DmtTransferPageState extends State<DmtTransferPage> {
                     ),
                     child: Center(
                       child: Text(
-                        b.name[0].toUpperCase(),
+                        b.name.isNotEmpty ? b.name[0].toUpperCase() : '?',
                         style: const TextStyle(
                           color: _blue,
                           fontSize: 20,
@@ -828,7 +963,7 @@ class DmtTransferPageState extends State<DmtTransferPage> {
               ),
             ),
             const SizedBox(height: 16),
-            // PPI Balance Card (replaces AEPS)
+            // PPI Balance Card
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -874,7 +1009,7 @@ class DmtTransferPageState extends State<DmtTransferPage> {
             const SizedBox(height: 8),
             _inputField(
               controller: _amountCtrl,
-              hint: 'Enter amount',
+              hint: 'Enter amount (Min ₹100)',
               prefix: '₹',
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -885,9 +1020,9 @@ class DmtTransferPageState extends State<DmtTransferPage> {
             const SizedBox(height: 8),
             _inputField(
               controller: _tpinCtrl,
-              hint: '4-digit TPIN',
+              hint: '6-digit TPIN',
               obscure: _obscureTpin,
-              maxLength: 4,
+              maxLength: 6,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               suffix: IconButton(
@@ -906,7 +1041,9 @@ class DmtTransferPageState extends State<DmtTransferPage> {
               children: [
                 Expanded(
                   child: _outlineButton(
-                      label: 'Cancel', onTap: () => Navigator.pop(context)),
+                    label: 'Cancel',
+                    onTap: () => Navigator.pop(context),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -920,42 +1057,6 @@ class DmtTransferPageState extends State<DmtTransferPage> {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _modeChip(String label, IconData icon) {
-    final selected = _mode == label;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _mode = label),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? _blue.withOpacity(0.15) : _card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? _blue : _border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: selected ? _blue : _textSec, size: 18),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: selected ? _blue : _textSec,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

@@ -27,9 +27,9 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
       _error = null;
     });
     try {
-      final history = await _payoutService.getTransactionHistory();
+      // final history = await _payoutService.getTransactionHistory();
       setState(() {
-        _transactions = history;
+        // _transactions = history;
         _loading = false;
       });
     } catch (e) {

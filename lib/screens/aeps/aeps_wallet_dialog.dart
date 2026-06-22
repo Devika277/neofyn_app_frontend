@@ -239,9 +239,9 @@ class _MoveToMainWalletPageState extends State<MoveToMainWalletPage> {
             const SizedBox(height: 8),
             _inputField(
               controller: _tpinCtrl,
-              hint: '4-digit TPIN',
+              hint: '6-digit TPIN',
               obscure: _obscureTpin,
-              maxLength: 4,
+              maxLength: 6,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               suffix: IconButton(
@@ -405,10 +405,12 @@ class _MoveFundPageState extends State<MoveFundPage> {
 // ─────────────────────────────────────────────────────────────────────────────
 class _BeneficiaryDashboard extends StatefulWidget {
   final String phone;
-  final double aepsBalance;  // ← add this
+  final double aepsBalance;
 
   const _BeneficiaryDashboard({required this.phone, required this.aepsBalance});
-  @override State<_BeneficiaryDashboard> createState() => _BeneficiaryDashboardState();
+  
+  @override
+  State<_BeneficiaryDashboard> createState() => _BeneficiaryDashboardState();
 }
 
 class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
@@ -417,29 +419,53 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
   @override
   void initState() {
     super.initState();
-    // Load beneficiaries from API
+    // Load beneficiaries from local storage
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BeneficiaryProvider>().loadBeneficiaries();
+      if (mounted) {
+        try {
+          context.read<BeneficiaryProvider>().loadBeneficiaries();
+        } catch (e) {
+          print('Error loading beneficiaries: $e');
+        }
+      }
     });
   }
 
   void _openAdd() {
-    Navigator.push(context, _slide(_AddBeneficiaryPage(
-      phone: widget.phone,
-      onSave: () => context.read<BeneficiaryProvider>().loadBeneficiaries(),
-    )));
+    Navigator.push(
+      context, 
+      _slide(
+        _AddBeneficiaryPage(
+          phone: widget.phone,
+          onSave: () => context.read<BeneficiaryProvider>().loadBeneficiaries(),
+        )
+      )
+    );
   }
 
   void _openEdit(Beneficiary beneficiary) {
-    Navigator.push(context, _slide(_AddBeneficiaryPage(
-      phone: widget.phone,
-      existing: beneficiary,
-      onSave: () => context.read<BeneficiaryProvider>().loadBeneficiaries(),
-    )));
+    Navigator.push(
+      context, 
+      _slide(
+        _AddBeneficiaryPage(
+          phone: widget.phone,
+          existing: beneficiary,
+          onSave: () => context.read<BeneficiaryProvider>().loadBeneficiaries(),
+        )
+      )
+    );
   }
 
-  void _openTransfer(Beneficiary b) {
-    Navigator.push(context, _slide(_TransferPage(beneficiary: b, aepsBalance: widget.aepsBalance,)));
+  void _openTransfer(Beneficiary beneficiary) {
+    Navigator.push(
+      context, 
+      _slide(
+        _TransferPage(
+          beneficiary: beneficiary, 
+          aepsBalance: widget.aepsBalance,
+        )
+      )
+    );
   }
 
   void _confirmDelete(Beneficiary beneficiary) {
@@ -461,7 +487,9 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await context.read<BeneficiaryProvider>().deleteBeneficiary(beneficiary.id!);
+              await context.read<BeneficiaryProvider>().deleteBeneficiary(
+                beneficiary.id?.toString() ?? ''
+              );
             },
             child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
           ),
@@ -482,7 +510,7 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
           appBar: _darkAppBar('Beneficiaries'),
           body: Column(
             children: [
-              // Header strip (unchanged)
+              // Header strip
               Container(
                 margin: const EdgeInsets.all(20),
                 padding: const EdgeInsets.all(16),
@@ -495,9 +523,14 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
                   children: [
                     const Icon(Icons.phone_android_rounded, color: _blue, size: 18),
                     const SizedBox(width: 8),
-                    Text('+91 ${widget.phone}',
-                        style: const TextStyle(color: _textPrim, fontSize: 14,
-                            fontWeight: FontWeight.w500)),
+                    Text(
+                      '+91 ${widget.phone}',
+                      style: const TextStyle(
+                        color: _textPrim,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -507,15 +540,32 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
                       ),
                       child: Text(
                         '${beneficiaries.length}/$_maxBeneficiaries accounts',
-                        style: const TextStyle(color: _blue, fontSize: 11,
-                            fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          color: _blue,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
 
-              // List
+// Add this button to view the last transaction
+ElevatedButton(
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PayoutStatusScreen(
+          merchantRefId: '17821251429405351', // ✅ Use the actual merchant_ref_id
+        ),
+      ),
+    );
+  },
+  child: const Text('View Last Transaction'),
+),
+              // Beneficiary list or empty state
               Expanded(
                 child: provider.isLoading
                     ? const Center(child: CircularProgressIndicator(color: _blue))
@@ -526,8 +576,8 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
                             itemCount: beneficiaries.length,
                             itemBuilder: (_, i) => _BeneficiaryCard(
                               beneficiary: beneficiaries[i],
-                              onTap:    () => _openTransfer(beneficiaries[i]),
-                              onEdit:   () => _openEdit(beneficiaries[i]),
+                              onTap: () => _openTransfer(beneficiaries[i]),
+                              onEdit: () => _openEdit(beneficiaries[i]),
                               onDelete: () => _confirmDelete(beneficiaries[i]),
                             ),
                           ),
@@ -537,9 +587,7 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                 child: _primaryButton(
-                  label: canAdd
-                      ? 'Add Beneficiary'
-                      : 'Maximum 3 accounts reached',
+                  label: canAdd ? 'Add Beneficiary' : 'Maximum 3 accounts reached',
                   color: canAdd ? _blue : _textSec,
                   icon: canAdd ? Icons.add_rounded : Icons.block_rounded,
                   onTap: canAdd ? _openAdd : null,
@@ -556,22 +604,31 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.account_balance_rounded,
-            size: 56, color: _textSec.withOpacity(0.3)),
+        Icon(
+          Icons.account_balance_rounded,
+          size: 56, 
+          color: _textSec.withOpacity(0.3)
+        ),
         const SizedBox(height: 16),
-        const Text('No beneficiaries added',
-            style: TextStyle(color: _textSec, fontSize: 15)),
+        const Text(
+          'No beneficiaries added',
+          style: TextStyle(color: _textSec, fontSize: 15),
+        ),
         const SizedBox(height: 6),
-        const Text('Tap "Add Beneficiary" to get started',
-            style: TextStyle(color: _textSec, fontSize: 12)),
+        const Text(
+          'Tap "Add Beneficiary" to get started',
+          style: TextStyle(color: _textSec, fontSize: 12),
+        ),
       ],
     ),
   );
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Beneficiary Card – updated to use Beneficiary model fields
 // ─────────────────────────────────────────────────────────────────────────────
+// _BeneficiaryCard - Fixed version with null safety
 class _BeneficiaryCard extends StatelessWidget {
   final Beneficiary beneficiary;
   final VoidCallback onTap;
@@ -579,8 +636,10 @@ class _BeneficiaryCard extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _BeneficiaryCard({
-    required this.beneficiary, required this.onTap,
-    required this.onEdit, required this.onDelete,
+    required this.beneficiary,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -601,7 +660,8 @@ class _BeneficiaryCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: _blue.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -609,8 +669,11 @@ class _BeneficiaryCard extends StatelessWidget {
                   child: Center(
                     child: Text(
                       beneficiary.name.isNotEmpty ? beneficiary.name[0].toUpperCase() : '?',
-                      style: const TextStyle(color: _blue, fontSize: 18,
-                          fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: _blue,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -619,26 +682,38 @@ class _BeneficiaryCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(beneficiary.name,
-                          style: const TextStyle(color: _textPrim,
-                              fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        beneficiary.name,
+                        style: const TextStyle(
+                          color: _textPrim,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text(beneficiary.bankName,
-                          style: const TextStyle(color: _textSec, fontSize: 12)),
+                      Text(
+                        beneficiary.bankName.isNotEmpty ? beneficiary.bankName : 'Unknown Bank',
+                        style: const TextStyle(color: _textSec, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
                 IconButton(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_rounded, color: _textSec, size: 18),
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 12),
                 IconButton(
                   onPressed: onDelete,
-                  icon: const Icon(Icons.delete_rounded,
-                      color: Colors.redAccent, size: 18),
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                  icon: const Icon(
+                    Icons.delete_rounded,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -651,7 +726,10 @@ class _BeneficiaryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 _chip(Icons.code_rounded, beneficiary.ifsc),
                 const Spacer(),
-                _chip(Icons.location_on_rounded, beneficiary.stateName ?? beneficiary.stateCode),
+                _chip(
+                  Icons.location_on_rounded,
+                  beneficiary.stateName.isNotEmpty ? beneficiary.stateName : 'Unknown',
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -659,8 +737,10 @@ class _BeneficiaryCard extends StatelessWidget {
               children: [
                 const Icon(Icons.arrow_forward_rounded, color: _blue, size: 14),
                 const SizedBox(width: 4),
-                const Text('Tap to transfer',
-                    style: TextStyle(color: _blue, fontSize: 11)),
+                const Text(
+                  'Tap to transfer',
+                  style: TextStyle(color: _blue, fontSize: 11),
+                ),
               ],
             ),
           ],
@@ -670,18 +750,33 @@ class _BeneficiaryCard extends StatelessWidget {
   }
 
   Widget _chip(IconData icon, String label) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(icon, size: 12, color: _textSec),
-      const SizedBox(width: 3),
-      Text(label, style: const TextStyle(color: _textSec, fontSize: 11)),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: _textSec),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: const TextStyle(color: _textSec, fontSize: 11),
+          ),
+        ],
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Add / Edit Beneficiary Page – now uses API for banks, purposes, states
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Add / Edit Beneficiary Page – with OTP Flow
+// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Add / Edit Beneficiary Page – No OTP Flow
+// ─────────────────────────────────────────────────────────────────────────────
+// In aeps_wallet_dialog.dart - Updated _AddBeneficiaryPage
+
+// In aeps_wallet_dialog.dart - Complete _AddBeneficiaryPage
+
+// In aeps_wallet_dialog.dart - Complete _AddBeneficiaryPage
+
 class _AddBeneficiaryPage extends StatefulWidget {
   final String phone;
   final Beneficiary? existing;
@@ -699,14 +794,14 @@ class _AddBeneficiaryPage extends StatefulWidget {
 
 class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _accCtrl;
-  late final TextEditingController _ifscCtrl;
-  late final TextEditingController _mobileCtrl;          // new – required for payout
+  final _nameCtrl = TextEditingController();
+  final _accCtrl = TextEditingController();
+  final _ifscCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
+  
   String? _selectedBankCode;
-  String? _selectedPurposeCode;
   String? _selectedStateCode;
-  String? _selectedPaymentMode = 'IMPS';
+  String _selectedPaymentMode = 'IMPS';
   bool _loading = false;
 
   bool get _isEdit => widget.existing != null;
@@ -714,17 +809,17 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
   @override
   void initState() {
     super.initState();
-    final e = widget.existing;
-    _nameCtrl    = TextEditingController(text: e?.name   ?? '');
-    _accCtrl     = TextEditingController(text: e?.accountNumber ?? '');
-    _ifscCtrl    = TextEditingController(text: e?.ifsc      ?? '');
-    _mobileCtrl  = TextEditingController(text: e?.mobile    ?? '');
-    _selectedBankCode   = e?.bankCode;
-    _selectedPurposeCode = e?.purposeCode;
-    _selectedStateCode   = e?.stateCode;
-    _selectedPaymentMode = e?.paymentMode ?? 'IMPS';
-
-    // Load master data if not already loaded
+    if (widget.existing != null) {
+      final e = widget.existing!;
+      _nameCtrl.text = e.name;
+      _accCtrl.text = e.accountNumber;
+      _ifscCtrl.text = e.ifsc;
+      _mobileCtrl.text = e.mobile;
+      _selectedBankCode = e.bankCode;
+      _selectedStateCode = e.stateCode;
+      _selectedPaymentMode = e.paymentMode;
+    }
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<PayoutProvider>();
       if (provider.banks.isEmpty && !provider.isLoading) {
@@ -735,28 +830,24 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose(); _accCtrl.dispose(); _ifscCtrl.dispose(); _mobileCtrl.dispose();
+    _nameCtrl.dispose();
+    _accCtrl.dispose();
+    _ifscCtrl.dispose();
+    _mobileCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-
-    // In _save(), add prints before creating Beneficiary object:
-    print('_selectedBankCode: $_selectedBankCode');
-    print('_selectedPurposeCode: $_selectedPurposeCode');
-    print('_selectedStateCode: $_selectedStateCode');
-    print('_mobileCtrl: ${_mobileCtrl.text}');
-    
+  Future<void> _saveBeneficiary() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedBankCode == null) {
-      _showSnack('Please select a bank'); return;
-    }
-    if (_selectedPurposeCode == null) {
-      _showSnack('Please select a purpose'); return;
+      _showSnack('Please select a bank');
+      return;
     }
     if (_selectedStateCode == null) {
-      _showSnack('Please select a state'); return;
+      _showSnack('Please select a state');
+      return;
     }
+    
     setState(() => _loading = true);
 
     try {
@@ -767,21 +858,20 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
         ifsc: _ifscCtrl.text.trim().toUpperCase(),
         mobile: _mobileCtrl.text.trim(),
         bankCode: _selectedBankCode!,
-        bankName: context.read<PayoutProvider>().getBankName(_selectedBankCode!),
-        purposeCode: _selectedPurposeCode!,
-        purposeDesc: context.read<PayoutProvider>().getPurposeName(_selectedPurposeCode!),
+        bankName: context.read<PayoutProvider>().getBankName(_selectedBankCode!) ?? 'Unknown Bank',
         stateCode: _selectedStateCode!,
-        stateName: context.read<PayoutProvider>().getStateName(_selectedStateCode!),
-        paymentMode: _selectedPaymentMode!,
+        stateName: context.read<PayoutProvider>().getStateName(_selectedStateCode!) ?? '',
+        paymentMode: _selectedPaymentMode,
       );
 
-      if (_isEdit) {
-        await context.read<BeneficiaryProvider>().updateBeneficiary(beneficiary);
-      } else {
-        await context.read<BeneficiaryProvider>().addBeneficiary(beneficiary);
-      }
+      await context.read<BeneficiaryProvider>().addBeneficiary(beneficiary);
+      
       widget.onSave();
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        _showSnack('Beneficiary added successfully!', isSuccess: true);
+        Navigator.pop(context);
+      }
+      
     } catch (e) {
       _showSnack(e.toString());
     } finally {
@@ -789,143 +879,20 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
     }
   }
 
-  void _showSnack(String msg) {
+  void _showSnack(String msg, {bool isSuccess = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: Colors.redAccent,
+      backgroundColor: isSuccess ? Colors.green : Colors.redAccent,
     ));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: _darkAppBar(_isEdit ? 'Edit Beneficiary' : 'Add Beneficiary'),
-      body: Consumer<PayoutProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading && provider.banks.isEmpty) {
-            return const Center(child: CircularProgressIndicator(color: _blue));
-          }
-          if (provider.errorMessage.isNotEmpty) {
-            return Center(child: Text('Error: ${provider.errorMessage}'));
-          }
-
-          return Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _sectionHeader('Account Details'),
-                  const SizedBox(height: 12),
-                  _label('Account Holder Name *'),
-                  const SizedBox(height: 8),
-                  _validatedField(_nameCtrl, 'Full name', validator: _notEmpty),
-                  const SizedBox(height: 16),
-                  _label('Account Number *'),
-                  const SizedBox(height: 8),
-                  _validatedField(_accCtrl, 'Enter account number',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) => (v == null || v.length < 9) ? 'Enter valid account number' : null),
-                  const SizedBox(height: 16),
-                  _label('IFSC Code *'),
-                  const SizedBox(height: 8),
-                  _validatedField(_ifscCtrl, 'e.g. SBIN0001234',
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-                        LengthLimitingTextInputFormatter(11),
-                      ],
-                      validator: (v) => (v == null || v.length != 11) ? 'IFSC must be 11 characters' : null),
-                  const SizedBox(height: 16),
-                  _label('Mobile Number *'),
-                  const SizedBox(height: 8),
-                  _validatedField(_mobileCtrl, '10-digit mobile number',
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                      validator: (v) => (v == null || v.length != 10) ? 'Enter 10 digits' : null),
-                  const SizedBox(height: 16),
-
-               _label('Bank *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: provider.banks.any((b) => b.code == _selectedBankCode)
-                      ? _selectedBankCode
-                      : null,  // ← reset to null if value not in list
-                  decoration: _inputDecoration('Select bank', prefix: null),
-                  dropdownColor: _surface,
-                  style: const TextStyle(color: _textPrim, fontSize: 14),
-                  items: provider.banks
-                      .map((b) => DropdownMenuItem(value: b.code, child: Text(b.description)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedBankCode = v),
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-
-                _label('Payment Purpose *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: provider.purposes.any((p) => p.code == _selectedPurposeCode)
-                      ? _selectedPurposeCode
-                      : null,
-                  decoration: _inputDecoration('Select purpose', prefix: null),
-                  dropdownColor: _surface,
-                  style: const TextStyle(color: _textPrim, fontSize: 14),
-                  items: provider.purposes
-                      .map((p) => DropdownMenuItem(value: p.code, child: Text(p.description)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedPurposeCode = v),
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-
-                _label('State *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: provider.states.any((s) => s.code == _selectedStateCode)
-                      ? _selectedStateCode
-                      : null,
-                  decoration: _inputDecoration('Select state', prefix: null),
-                  dropdownColor: _surface,
-                  style: const TextStyle(color: _textPrim, fontSize: 14),
-                  items: provider.states
-                      .map((s) => DropdownMenuItem(value: s.code, child: Text(s.description)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedStateCode = v),
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
-                  const SizedBox(height: 16),
-
-                  _label('Payment Mode'),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _modeChip('IMPS', Icons.bolt_rounded, _selectedPaymentMode!, (v) => setState(() => _selectedPaymentMode = v)),
-                      const SizedBox(width: 12),
-                      _modeChip('NEFT', Icons.account_balance_rounded, _selectedPaymentMode!, (v) => setState(() => _selectedPaymentMode = v)),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-
-                  _primaryButton(
-                    label: _isEdit ? 'Save Changes' : 'Add Beneficiary',
-                    loading: _loading,
-                    color: _blue,
-                    onTap: _save,
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   String? _notEmpty(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
-  Widget _validatedField(TextEditingController ctrl, String hint, {String? Function(String?)? validator, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters}) {
+  
+  Widget _validatedField(TextEditingController ctrl, String hint, {
+    String? Function(String?)? validator, 
+    TextInputType? keyboardType, 
+    List<TextInputFormatter>? inputFormatters
+  }) {
     return TextFormField(
       controller: ctrl,
       validator: validator,
@@ -954,10 +921,146 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
             children: [
               Icon(icon, color: selected ? _blue : _textSec, size: 18),
               const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: selected ? _blue : _textSec, fontWeight: selected ? FontWeight.w600 : FontWeight.normal, fontSize: 14)),
+              Text(
+                label, 
+                style: TextStyle(
+                  color: selected ? _blue : _textSec, 
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal, 
+                  fontSize: 14
+                )
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: _darkAppBar(_isEdit ? 'Edit Beneficiary' : 'Add Beneficiary'),
+      body: Consumer<PayoutProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading && provider.banks.isEmpty) {
+            return const Center(child: CircularProgressIndicator(color: _blue));
+          }
+          if (provider.errorMessage.isNotEmpty) {
+            return Center(child: Text('Error: ${provider.errorMessage}'));
+          }
+
+          return Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionHeader('Account Details'),
+                  const SizedBox(height: 12),
+                  
+                  _label('Account Holder Name *'),
+                  const SizedBox(height: 8),
+                  _validatedField(_nameCtrl, 'Full name', validator: _notEmpty),
+                  const SizedBox(height: 16),
+                  
+                  _label('Account Number *'),
+                  const SizedBox(height: 8),
+                  _validatedField(
+                    _accCtrl, 
+                    'Enter account number',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) => (v == null || v.length < 9) ? 'Enter valid account number' : null
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  _label('IFSC Code *'),
+                  const SizedBox(height: 8),
+                  _validatedField(
+                    _ifscCtrl, 
+                    'e.g. SBIN0001234',
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    validator: (v) => (v == null || v.length != 11) ? 'IFSC must be 11 characters' : null
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  _label('Mobile Number *'),
+                  const SizedBox(height: 8),
+                  _validatedField(
+                    _mobileCtrl, 
+                    '10-digit mobile number',
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly, 
+                      LengthLimitingTextInputFormatter(10)
+                    ],
+                    validator: (v) => (v == null || v.length != 10) ? 'Enter 10 digits' : null
+                  ),
+                  const SizedBox(height: 16),
+
+                  _label('Bank *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedBankCode,
+                    decoration: _inputDecoration('Select bank', prefix: null),
+                    dropdownColor: _surface,
+                    style: const TextStyle(color: _textPrim, fontSize: 14),
+                    items: provider.banks.map<DropdownMenuItem<String>>((bank) {
+                      return DropdownMenuItem<String>(
+                        value: bank['code'] as String?,
+                        child: Text(bank['description'] as String? ?? ''),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedBankCode = v),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  _label('State *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedStateCode,
+                    decoration: _inputDecoration('Select state', prefix: null),
+                    dropdownColor: _surface,
+                    style: const TextStyle(color: _textPrim, fontSize: 14),
+                    items: provider.states.map<DropdownMenuItem<String>>((state) {
+                      return DropdownMenuItem<String>(
+                        value: state['code'] as String?,
+                        child: Text(state['description'] as String? ?? ''),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedStateCode = v),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  _label('Payment Mode'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _modeChip('IMPS', Icons.bolt_rounded, _selectedPaymentMode, (v) => setState(() => _selectedPaymentMode = v)),
+                      const SizedBox(width: 12),
+                      _modeChip('NEFT', Icons.account_balance_rounded, _selectedPaymentMode, (v) => setState(() => _selectedPaymentMode = v)),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  _primaryButton(
+                    label: _isEdit ? 'Update Beneficiary' : 'Add Beneficiary',
+                    loading: _loading,
+                    color: _blue,
+                    onTap: _saveBeneficiary,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -968,78 +1071,103 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
 // ─────────────────────────────────────────────────────────────────────────────
 class _TransferPage extends StatefulWidget {
   final Beneficiary beneficiary;
-  final double aepsBalance;  // ← add this
-
+  final double aepsBalance;
 
   const _TransferPage({required this.beneficiary, required this.aepsBalance});
-  @override State<_TransferPage> createState() => _TransferPageState();
+  
+  @override
+  State<_TransferPage> createState() => _TransferPageState();
 }
 
 class _TransferPageState extends State<_TransferPage> {
   final _amountCtrl = TextEditingController();
-  final _tpinCtrl   = TextEditingController();
+  final _tpinCtrl = TextEditingController();
   bool _obscureTpin = true;
-  String _mode      = 'IMPS';
-  bool _loading     = false;
+  String _mode = 'IMPS';
+  bool _loading = false;
 
   @override
-  void dispose() { _amountCtrl.dispose(); _tpinCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _amountCtrl.dispose();
+    _tpinCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _proceed() async {
-  if (_amountCtrl.text.isEmpty) { _showSnack('Enter amount'); return; }
-  final amount = double.tryParse(_amountCtrl.text);
-  if (amount == null || amount <= 0) { _showSnack('Invalid amount'); return; }
-  if (_tpinCtrl.text.length < 4) { _showSnack('Enter 4-digit TPIN'); return; }
+    // Validate Amount
+    if (_amountCtrl.text.isEmpty) {
+      _showSnack('Please enter amount');
+      return;
+    }
+    
+    final amount = double.tryParse(_amountCtrl.text);
+    if (amount == null || amount <= 0) {
+      _showSnack('Please enter a valid amount');
+      return;
+    }
+    if (amount < 100) {
+      _showSnack('Minimum payout amount is ₹100');
+      return;
+    }
+    if (amount > 50000) {
+      _showSnack('Maximum per transaction is ₹50,000');
+      return;
+    }
 
-  // Balance check using passed value
-  final aepsBalance = widget.aepsBalance;  // ← use widget value directly
+    // ✅ Validate 6-digit TPIN
+    final tpin = _tpinCtrl.text.trim();
+    if (tpin.length != 6) {
+      _showSnack('Please enter a 6-digit TPIN');
+      return;
+    }
 
-  if (aepsBalance <= 0) {
-    _showSnack('AEPS wallet is empty. Please add funds first.');
-    return;
-  }
-  if (amount > aepsBalance) {
-    _showSnack('Insufficient balance. Available: ₹${aepsBalance.toStringAsFixed(2)}');
-    return;
-  }
+    // Check AEPS Balance
+    final aepsBalance = widget.aepsBalance;
+    if (aepsBalance <= 0) {
+      _showSnack('AEPS wallet is empty. Please add funds first.');
+      return;
+    }
+    if (amount > aepsBalance) {
+      _showSnack('Insufficient balance. Available: ₹${aepsBalance.toStringAsFixed(2)}');
+      return;
+    }
 
-  if (aepsBalance <= 0) {
-    _showSnack('AEPS wallet is empty. Please add funds first.');
-    return;
-  }
-  // ───────────────────────────────────────────────────────────
-
-  setState(() => _loading = true);
-  try {
+    setState(() => _loading = true);
+    
+   try {
     final payoutProvider = context.read<PayoutProvider>();
-    final beneficiary = widget.beneficiary;
-
+    
     final payoutRequest = {
       'amount': amount,
-      'merchantRefId': 'MER${DateTime.now().millisecondsSinceEpoch}',
-      'beneficiaryBank': beneficiary.bankCode,
-      'paymentPurpose': beneficiary.purposeCode,
-      'paymentMode': _mode,
-      'beneficiaryAccountNumber': beneficiary.accountNumber,
-      'beneficiaryIFSC': beneficiary.ifsc,
-      'beneficiaryMobileNumber': beneficiary.mobile,
-      'beneficiaryName': beneficiary.name,
-      'beneficiaryLocation': beneficiary.stateCode,
-      'tpin': _tpinCtrl.text,
+      'mode': _mode,
+      'tpin': tpin,
+      'ip_address': '192.168.1.1',
+      'fee': 3,
+      'lat': '28.7041',
+      'long': '77.1025',
     };
+
+    print('📤 Sending payout request: $payoutRequest');
 
     final response = await payoutProvider.initiatePayout(payoutRequest);
 
     if (response['success'] == true) {
-      
-      final merchantRefId = response['data']['merchantRefId'];
+      // ✅ FIX: Use the correct merchant_ref_id from response
+      // The backend returns merchantRefId in the response
+      final merchantRefId = response['merchantRefId'] ?? 
+                           response['data']?['merchantRefId'] ?? 
+                           response['data']?['merchant_ref_id'] ?? 
+                           response['transactionId']?.toString();
+
+      print('✅ Merchant Ref ID: $merchantRefId');
 
       if (mounted) {
-        // Navigate to status screen instead of just popping
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => PayoutStatusScreen(merchantRefId: merchantRefId),
+            builder: (_) => PayoutStatusScreen(
+              merchantRefId: merchantRefId?.toString() ?? '',
+            ),
           ),
         );
       }
@@ -1047,6 +1175,7 @@ class _TransferPageState extends State<_TransferPage> {
       _showSnack(response['message'] ?? 'Payout failed');
     }
   } catch (e) {
+    print('❌ Payout error: $e');
     _showSnack(e.toString());
   } finally {
     if (mounted) setState(() => _loading = false);
@@ -1060,132 +1189,6 @@ class _TransferPageState extends State<_TransferPage> {
     ));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final b = widget.beneficiary;
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: _darkAppBar('Fund Transfer'),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Beneficiary summary card (unchanged UI)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _border),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                      color: _blue.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(b.name[0].toUpperCase(),
-                          style: const TextStyle(color: _blue, fontSize: 20,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(b.name,
-                            style: const TextStyle(color: _textPrim,
-                                fontSize: 15, fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 2),
-                        Text('${b.bankName} • ${b.accountNumber}',
-                            style: const TextStyle(color: _textSec, fontSize: 12)),
-                        Text('IFSC: ${b.ifsc} • ${b.stateName}',
-                            style: const TextStyle(color: _textSec, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-              const SizedBox(height: 16),
-           Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: _green.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _green.withOpacity(0.2)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.account_balance_wallet_rounded, color: _green, size: 18),
-                  const SizedBox(width: 8),
-                  const Text('AEPS Balance', style: TextStyle(color: _textSec, fontSize: 13)),
-                  const Spacer(),
-                  Text(
-                    '₹${widget.aepsBalance.toStringAsFixed(2)}',
-                    style: const TextStyle(color: _green, fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-                          const SizedBox(height: 24),
-
-            _label('Transfer Mode'),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _modeChip('IMPS', Icons.bolt_rounded),
-                const SizedBox(width: 12),
-                _modeChip('NEFT', Icons.account_balance_rounded),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _label('Amount'),
-            const SizedBox(height: 8),
-            _inputField(
-              controller: _amountCtrl,
-              hint: 'Enter amount',
-              prefix: '₹',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            const SizedBox(height: 20),
-            _label('Transaction PIN (TPIN)'),
-            const SizedBox(height: 8),
-            _inputField(
-              controller: _tpinCtrl,
-              hint: '4-digit TPIN',
-              obscure: _obscureTpin,
-              maxLength: 4,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              suffix: IconButton(
-                icon: Icon(
-                  _obscureTpin ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                  color: _textSec, size: 20,
-                ),
-                onPressed: () => setState(() => _obscureTpin = !_obscureTpin),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(child: _outlineButton(label: 'Cancel', onTap: () => Navigator.pop(context))),
-                const SizedBox(width: 12),
-                Expanded(child: _primaryButton(label: 'Proceed', loading: _loading, color: _blue, onTap: _proceed)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _modeChip(String label, IconData icon) {
     final selected = _mode == label;
     return Expanded(
@@ -1197,22 +1200,228 @@ class _TransferPageState extends State<_TransferPage> {
           decoration: BoxDecoration(
             color: selected ? _blue.withOpacity(0.15) : _card,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: selected ? _blue : _border, width: selected ? 1.5 : 1),
+            border: Border.all(
+              color: selected ? _blue : _border,
+              width: selected ? 1.5 : 1,
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: selected ? _blue : _textSec, size: 18),
               const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: selected ? _blue : _textSec, fontWeight: selected ? FontWeight.w600 : FontWeight.normal, fontSize: 14)),
+              Text(
+                label, 
+                style: TextStyle(
+                  color: selected ? _blue : _textSec, 
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal, 
+                  fontSize: 14,
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-}
 
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.beneficiary;
+    
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: _darkAppBar('Fund Transfer'),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ✅ Beneficiary Details Card (Shows all details)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.person, color: _blue, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Beneficiary Details',
+                        style: TextStyle(
+                          color: _textPrim,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: _border, height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _blue.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            b.name.isNotEmpty ? b.name[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              color: _blue,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              b.name,
+                              style: const TextStyle(
+                                color: _textPrim,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${b.bankName} • ${b.accountNumber}',
+                              style: const TextStyle(color: _textSec, fontSize: 13),
+                            ),
+                            Text(
+                              'IFSC: ${b.ifsc} • ${b.stateName}',
+                              style: const TextStyle(color: _textSec, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // ✅ AEPS Balance
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: _green.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _green.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_rounded, color: _green, size: 18),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'AEPS Balance',
+                    style: TextStyle(color: _textSec, fontSize: 13),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '₹${widget.aepsBalance.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: _green,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+
+            // ✅ Transfer Mode
+            _label('Transfer Mode'),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _modeChip('IMPS', Icons.bolt_rounded),
+                const SizedBox(width: 12),
+                _modeChip('NEFT', Icons.account_balance_rounded),
+              ],
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // ✅ Amount
+            _label('Amount'),
+            const SizedBox(height: 8),
+            _inputField(
+              controller: _amountCtrl,
+              hint: 'Enter amount (Min ₹100)',
+              prefix: '₹',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // ✅ TPIN (6-digit)
+            _label('Transaction PIN (TPIN)'),
+            const SizedBox(height: 8),
+            _inputField(
+              controller: _tpinCtrl,
+              hint: 'Enter 6-digit TPIN',
+              obscure: _obscureTpin,
+              maxLength: 6,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              suffix: IconButton(
+                icon: Icon(
+                  _obscureTpin ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                  color: _textSec,
+                  size: 20,
+                ),
+                onPressed: () => setState(() => _obscureTpin = !_obscureTpin),
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // ✅ Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: _outlineButton(
+                    label: 'Cancel',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _primaryButton(
+                    label: 'Proceed',
+                    loading: _loading,
+                    color: _blue,
+                    onTap: _proceed,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // All shared UI helpers remain exactly the same as your original file
 // ─────────────────────────────────────────────────────────────────────────────

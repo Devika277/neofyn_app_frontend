@@ -15,7 +15,7 @@ class ApiConfig {
   
  // ========== PAYOUT ENDPOINTS ==========
   static const String payoutBanks = '/api/payout/banks';
-  static const String payoutPurposes = '/api/payout/purposes';
+  // static const String payoutPurposes = '/api/payout/purposes';
   static const String payoutStates = '/api/payout/states';
   static const String payoutInitiate = '/api/payout/initiate';
   static const String payoutStatus = '/api/payout/status';

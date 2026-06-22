@@ -1,10 +1,10 @@
 // lib/screens/payout/payout_home_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/payout_provider.dart';
 import '../../screens/payout/payout_form.dart';
 import '../payout/payout_history_screen.dart';
-
 
 class PayoutHomeScreen extends StatefulWidget {
   const PayoutHomeScreen({Key? key}) : super(key: key);
@@ -40,7 +40,7 @@ class _PayoutHomeScreenState extends State<PayoutHomeScreen> {
           IconButton(
             icon: const Icon(Icons.history),
             onPressed: () {
-              // Navigate to transaction history (uncomment when ready)
+              // Navigate to transaction history
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const PayoutHistoryScreen()),
@@ -68,8 +68,8 @@ class _PayoutHomeScreenState extends State<PayoutHomeScreen> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
-                      // Reset provider state before retry
-                      provider.reset();
+                      // ✅ Fixed: Clear error and reload instead of calling reset()
+                      provider.clearError();
                       provider.loadMasterData();
                     },
                     child: const Text('Retry'),
@@ -79,8 +79,7 @@ class _PayoutHomeScreenState extends State<PayoutHomeScreen> {
             );
           }
           
-          // Once data is loaded, render the form (const constructor)
-          // Using const ensures no unnecessary rebuilds
+          // Once data is loaded, render the form
           return const PayoutFormScreen();
         },
       ),

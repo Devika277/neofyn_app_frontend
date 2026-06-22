@@ -25,7 +25,7 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchStatus();
+    // _fetchStatus();
   }
 
   @override
@@ -34,25 +34,25 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchStatus() async {
-    while (_isPolling && mounted) {
-      try {
-        final response = await _payoutService.getTransactionStatus(widget.merchantRefId);
-        if (response['success'] == true) {
-          setState(() {
-            _transaction = response['data'];
-            _loading = false;
-          });
-          if (_transaction!['status'] == 'SUCCESS' || _transaction!['status'] == 'FAILED') {
-            _isPolling = false;
-          }
-        }
-      } catch (e) {
-        debugPrint('Polling error: $e');
-      }
-      if (_isPolling) await Future.delayed(const Duration(seconds: 3));
-    }
-  }
+  // Future<void> _fetchStatus() async {
+  //   while (_isPolling && mounted) {
+  //     try {
+  //       final response = await _payoutService.getTransactionStatus(widget.merchantRefId);
+  //       if (response['success'] == true) {
+  //         setState(() {
+  //           _transaction = response['data'];
+  //           _loading = false;
+  //         });
+  //         if (_transaction!['status'] == 'SUCCESS' || _transaction!['status'] == 'FAILED') {
+  //           _isPolling = false;
+  //         }
+  //       }
+  //     } catch (e) {
+  //       debugPrint('Polling error: $e');
+  //     }
+  //     if (_isPolling) await Future.delayed(const Duration(seconds: 3));
+  //   }
+  // }
 
   // --- PDF GENERATION LOGIC ---
 Future<Uint8List> _generatePdf() async {
