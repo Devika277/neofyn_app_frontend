@@ -2,8 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../models/receipt_model.dart';
 import '../../providers/aeps_provider.dart';
 import '../../services/AEPS/location_service.dart';
+import '../receipt_screen.dart';
 import 'biometric_service.dart';
 import '../../services/AEPS/aeps_service.dart' as aeps;
 
@@ -17,6 +19,19 @@ class TxnColors {
   static const Color success = Color(0xFF2ECC71);
   static const Color error = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
+}
+
+// ─── DEVICE TYPE ENUM ─────────────────────────────────────────
+enum DeviceType {
+  mantra('Mantra MFS-100', 'Mantra', Icons.fingerprint, 'mantra'),
+  morpho('Morpho MSO 1300', 'Morpho', Icons.scanner, 'morpho');
+
+  final String displayName;
+  final String shortName;
+  final IconData icon;
+  final String apiValue;
+
+  const DeviceType(this.displayName, this.shortName, this.icon, this.apiValue);
 }
 
 class AepsTransactionScreen extends StatefulWidget {
@@ -47,10 +62,13 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   String _searchQuery = '';
   final LocationService _locationService = LocationService();
 
+  // ─── DEVICE SELECTION ───────────────────────────────────────
+  DeviceType _selectedDevice = DeviceType.mantra; // Default: Mantra
+
   bool get _isAmountRequired => ['CW', 'CD', 'AP'].contains(widget.serviceType);
 
   String _getServiceTitle() {
-    switch (widget.serviceType) {
+     switch (widget.serviceType) {
       case 'CW':
         return 'Cash Withdrawal';
       case 'BE':
@@ -157,11 +175,9 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       final provider = context.read<AepsProvider>();
       final currentPipe = provider.pipe ?? '1';
 
-      // WADH is only needed for eKYC and 2FA, not for regular AEPS transactions
-      // All these service types (CW, BE, MS, CD, AP) don't need WADH
       final pidXml = await BiometricService.capturePid(
         clientKey: 'NEOFYN',
-        skipWadh: true,  // No WADH needed for any AEPS transaction
+        skipWadh: true,
         pipe: currentPipe,
       );
 
@@ -220,6 +236,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     if (!confirmed) return;
 
     try {
+      // ✅ Using selected device type
       final response = await provider.performAepsTransaction(
         merchantId: merchantId,
         transactionType: widget.serviceType,
@@ -227,10 +244,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         bankIIN: _selectedBankIIN!,
         amount: _isAmountRequired ? _amountController.text : '0',
         pidData: _pidData!,
-        deviceType: 'mantra',
-        merchantRefId: merchantRefId ?? 'TXN_${DateTime
-            .now()
-            .millisecondsSinceEpoch}',
+        deviceType: _selectedDevice.apiValue, // ✅ Dynamic device type
+        merchantRefId: merchantRefId ?? 'TXN_${DateTime.now().millisecondsSinceEpoch}',
         mobileNo: _mobileController.text.isNotEmpty
             ? _mobileController.text
             : (provider.mobileNo ?? ''),
@@ -252,179 +267,330 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     final amountText = _isAmountRequired ? '₹${_amountController.text}' : 'N/A';
     return await showDialog<bool>(
       context: context,
-      builder: (ctx) =>
-          AlertDialog(
-            backgroundColor: TxnColors.cardColor,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _getServiceColor().withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                      _getServiceIcon(), color: _getServiceColor(), size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Text('Confirm Transaction',
-                    style: TextStyle(color: Colors.white, fontSize: 18)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _confirmRow('Service', _getServiceTitle()),
-                const SizedBox(height: 8),
-                _confirmRow('Aadhaar', _maskAadhaar(_aadhaarController.text)),
-                if (_isAmountRequired) ...[
-                  const SizedBox(height: 8),
-                  _confirmRow('Amount', amountText),
-                ],
-                const SizedBox(height: 8),
-                _confirmRow('Bank', _selectedBankName ?? 'N/A'),
-                const SizedBox(height: 8),
-                _confirmRow('Biometric',
-                    _isBiometricCaptured ? '✓ Captured' : '✗ Not captured'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
-                    'Cancel', style: TextStyle(color: Colors.white60)),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TxnColors.cardColor,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _getServiceColor().withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [
-                    _getServiceColor(),
-                    _getServiceColor().withOpacity(0.7)
-                  ]),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: const Text(
-                      'Confirm', style: TextStyle(color: Colors.white)),
-                ),
-              ),
+              child: Icon(
+                  _getServiceIcon(), color: _getServiceColor(), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Confirm Transaction',
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _confirmRow('Service', _getServiceTitle()),
+            const SizedBox(height: 8),
+            _confirmRow('Aadhaar', _maskAadhaar(_aadhaarController.text)),
+            if (_isAmountRequired) ...[
+              const SizedBox(height: 8),
+              _confirmRow('Amount', amountText),
             ],
+            const SizedBox(height: 8),
+            _confirmRow('Bank', _selectedBankName ?? 'N/A'),
+            const SizedBox(height: 8),
+            _confirmRow('Device', _selectedDevice.displayName),
+            const SizedBox(height: 8),
+            _confirmRow('Biometric',
+                _isBiometricCaptured ? '✓ Captured' : '✗ Not captured'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+                'Cancel', style: TextStyle(color: Colors.white60)),
           ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                _getServiceColor(),
+                _getServiceColor().withOpacity(0.7)
+              ]),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text(
+                  'Confirm', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
     ) ?? false;
   }
 
   Widget _confirmRow(String label, String value) {
     return Row(
       children: [
-        SizedBox(width: 80,
+        SizedBox(
+            width: 80,
             child: Text(label,
                 style: const TextStyle(color: Colors.white60, fontSize: 12))),
-        Expanded(child: Text(value, style: const TextStyle(
-            color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
+        Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500))),
       ],
     );
   }
 
-  void _showResultDialog(TransactionResponse response) {
-    final isSuccess = response.status == '000';
+  // ─── RESULT DIALOG WITH RECEIPT INTEGRATION ─────────────────
+// ─── RESULT DIALOG WITH RECEIPT INTEGRATION ─────────────────
+  void _showResultDialog(dynamic response) {
+    // Check success from responseCode (your API returns this)
+    final isSuccess = response.responseCode == '000' ||
+        response.status == '000';
+
+    // Get values directly from response object (no .data needed)
+    final String? txnRefId = response.txnRefId;
+    final String? rrn = response.rrn;
+    final String? availableBalance = response.availableBalance;
+    final String? npciMessage = response.npciMessage;
+    final String? statusDescription = response.statusDescription ?? response.npciMessage;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) =>
-          AlertDialog(
-            backgroundColor: TxnColors.cardColor,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: (isSuccess ? TxnColors.success : TxnColors.error)
-                        .withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isSuccess ? Icons.check_circle_rounded : Icons
-                        .error_rounded,
-                    color: isSuccess ? TxnColors.success : TxnColors.error,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    isSuccess ? 'Transaction Successful' : 'Transaction Failed',
-                    style: TextStyle(
-                      color: isSuccess ? TxnColors.success : TxnColors.error,
-                      fontSize: 16, fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            content: Container(
-              padding: const EdgeInsets.all(16),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TxnColors.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
-                borderRadius: BorderRadius.circular(12),
+                color: (isSuccess ? TxnColors.success : TxnColors.error)
+                    .withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(response.statusDescription ?? 'Transaction completed',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.7), fontSize: 13)),
-                  const SizedBox(height: 16),
-                  if (response.rrn != null) _resultRow('RRN', response.rrn!),
-                  if (response.txnRefId != null) _resultRow(
-                      'Ref ID', response.txnRefId!),
-                  if (response.availableBalance != null) _resultRow(
-                      'Balance', '₹${response.availableBalance}'),
-                  if (response.npciMessage != null) _resultRow(
-                      'Status', response.npciMessage!),
-                ],
+              child: Icon(
+                isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+                color: isSuccess ? TxnColors.success : TxnColors.error,
+                size: 28,
               ),
             ),
-            actions: [
-              SizedBox(
-                width: double.infinity,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isSuccess
-                          ? [TxnColors.primary, TxnColors.primaryLight]
-                          : [TxnColors.error, TxnColors.error.withOpacity(0.7)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text('Done',
-                        style: TextStyle(color: Colors.white, fontSize: 15)),
-                  ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isSuccess ? 'Transaction Successful' : 'Transaction Failed',
+                style: TextStyle(
+                  color: isSuccess ? TxnColors.success : TxnColors.error,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+            ),
+          ],
+        ),
+        content: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                statusDescription ?? 'Transaction completed',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.7), fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              if (rrn != null) _resultRow('RRN', rrn),
+              if (txnRefId != null) _resultRow('Ref ID', txnRefId),
+              if (availableBalance != null)
+                _resultRow('Balance', '₹$availableBalance'),
+              if (npciMessage != null) _resultRow('Status', npciMessage),
             ],
           ),
+        ),
+        actions: [
+          // View Receipt Button
+          SizedBox(
+            width: double.infinity,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [TxnColors.primary, TxnColors.primaryLight],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _openReceiptScreen(response);
+                },
+                icon: const Icon(Icons.receipt_long_rounded, size: 20),
+                label: const Text('View Receipt'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ),
+
+          // Done Button
+          SizedBox(
+            width: double.infinity,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isSuccess
+                      ? [TxnColors.primary, TxnColors.primaryLight]
+                      : [TxnColors.error, TxnColors.error.withOpacity(0.7)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(color: Colors.white, fontSize: 15),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+// ─── OPEN RECEIPT SCREEN ────────────────────────────────────
+// In aeps_transaction_screen.dart - _openReceiptScreen method
+
+  void _openReceiptScreen(dynamic response) {
+    try {
+      final provider = context.read<AepsProvider>();
+
+      // Build API response map
+      final Map<String, dynamic> apiResponse = {
+        'data': {
+          'status': _safeGet(response, 'responseCode', '001'),
+          'merchantRefId': provider.merchantRefId ??
+              provider.getMerchantRefIdForPipe(provider.pipe ?? '1') ??
+              'TXN_${DateTime.now().millisecondsSinceEpoch}',
+          'txnRefId': _safeGet(response, 'txnRefId', ''),
+          'merchantId': provider.merchantId ??
+              provider.getMerchantIdForPipe(provider.pipe ?? '1') ?? '',
+          'aadhaarNo': _aadhaarController.text,
+          'transactionAmount': _isAmountRequired ? _amountController.text : '0',
+          'availableBalance': _safeGet(response, 'availableBalance', '0'),
+          'txnDateTime': _safeGet(response, 'txnDateTime', DateTime.now().toString()),
+          'bankIIN': _selectedBankIIN ?? '',
+          'npciCode': _safeGet(response, 'npciCode', ''),
+          'npciMessage': _safeGet(response, 'npciMessage', ''),
+          'statusDescription': _safeGet(response, 'statusDescription',
+              _safeGet(response, 'npciMessage', '')),
+          'rrn': _safeGet(response, 'rrn', ''),
+          'pipe': provider.pipe ?? '1',
+
+          // ✅ Add transaction list for Mini Statement
+          'transactionList': _safeGet(response, 'transactionList', ''),
+        }
+      };
+
+      final receipt = ReceiptModel.fromApiResponse(
+        apiResponse,
+        transactionType: widget.serviceType,
+        merchantId: provider.merchantId ?? 'N/A',
+        mobileNumber: _mobileController.text.isNotEmpty
+            ? _mobileController.text
+            : (provider.mobileNo ?? ''),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ReceiptScreen(receipt: receipt),
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ Error opening receipt: $e');
+      _showError('Error opening receipt: $e');
+    }
+  }
+
+// Helper method to safely get fields from response
+  String _safeGet(dynamic obj, String fieldName, [String defaultValue = '']) {
+    try {
+      // Try to get the field using reflection or direct access
+      if (obj is Map) {
+        return obj[fieldName]?.toString() ?? defaultValue;
+      }
+
+      // Try common getter patterns
+      final value = _tryGetField(obj, fieldName);
+      return value?.toString() ?? defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+
+  dynamic _tryGetField(dynamic obj, String fieldName) {
+    try {
+      // Try direct property access
+      switch (fieldName) {
+        case 'responseCode':
+          return (obj as dynamic).responseCode;
+        case 'txnRefId':
+          return (obj as dynamic).txnRefId;
+        case 'rrn':
+          return (obj as dynamic).rrn;
+        case 'availableBalance':
+          return (obj as dynamic).availableBalance;
+        case 'npciMessage':
+          return (obj as dynamic).npciMessage;
+        case 'npciCode':
+          return (obj as dynamic).npciCode;
+        case 'statusDescription':
+          return (obj as dynamic).statusDescription;
+        case 'txnDateTime':
+          return (obj as dynamic).txnDateTime;
+        case 'merchantRefId':
+          return (obj as dynamic).merchantRefId;
+        default:
+          return null;
+      }
+    } catch (e) {
+      return null;
+    }
   }
 
   Widget _resultRow(String label, String value) {
@@ -432,11 +598,17 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          SizedBox(width: 70,
+          SizedBox(
+              width: 70,
               child: Text(label,
-                  style: const TextStyle(color: Colors.white60, fontSize: 12))),
-          Expanded(child: Text(value, style: const TextStyle(
-              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
+                  style:
+                  const TextStyle(color: Colors.white60, fontSize: 12))),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600))),
         ],
       ),
     );
@@ -445,8 +617,9 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   String _maskAadhaar(String aadhaar) {
     if (aadhaar.isEmpty) return '';
     if (aadhaar.length < 4) return aadhaar;
-    if (aadhaar.length >= 8)
+    if (aadhaar.length >= 8) {
       return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
+    }
     return aadhaar;
   }
 
@@ -494,7 +667,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [
               Color(0xFF0A0E0A),
               Color(0xFF0F1A0F),
@@ -508,8 +682,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 12),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 child: Row(
                   children: [
                     IconButton(
@@ -523,13 +697,14 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                         color: serviceColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                          _getServiceIcon(), color: serviceColor, size: 22),
+                      child: Icon(_getServiceIcon(),
+                          color: serviceColor, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(_getServiceTitle(),
-                          style: const TextStyle(color: Colors.white,
+                          style: const TextStyle(
+                              color: Colors.white,
                               fontWeight: FontWeight.w600,
                               fontSize: 18)),
                     ),
@@ -539,14 +714,21 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               Expanded(
                 child: provider.isLoading || provider.isLoadingBankIINs
                     ? const Center(
-                    child: CircularProgressIndicator(color: TxnColors.primary))
+                    child: CircularProgressIndicator(
+                        color: TxnColors.primary))
                     : SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildDeviceCard(),
+                      // ─── DEVICE SELECTOR (NEW) ────────────────────
+                      _buildSectionLabel('Select Device'),
+                      const SizedBox(height: 8),
+                      _buildDeviceSelector(),
+                      const SizedBox(height: 16),
+
+                      _buildDeviceStatusCard(),
                       const SizedBox(height: 16),
                       _buildLocationCard(),
                       const SizedBox(height: 16),
@@ -591,8 +773,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                       const SizedBox(height: 16),
                       _buildBiometricCard(),
                       const SizedBox(height: 24),
-                      if (!amountValid &&
-                          _isAmountRequired) _buildAmountError(),
+                      if (!amountValid && _isAmountRequired)
+                        _buildAmountError(),
                       _buildProcessButton(
                           canProceed && amountValid, serviceColor),
                       const SizedBox(height: 16),
@@ -609,12 +791,87 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     );
   }
 
-  Widget _buildSectionLabel(String text) {
-    return Text(text, style: const TextStyle(
-        color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500));
+  // ─── NEW: DEVICE SELECTOR ───────────────────────────────────
+  Widget _buildDeviceSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: TxnColors.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: DeviceType.values.map((device) {
+          final isSelected = _selectedDevice == device;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedDevice = device;
+                  // Reset biometric when device changes
+                  _isBiometricCaptured = false;
+                  _pidData = null;
+                });
+                _checkDevice(); // Re-check device connection
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? TxnColors.primary.withOpacity(0.15)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: isSelected
+                      ? Border.all(
+                      color: TxnColors.primary.withOpacity(0.5), width: 1.5)
+                      : null,
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      device.icon,
+                      color: isSelected ? TxnColors.primaryLight : Colors.white38,
+                      size: 24,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      device.shortName,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.white54,
+                        fontSize: 12,
+                        fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      device.displayName.split(' ').last,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white.withOpacity(0.7)
+                            : Colors.white30,
+                        fontSize: 9,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
-  Widget _buildDeviceCard() {
+  Widget _buildSectionLabel(String text) {
+    return Text(text,
+        style: const TextStyle(
+            color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500));
+  }
+
+  // ─── UPDATED: DEVICE STATUS CARD ───────────────────────────
+  Widget _buildDeviceStatusCard() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -629,18 +886,25 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: (_isDeviceConnected ? TxnColors.success : TxnColors
-                  .warning).withOpacity(0.1),
+              color: (_isDeviceConnected
+                  ? TxnColors.success
+                  : TxnColors.warning)
+                  .withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: _isCheckingDevice
-                ? const SizedBox(width: 18,
+                ? const SizedBox(
+                width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: TxnColors.primary))
                 : Icon(
-              _isDeviceConnected ? Icons.usb_rounded : Icons.usb_off_rounded,
-              color: _isDeviceConnected ? TxnColors.success : TxnColors.warning,
+              _isDeviceConnected
+                  ? Icons.usb_rounded
+                  : Icons.usb_off_rounded,
+              color: _isDeviceConnected
+                  ? TxnColors.success
+                  : TxnColors.warning,
               size: 20,
             ),
           ),
@@ -651,12 +915,14 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               children: [
                 Text(
                   _isDeviceConnected
-                      ? 'Mantra MFS-100 Connected'
-                      : 'Device Not Connected',
+                      ? '${_selectedDevice.displayName} Connected'
+                      : '${_selectedDevice.displayName} Not Connected',
                   style: TextStyle(
-                    color: _isDeviceConnected ? TxnColors.success : TxnColors
-                        .warning,
-                    fontWeight: FontWeight.w600, fontSize: 13,
+                    color: _isDeviceConnected
+                        ? TxnColors.success
+                        : TxnColors.warning,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
                 ),
                 Text(
@@ -669,8 +935,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(
-                Icons.refresh_rounded, color: Colors.white38, size: 20),
+            icon: const Icon(Icons.refresh_rounded,
+                color: Colors.white38, size: 20),
             onPressed: _checkDevice,
           ),
         ],
@@ -699,14 +965,17 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: _isGettingLocation
-                ? const SizedBox(width: 18,
+                ? const SizedBox(
+                width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: TxnColors.primary))
                 : Icon(
-              hasLocation ? Icons.location_on_rounded : Icons
-                  .location_off_rounded,
-              color: hasLocation ? TxnColors.success : TxnColors.warning,
+              hasLocation
+                  ? Icons.location_on_rounded
+                  : Icons.location_off_rounded,
+              color:
+              hasLocation ? TxnColors.success : TxnColors.warning,
               size: 20,
             ),
           ),
@@ -715,22 +984,25 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(hasLocation ? 'Location Ready' : 'Location Required',
+                Text(
+                    hasLocation ? 'Location Ready' : 'Location Required',
                     style: TextStyle(
-                        color: hasLocation ? TxnColors.success : TxnColors
-                            .warning,
+                        color: hasLocation
+                            ? TxnColors.success
+                            : TxnColors.warning,
                         fontWeight: FontWeight.w600,
                         fontSize: 13)),
                 if (hasLocation)
-                  Text('Lat: ${_location!['latitude']!.toStringAsFixed(
-                      4)}, Lng: ${_location!['longitude']!.toStringAsFixed(4)}',
+                  Text(
+                      'Lat: ${_location!['latitude']!.toStringAsFixed(4)}, Lng: ${_location!['longitude']!.toStringAsFixed(4)}',
                       style: const TextStyle(
                           color: Colors.white54, fontSize: 11)),
               ],
             ),
           ),
-          IconButton(icon: const Icon(
-              Icons.refresh_rounded, color: Colors.white38, size: 20),
+          IconButton(
+              icon: const Icon(Icons.refresh_rounded,
+                  color: Colors.white38, size: 20),
               onPressed: _getLocation),
         ],
       ),
@@ -742,16 +1014,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         bankIINs.any((b) => b.iin == _selectedBankIIN)
         ? _selectedBankIIN
         : null;
-
-    // Filter banks based on search query
-    final filteredBanks = _searchQuery.isEmpty
-        ? bankIINs
-        : bankIINs.where((bank) {
-      final searchLower = _searchQuery.toLowerCase();
-      final description = (bank.description ?? '').toLowerCase();
-      final iin = (bank.iin ?? '').toLowerCase();
-      return description.contains(searchLower) || iin.contains(searchLower);
-    }).toList();
 
     return GestureDetector(
       onTap: () => _showBankSearchDialog(bankIINs),
@@ -794,13 +1056,14 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                   child: Icon(Icons.close, color: Colors.white38, size: 18),
                 ),
               ),
-            const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54),
+            const Icon(Icons.keyboard_arrow_down_rounded,
+                color: Colors.white54),
           ],
         ),
       ),
     );
   }
-// Add this method to show the search dialog
+
   void _showBankSearchDialog(List<aeps.BankIIN> bankIINs) {
     String localSearchQuery = '';
 
@@ -815,9 +1078,11 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                 ? bankIINs
                 : bankIINs.where((bank) {
               final searchLower = localSearchQuery.toLowerCase();
-              final description = (bank.description ?? '').toLowerCase();
+              final description =
+              (bank.description ?? '').toLowerCase();
               final iin = (bank.iin ?? '').toLowerCase();
-              return description.contains(searchLower) || iin.contains(searchLower);
+              return description.contains(searchLower) ||
+                  iin.contains(searchLower);
             }).toList();
 
             return Container(
@@ -831,7 +1096,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               ),
               child: Column(
                 children: [
-                  // Handle bar
                   Container(
                     margin: const EdgeInsets.symmetric(vertical: 12),
                     width: 40,
@@ -841,8 +1105,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-
-                  // Title
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Text(
@@ -854,15 +1116,15 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                       ),
                     ),
                   ),
-
-                  // Search field
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: TxnColors.primary.withOpacity(0.3)),
+                        border: Border.all(
+                            color: TxnColors.primary.withOpacity(0.3)),
                       ),
                       child: TextField(
                         autofocus: true,
@@ -871,26 +1133,30 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                             localSearchQuery = value;
                           });
                         },
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 14),
                         decoration: const InputDecoration(
                           hintText: 'Search bank name or IIN...',
-                          hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
-                          prefixIcon: Icon(Icons.search_rounded, color: TxnColors.primaryLight, size: 22),
+                          hintStyle: TextStyle(
+                              color: Colors.white38, fontSize: 14),
+                          prefixIcon: Icon(Icons.search_rounded,
+                              color: TxnColors.primaryLight, size: 22),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
                         ),
                       ),
                     ),
                   ),
-
-                  // Bank count
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 4),
                     child: Row(
                       children: [
                         Text(
                           '${filteredBanks.length} banks found',
-                          style: const TextStyle(color: Colors.white38, fontSize: 12),
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 12),
                         ),
                         const Spacer(),
                         if (_selectedBankIIN != null)
@@ -904,22 +1170,25 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                               });
                               Navigator.pop(context);
                             },
-                            child: const Text('Clear', style: TextStyle(color: TxnColors.error, fontSize: 12)),
+                            child: const Text('Clear',
+                                style: TextStyle(
+                                    color: TxnColors.error, fontSize: 12)),
                           ),
                       ],
                     ),
                   ),
-
-                  // Bank list
                   Expanded(
                     child: filteredBanks.isEmpty
                         ? const Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.search_off_rounded, color: Colors.white24, size: 48),
+                          Icon(Icons.search_off_rounded,
+                              color: Colors.white24, size: 48),
                           SizedBox(height: 12),
-                          Text('No banks found', style: TextStyle(color: Colors.white38, fontSize: 14)),
+                          Text('No banks found',
+                              style: TextStyle(
+                                  color: Colors.white38, fontSize: 14)),
                         ],
                       ),
                     )
@@ -928,22 +1197,29 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                       itemCount: filteredBanks.length,
                       itemBuilder: (context, index) {
                         final bank = filteredBanks[index];
-                        final isSelected = bank.iin == _selectedBankIIN;
+                        final isSelected =
+                            bank.iin == _selectedBankIIN;
 
                         return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 2, horizontal: 4),
                           decoration: BoxDecoration(
-                            color: isSelected ? TxnColors.primary.withOpacity(0.15) : Colors.transparent,
+                            color: isSelected
+                                ? TxnColors.primary.withOpacity(0.15)
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(10),
                             border: isSelected
-                                ? Border.all(color: TxnColors.primary.withOpacity(0.3))
+                                ? Border.all(
+                                color: TxnColors.primary
+                                    .withOpacity(0.3))
                                 : null,
                           ),
                           child: ListTile(
                             onTap: () {
                               setState(() {
                                 _selectedBankIIN = bank.iin;
-                                _selectedBankName = bank.description ?? bank.iin;
+                                _selectedBankName =
+                                    bank.description ?? bank.iin;
                                 _isBiometricCaptured = false;
                                 _pidData = null;
                               });
@@ -959,30 +1235,44 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
-                                isSelected ? Icons.check_circle : Icons.account_balance_rounded,
-                                color: isSelected ? TxnColors.primary : Colors.white38,
+                                isSelected
+                                    ? Icons.check_circle
+                                    : Icons.account_balance_rounded,
+                                color: isSelected
+                                    ? TxnColors.primary
+                                    : Colors.white38,
                                 size: 20,
                               ),
                             ),
                             title: Text(
-                              bank.description ?? bank.iin ?? 'Unknown Bank',
+                              bank.description ??
+                                  bank.iin ??
+                                  'Unknown Bank',
                               style: TextStyle(
-                                color: isSelected ? TxnColors.primaryLight : Colors.white,
+                                color: isSelected
+                                    ? TxnColors.primaryLight
+                                    : Colors.white,
                                 fontSize: 14,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
                               'IIN: ${bank.iin}',
                               style: TextStyle(
-                                color: isSelected ? TxnColors.primary.withOpacity(0.7) : Colors.white38,
+                                color: isSelected
+                                    ? TxnColors.primary.withOpacity(0.7)
+                                    : Colors.white38,
                                 fontSize: 12,
                               ),
                             ),
                             trailing: isSelected
-                                ? const Icon(Icons.check_circle, color: TxnColors.primary, size: 22)
-                                : const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+                                ? const Icon(Icons.check_circle,
+                                color: TxnColors.primary, size: 22)
+                                : const Icon(Icons.chevron_right,
+                                color: Colors.white24, size: 20),
                           ),
                         );
                       },
@@ -996,6 +1286,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       },
     );
   }
+
   Widget _buildInputField({
     required TextEditingController controller,
     required String hint,
@@ -1013,9 +1304,9 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         controller: controller,
         keyboardType: keyboardType,
         maxLength: maxLength,
-        inputFormatters: keyboardType == TextInputType.number ? [
-          FilteringTextInputFormatter.digitsOnly
-        ] : null,
+        inputFormatters: keyboardType == TextInputType.number
+            ? [FilteringTextInputFormatter.digitsOnly]
+            : null,
         style: const TextStyle(color: Colors.white, fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
@@ -1023,8 +1314,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           prefixIcon: Icon(icon, color: Colors.white38, size: 20),
           border: InputBorder.none,
           counterText: '',
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 14),
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         ),
       ),
     );
@@ -1037,9 +1328,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
       decoration: BoxDecoration(
         color: TxnColors.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _isBiometricCaptured
-            ? TxnColors.success.withOpacity(0.3)
-            : Colors.white.withOpacity(0.08)),
+        border: Border.all(
+            color: _isBiometricCaptured
+                ? TxnColors.success.withOpacity(0.3)
+                : Colors.white.withOpacity(0.08)),
       ),
       child: Row(
         children: [
@@ -1048,35 +1340,48 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
             decoration: BoxDecoration(
               color: _isBiometricCaptured
                   ? TxnColors.success.withOpacity(0.1)
-                  : (bankSelected ? TxnColors.primary.withOpacity(0.1) : Colors
-                  .white.withOpacity(0.05)),
+                  : (bankSelected
+                  ? TxnColors.primary.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.05)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: _isCapturingBiometric
-                ? const SizedBox(width: 22,
+                ? const SizedBox(
+                width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: TxnColors.primary))
-                : Icon(_isBiometricCaptured ? Icons.check_circle_rounded : Icons
-                .fingerprint_rounded,
-                color: _isBiometricCaptured ? TxnColors.success : (bankSelected
-                    ? TxnColors.primaryLight
-                    : Colors.white38), size: 22),
+                : Icon(
+              _isBiometricCaptured
+                  ? Icons.check_circle_rounded
+                  : Icons.fingerprint_rounded,
+              color: _isBiometricCaptured
+                  ? TxnColors.success
+                  : (bankSelected
+                  ? TxnColors.primaryLight
+                  : Colors.white38),
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_isBiometricCaptured
-                    ? 'Biometric Captured'
-                    : 'Biometric Required',
+                Text(
+                    _isBiometricCaptured
+                        ? 'Biometric Captured'
+                        : 'Biometric Required',
                     style: TextStyle(
-                        color: _isBiometricCaptured ? TxnColors.success : Colors
-                            .white, fontWeight: FontWeight.w600, fontSize: 13)),
-                Text(_isBiometricCaptured
-                    ? 'Ready for transaction'
-                    : 'Tap to capture fingerprint',
+                        color: _isBiometricCaptured
+                            ? TxnColors.success
+                            : Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+                Text(
+                    _isBiometricCaptured
+                        ? 'Ready for transaction'
+                        : 'Tap to capture fingerprint',
                     style: const TextStyle(
                         color: Colors.white54, fontSize: 11)),
               ],
@@ -1110,7 +1415,8 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   Widget _buildAmountError() {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: TxnColors.error.withOpacity(0.1),
+      decoration: BoxDecoration(
+          color: TxnColors.error.withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: TxnColors.error.withOpacity(0.3))),
       child: const Row(children: [
@@ -1124,21 +1430,28 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
 
   Widget _buildProcessButton(bool enabled, Color serviceColor) {
     return Container(
-      width: double.infinity, height: 52,
+      width: double.infinity,
+      height: 52,
       decoration: BoxDecoration(
-        gradient: enabled ? LinearGradient(colors: [serviceColor, serviceColor
-            .withOpacity(0.7)
-        ]) : LinearGradient(colors: [Colors.grey[800]!, Colors.grey[700]!]),
+        gradient: enabled
+            ? LinearGradient(
+            colors: [serviceColor, serviceColor.withOpacity(0.7)])
+            : LinearGradient(
+            colors: [Colors.grey[800]!, Colors.grey[700]!]),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: enabled ? [
-          BoxShadow(color: serviceColor.withOpacity(0.3),
+        boxShadow: enabled
+            ? [
+          BoxShadow(
+              color: serviceColor.withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 4))
-        ] : [],
+        ]
+            : [],
       ),
       child: ElevatedButton(
         onPressed: enabled ? _processTransaction : null,
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent,
+        style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12))),
@@ -1147,10 +1460,11 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           children: [
             Icon(_getServiceIcon(), color: Colors.white, size: 18),
             const SizedBox(width: 8),
-            Text('Process ${_getServiceTitle()}', style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600)),
+            Text('Process ${_getServiceTitle()}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -1173,27 +1487,32 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         '• Customer pays merchant via Aadhaar\n• Biometric authentication required\n• Merchant receives credited amount';
         break;
       default:
-        noteText = '• Ensure biometric is captured\n• Location must be enabled';
+        noteText =
+        '• Ensure biometric is captured\n• Location must be enabled';
     }
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: TxnColors.cardColor,
+      decoration: BoxDecoration(
+          color: TxnColors.cardColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: TxnColors.primary.withOpacity(0.15))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(children: [
-            Icon(Icons.info_outline_rounded, color: TxnColors.primaryLight,
-                size: 16),
+            Icon(Icons.info_outline_rounded,
+                color: TxnColors.primaryLight, size: 16),
             SizedBox(width: 6),
-            Text('Note', style: TextStyle(color: TxnColors.primaryLight,
-                fontWeight: FontWeight.w600,
-                fontSize: 13))
+            Text('Note',
+                style: TextStyle(
+                    color: TxnColors.primaryLight,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13))
           ]),
           const SizedBox(height: 8),
-          Text(noteText, style: const TextStyle(
-              color: Colors.white54, fontSize: 12, height: 1.5)),
+          Text(noteText,
+              style: const TextStyle(
+                  color: Colors.white54, fontSize: 12, height: 1.5)),
         ],
       ),
     );

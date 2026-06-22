@@ -1,5 +1,6 @@
 // lib/services/aeps_service.dart
 
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -1091,9 +1092,27 @@ class AepsService {
   }
 
   Future<RegisterMerchantResponse> registerMerchant(RegisterMerchantRequest data) {
+    print('═══════════════════════════════════════════════════════');
+    print('📤 AEPS SERVICE: registerMerchant');
+    print('───────────────────────────────────────────────────────');
+    print('📤 Request pipe: ${data.pipe}');
+
+    final body = data.toJson();
+    print('📤 Body before: ${jsonEncode(body)}');
+    print('📤 Pipe in body: ${body["pipe"]}');
+
+    // ✅ FORCE the correct pipe
+    if (data.pipe != null && data.pipe!.isNotEmpty) {
+      body['pipe'] = data.pipe;
+      print('✅ Forced pipe to: ${data.pipe}');
+    }
+
+    print('📤 Body after: ${jsonEncode(body)}');
+    print('═══════════════════════════════════════════════════════');
+
     return _handleResponse(
-      _dio.post('/aeps/merchant/register', data: data.toJson()),
-      (data) => RegisterMerchantResponse.fromJson(data),
+      _dio.post('/aeps/merchant/register', data: body),
+          (responseData) => RegisterMerchantResponse.fromJson(responseData),
     );
   }
 

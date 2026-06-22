@@ -5,16 +5,16 @@ import 'package:http/http.dart' as http;
 import 'package:my_app/config/api_config.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/AEPS/aeps_service.dart' as aeps; // ✅ prefix added
+import '../services/AEPS/aeps_service.dart' as aeps;
 import '../services/AEPS/auth_service.dart';
 
 class AepsProvider extends ChangeNotifier {
   final aeps.AepsService _aepsService = aeps.AepsService();
   final AuthService _authService = AuthService();
 
-  // State variables – using prefixed types
+  // State variables
   List<aeps.Bank> _banks = [];
-  List<aeps.State> _states = []; // ✅ now aeps.State
+  List<aeps.State> _states = [];
   List<aeps.District> _districts = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -24,15 +24,14 @@ class AepsProvider extends ChangeNotifier {
 
   bool _isLoadingStates = false;
   bool _isLoadingBanks = false;
-  List<aeps.BankIIN> _bankIINs = [];           // ✅ ADD THIS
-  bool _isLoadingBankIINs = false;              // ✅ ADD THIS
+  List<aeps.BankIIN> _bankIINs = [];
+  bool _isLoadingBankIINs = false;
 
-  // 🔽 ADD these getters (and keep isLoading, isLoadingDistricts)
   bool get isLoadingStates => _isLoadingStates;
-
   bool get isLoadingBanks => _isLoadingBanks;
-  List<aeps.BankIIN> get bankIINs => _bankIINs;           // ✅ ADD THIS
+  List<aeps.BankIIN> get bankIINs => _bankIINs;
   bool get isLoadingBankIINs => _isLoadingBankIINs;
+
   // Merchant data
   String? _merchantId;
   String? _merchantRefId;
@@ -46,6 +45,10 @@ class AepsProvider extends ChangeNotifier {
   String? _userId;
   String? _ipAddress;
   String? _pipe = '1';
+
+  // ✅ ADD: Store error details for 409 conflicts
+  String? _existingPipeNumber;
+  String? get existingPipeNumber => _existingPipeNumber;
 
   static const String _keyAuthToken = 'aeps_auth_token';
   static const String _keyUserId = 'aeps_user_id';
@@ -62,36 +65,30 @@ class AepsProvider extends ChangeNotifier {
 
   // Getters
   List<aeps.Bank> get banks => _banks;
-
   List<aeps.State> get states => _states;
-
   List<aeps.District> get districts => _districts;
-
   bool get isLoading => _isLoading;
-
   String? get errorMessage => _errorMessage;
-
   String? get merchantId => _merchantId;
-
   String? get merchantRefId => _merchantRefId;
-
   String? get mobileNo => _mobileNo;
-
   String? get aadhaarNo => _aadhaarNo;
-
   bool get is2FAVerifiedToday => _is2FAVerifiedToday;
-
   bool get isMerchantActive => _merchantId != null && _merchantId!.isNotEmpty;
-
   String? get realMerchantId => _realMerchantId;
-
   String? get ipAddress => _ipAddress;
 
+  // ✅ FIX: Make pipe settable
   String? get pipe => _pipe;
+  set pipe(String? value) {
+    _pipe = value ?? '1';
+    print('🔄 Pipe changed to: $_pipe');
+    notifyListeners();
+  }
+
   String _activePipe = '1';
 
   static const String _keyMerchantRefId = 'aeps_merchant_ref_id';
-
   static const String _keyAadhaarNo = 'aeps_aadhaar_no';
   Map<String, Map<String, dynamic>> _pipeMerchants = {};
 
@@ -100,13 +97,10 @@ class AepsProvider extends ChangeNotifier {
   // ----------------------------------------------------------------------
   Future<void> init() async {
     debugPrint('🚀 AepsProvider.init() called');
-
     await _loadPersistedData();
     debugPrint('✅ init() completed');
   }
 
-  // Call this in main.dart after creating the provider
-  /// Load stored auth data from SharedPreferences
   Future<void> loadFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
     _authToken = prefs.getString(_keyAuthToken);
@@ -125,7 +119,6 @@ class AepsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update setAuthDetails to persist token, userId, and merchantId
   void setAuthDetails({
     required String token,
     required String userId,
@@ -141,7 +134,7 @@ class AepsProvider extends ChangeNotifier {
     _authToken = token;
     _userId = userId;
     _merchantId = merchantId;
-    _merchantRefId = null; // reset
+    _merchantRefId = null;
     _mobileNo = mobileNo;
     _aadhaarNo = aadhaarNo;
     _pipe = pipe ?? '1';
@@ -153,12 +146,12 @@ class AepsProvider extends ChangeNotifier {
   }
 
   Future<void> _persistAuthData(
-    String token,
-    String userId,
-    String merchantId,
-    String? mobileNo,
-    String pipe,
-  ) async {
+      String token,
+      String userId,
+      String merchantId,
+      String? mobileNo,
+      String pipe,
+      ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAuthToken, token);
     await prefs.setString(_keyUserId, userId);
@@ -168,7 +161,6 @@ class AepsProvider extends ChangeNotifier {
     debugPrint('💾 Auth data persisted');
   }
 
-  // Also update clearMerchantData to clear storage keys
   void clearMerchantData() {
     _authToken = null;
     _userId = null;
@@ -191,7 +183,6 @@ class AepsProvider extends ChangeNotifier {
 
   void setActivePipe(String pipe) {
     _activePipe = pipe;
-    // Don't call notifyListeners yet – we'll set merchant data right after
   }
 
   // Fetch status for a specific pipe
@@ -216,27 +207,22 @@ class AepsProvider extends ChangeNotifier {
       debugPrint('🔎 Response status: ${response.statusCode}');
 
       final body = json.decode(response.body);
-      debugPrint('🔎 Raw response for pipe $pipe: $body');
+      debugPrint('🔎 Raw response for pipe $pipe: ${jsonEncode(body)}');
 
       if (response.statusCode == 200) {
-        // Response can be a List (all merchants) or a Map (single merchant)
         if (body is List) {
-          // Find the first entry where 'pipe' matches (as string)
           final match = body.firstWhere(
-            (item) => item['pipe']?.toString() == pipe,
+                (item) => item['pipe']?.toString() == pipe,
             orElse: () => null,
           );
           if (match != null && match['merchantId'] != null) {
-            debugPrint(
-              '✅ Found merchant for pipe $pipe: ${match['merchantId']}',
-            );
+            debugPrint('✅ Found merchant for pipe $pipe: ${match['merchantId']}');
             return match as Map<String, dynamic>;
           } else {
             debugPrint('⚠️ No merchant found for pipe $pipe');
             return null;
           }
         } else if (body is Map<String, dynamic>) {
-          // If it's a direct map, return it (but ensure merchantId exists)
           if (body['merchantId'] != null) {
             return body;
           } else {
@@ -310,28 +296,6 @@ class AepsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ----------------------------------------------------------------------
-  // Auth & Merchant Data
-  // ----------------------------------------------------------------------
-  //   void setAuthDetails({
-  //   required String token,
-  //   required String userId,
-  //   required String merchantId,
-  //   String? mobileNo,
-  //   String? pipe,
-  // }) {
-  //   debugPrint('🔐 setAuthDetails called with userId: $userId, merchantId: $merchantId, pipe: $pipe');
-  //   _authToken = token;
-  //   _userId = userId;
-  //   _merchantId = merchantId;
-  //   _mobileNo = mobileNo;
-  //   _pipe = pipe ?? '1';
-  //   _getLocalIp();
-  //   _persistAuthToken(token, userId);
-  //   notifyListeners();
-  //   debugPrint('✅ setAuthDetails completed');
-  // }
-
   Future<void> loadMerchantData() async {
     final data = await _authService.getMerchantData();
     _merchantId = data['merchantId'];
@@ -341,7 +305,6 @@ class AepsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add these getters
   String? getMerchantIdForPipe(String pipe) {
     return _pipeMerchants[pipe]?['merchantId']?.toString();
   }
@@ -349,6 +312,7 @@ class AepsProvider extends ChangeNotifier {
   String? getMerchantRefIdForPipe(String pipe) {
     return _pipeMerchants[pipe]?['merchantRefId']?.toString();
   }
+
   void setMerchantData(Map<String, dynamic> merchant) {
     debugPrint('📥 setMerchantData called with: $merchant');
     _merchantId = merchant['merchantId']?.toString();
@@ -358,7 +322,6 @@ class AepsProvider extends ChangeNotifier {
     _pipe = merchant['pipe']?.toString() ?? _pipe;
     _last2FADate = null;
     _is2FAVerifiedToday = false;
-    // ✅ Store per pipe
     final pipe = _pipe ?? '1';
     _pipeMerchants[pipe] = {
       'merchantId': _merchantId,
@@ -374,42 +337,30 @@ class AepsProvider extends ChangeNotifier {
       aadhaarNo: _aadhaarNo,
     );
     notifyListeners();
-    debugPrint(
-      '✅ setMerchantData completed: merchantId=$_merchantId, pipe=$_pipe',
-    );
+    debugPrint('✅ setMerchantData completed: merchantId=$_merchantId, pipe=$_pipe');
   }
 
   Future<void> fetchMerchantByPhone(String phone) async {
     DebugLogger.log('fetchMerchantByPhone not implemented in AepsService');
   }
 
-/*  bool needs2FA() {
-    if (_merchantId == null || _merchantId!.isEmpty) return false;
-    final today = DateTime.now().toIso8601String().split('T')[0];
-    return _last2FADate != today;
-  }*/
   bool needs2FA() {
     if (_merchantId == null || _merchantId!.isEmpty) return false;
-
     final today = DateTime.now().toIso8601String().split('T')[0];
-
     if (_last2FADate == today) {
       _is2FAVerifiedToday = true;
       return false;
     }
-
     if (_is2FAVerifiedToday) return false;
-
     return true;
   }
-  // In aeps_provider.dart, update the performDaily2FA method:
 
   Future<bool> performDaily2FA(
-    String pidData, {
-    String deviceType = 'mantra',
-    String? aadhaarNumber,
-    String? merchantRefId,
-  }) async {
+      String pidData, {
+        String deviceType = 'mantra',
+        String? aadhaarNumber,
+        String? merchantRefId,
+      }) async {
     final currentPipe = _pipe ?? '1';
     final pipeMerchantId = getMerchantIdForPipe(currentPipe) ?? _merchantId;
 
@@ -423,12 +374,6 @@ class AepsProvider extends ChangeNotifier {
       _errorMessage = 'Aadhaar number is required';
       return false;
     }
-   /* if (_merchantId == null) return false;
-    final aadhaar = aadhaarNumber ?? _aadhaarNo;
-    if (aadhaar == null || aadhaar.isEmpty) {
-      _errorMessage = 'Aadhaar number is required';
-      return false;
-    }*/
 
     _isLoading = true;
     notifyListeners();
@@ -437,12 +382,10 @@ class AepsProvider extends ChangeNotifier {
       print('🔵 2FA Request: merchantId=$_merchantId, pipe=$_pipe, aadhaar=$aadhaar');
       print('🔵 merchantRefId: $merchantRefId');
       print('🔵 pidData length: ${pidData.length}');
-      // ✅ Call the service WITHOUT lat/long
+
       final response = await _aepsService.perform2FA(
         aeps.Perform2FARequest(
           merchantId: _merchantId!,
-         /* merchantRefId:
-              merchantRefId ?? '2FA_${DateTime.now().millisecondsSinceEpoch}',*/
           merchantRefId: merchantRefId ??
               getMerchantRefIdForPipe(currentPipe) ??
               'NEO_${_userId}_${DateTime.now().millisecondsSinceEpoch}',
@@ -450,9 +393,6 @@ class AepsProvider extends ChangeNotifier {
           pipe: currentPipe,
           deviceType: deviceType,
           pidData: pidData,
-          // ❌ DO NOT send lat/long
-          // lat: null,
-          // long: null,
         ),
       );
       print('🔵 2FA Response: ${response.status} - ${response.statusDescription}');
@@ -470,7 +410,6 @@ class AepsProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('❌ 2FA Exception: $e');
-      // print('❌ Stack: $stack');
       _errorMessage = e.toString();
       return false;
     } finally {
@@ -479,31 +418,13 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  // Future<void> clearMerchantData() async {
-  //   await _authService.clearMerchantData();
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.remove(_keyAuthToken);
-  //   await prefs.remove(_keyUserId);
-  //   _merchantId = null;
-  //   _merchantRefId = null;
-  //   _mobileNo = null;
-  //   _aadhaarNo = null;
-  //   _is2FAVerifiedToday = false;
-  //   _last2FADate = null;
-  //   _authToken = null;
-  //   _userId = null;
-  //   _ipAddress = null;
-  //   _pipe = '1';
-  //   notifyListeners();
-  // }
-
   void clearError() {
     _errorMessage = null;
     notifyListeners();
   }
 
   // ----------------------------------------------------------------------
-  // AEPS Data Fetching (using AepsService)
+  // AEPS Data Fetching
   // ----------------------------------------------------------------------
   Future<void> fetchBanks() async {
     _isLoadingBanks = true;
@@ -519,27 +440,12 @@ class AepsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-// ✅ ADD THE NEW METHOD HERE - right after fetchBanks
- /* Future<void> fetchBankIINs() async {
-    _isLoadingBankIINs = true;
-    notifyListeners();
-    try {
-      _bankIINs = await _aepsService.getBankIINs();
-      DebugLogger.log('✅ Bank IINs loaded: ${_bankIINs.length}');
-    } catch (e) {
-      DebugLogger.log('❌ fetchBankIINs error: $e');
-      _errorMessage = e.toString();
-    } finally {
-      _isLoadingBankIINs = false;
-      notifyListeners();
-    }
-  }*/
+
   Future<void> fetchBankIINs() async {
     _isLoadingBankIINs = true;
     notifyListeners();
     try {
       final rawIINs = await _aepsService.getBankIINs();
-      // ✅ Trim whitespace from each IIN
       _bankIINs = rawIINs.map((iin) => aeps.BankIIN(
         iin: (iin.iin ?? '').trim(),
         description: (iin.description ?? '').trim(),
@@ -553,6 +459,7 @@ class AepsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
   Future<void> fetchStates() async {
     _isLoadingStates = true;
     notifyListeners();
@@ -569,7 +476,6 @@ class AepsProvider extends ChangeNotifier {
   }
 
   bool _isLoadingDistricts = false;
-
   bool get isLoadingDistricts => _isLoadingDistricts;
 
   Future<void> fetchDistricts(String stateCode) async {
@@ -587,13 +493,21 @@ class AepsProvider extends ChangeNotifier {
   }
 
   // ----------------------------------------------------------------------
-  // Merchant Registration & OTP
+  // ✅ FIXED: Merchant Registration - Use the pipe from the request
   // ----------------------------------------------------------------------
   Future<bool> registerMerchant(MerchantRegistrationRequest request) async {
     _isLoading = true;
     _errorMessage = null;
+    _existingPipeNumber = null;
     notifyListeners();
+
     try {
+      // ✅ Use the pipe from the request, not the stored _pipe
+      final requestPipe = request.pipe.isNotEmpty ? request.pipe : (_pipe ?? '1');
+      print('🔑 Registering merchant with pipe: $requestPipe');
+      print('🔑 Request pipe: ${request.pipe}');
+      print('🔑 Provider stored pipe: $_pipe');
+
       final regRequest = aeps.RegisterMerchantRequest(
         stateCode: request.merchantState,
         districtCode: request.merchantDistrict,
@@ -602,7 +516,7 @@ class AepsProvider extends ChangeNotifier {
         bankAccount: request.bankAccountNumber,
         bankIfsc: request.bankIfscCode,
         bankNameCode: request.bankName,
-        pipe: _pipe,
+        pipe: requestPipe, // ✅ Use request pipe
         merchantRefId: '',
         ipAddress: _ipAddress ?? '127.0.0.1',
         lat: request.lat.toString(),
@@ -620,15 +534,20 @@ class AepsProvider extends ChangeNotifier {
         pidData: null,
         emailId: request.emailId,
       );
+      print('📤 Sending registration request with pipe: ${regRequest.pipe}');
+
       final response = await _aepsService.registerMerchant(regRequest);
-      // response.merchantId is a String? – backend returns it on success
+
       if (response.merchantId != null && response.merchantId!.isNotEmpty) {
         _merchantId = response.merchantId;
         _merchantRefId = response.merchantRefId ?? '';
         _mobileNo = request.mobileNo;
         _aadhaarNo = request.aadhaarNo;
 
-        // 🔒 Persist immediately so the wrapper can read it later
+        // ✅ Update pipe to the requested pipe
+        _pipe = requestPipe;
+
+        // Persist merchant data
         await _authService.saveMerchantData(
           merchantId: _merchantId!,
           merchantRefId: _merchantRefId!,
@@ -636,7 +555,7 @@ class AepsProvider extends ChangeNotifier {
           aadhaarNo: _aadhaarNo,
         );
 
-        DebugLogger.log('✅ Merchant saved. ID: $_merchantId');
+        DebugLogger.log('✅ Merchant saved. ID: $_merchantId, Pipe: $_pipe');
         _isLoading = false;
         notifyListeners();
         return true;
@@ -647,7 +566,19 @@ class AepsProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _errorMessage = e.toString();
+      // ✅ Handle 409 Conflict - extract existing pipe info
+      final errorStr = e.toString();
+      print('❌ Registration error: $errorStr');
+
+      // Try to extract existing pipe from error message
+      final pipeMatch = RegExp(r'pipe\s*(\d+)', caseSensitive: false)
+          .firstMatch(errorStr);
+      if (pipeMatch != null) {
+        _existingPipeNumber = pipeMatch.group(1);
+        print('⚠️ Existing pipe found: $_existingPipeNumber');
+      }
+
+      _errorMessage = errorStr;
       _isLoading = false;
       notifyListeners();
       return false;
@@ -675,10 +606,10 @@ class AepsProvider extends ChangeNotifier {
   }
 
   Future<bool> verifyOtp(
-    String merchantId,
-    String otp,
-    String merchantRefId,
-  ) async {
+      String merchantId,
+      String otp,
+      String merchantRefId,
+      ) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -718,7 +649,6 @@ class AepsProvider extends ChangeNotifier {
           'merchantId': body['merchantId'],
           'merchantRefId': body['merchantRefId'],
           'phone': body['mobileNo'] ?? _mobileNo,
-          // you may need to adjust field names
           'aadhaarNo': _aadhaarNo,
           'firstName': '',
           'lastName': '',
@@ -729,14 +659,11 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  // ──────────────────────────────────────────────
-  // Resend OTP (new)
-  // ──────────────────────────────────────────────
   Future<bool> resendOtp(
-    String merchantId,
-    String merchantRefId, {
-    String? pipe,
-  }) async {
+      String merchantId,
+      String merchantRefId, {
+        String? pipe,
+      }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -758,9 +685,6 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  // ──────────────────────────────────────────────
-  // E‑KYC (new)
-  // ──────────────────────────────────────────────
   Future<bool> startEkyc({
     required String merchantId,
     required String merchantRefId,
@@ -774,7 +698,6 @@ class AepsProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      // Use the service method (ensure it exists in aeps_service.dart)
       final response = await _aepsService.merchantEkyc(
         aeps.MerchantEkycRequest(
           merchantId: merchantId,
@@ -783,12 +706,9 @@ class AepsProvider extends ChangeNotifier {
           pidData: pidData ?? '',
           deviceType: deviceType ?? 'mantra',
           aadhaarNumber: aadhaarNumber ?? '',
-          // The backend expects these; if your service doesn't have them, add optional fields
-          // ipAddress: ipAddress ?? _ipAddress ?? '127.0.0.1',
         ),
       );
       if (response.status == '000') {
-        // Optionally update local merchant status (backend will set to 'active')
         return true;
       } else {
         _errorMessage = response.statusDescription ?? 'EKYC failed';
@@ -803,9 +723,6 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  // ──────────────────────────────────────────────
-  // Daily 2FA (improved, using the same service)
-  // ──────────────────────────────────────────────
   Future<bool> perform2FA({
     required String merchantId,
     required String merchantRefId,
@@ -852,11 +769,7 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  // ----------------------------------------------------------------------
-  // Transactions
-  // ----------------------------------------------------------------------
-  // In AepsProvider class, REPLACE executeTransaction with this:
-
+  // Transaction methods (unchanged)
   Future<TransactionResponse?> executeTransaction(
       AepsTransactionRequest request,
       ) async {
@@ -879,7 +792,6 @@ class AepsProvider extends ChangeNotifier {
       debugPrint('🔵 Transaction: type=${request.transactionType}, pipe=$currentPipe');
       debugPrint('🔵 Aadhaar: ${request.aadhaarNumber}, Bank: ${request.bankIIN}');
 
-      // ✅ Route to correct backend endpoint based on transaction type
       switch (request.transactionType) {
         case 'CW':
           final response = await _aepsService.cashWithdrawal(
@@ -976,7 +888,6 @@ class AepsProvider extends ChangeNotifier {
           );
 
         case 'AP':
-        // Aadhaar Pay uses cash withdrawal endpoint with different type
           final response = await _aepsService.cashWithdrawal(
             aeps.CashWithdrawalRequest(
               amount: int.parse(request.amount),
@@ -1014,7 +925,6 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  // Update performAepsTransaction to pass location
   Future<TransactionResponse?> performAepsTransaction({
     required String merchantId,
     required String transactionType,
@@ -1054,9 +964,9 @@ class AepsProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> getTransactionStatus(
-    String merchantId,
-    String merchantRefId,
-  ) async {
+      String merchantId,
+      String merchantRefId,
+      ) async {
     DebugLogger.log('getTransactionStatus not implemented in AepsService');
     return {'success': false};
   }
@@ -1068,7 +978,7 @@ class AepsProvider extends ChangeNotifier {
 }
 
 // =========================================================================
-// Models that are NOT defined in aeps_service.dart (stay here)
+// Models
 // =========================================================================
 
 class MerchantRegistrationRequest {
@@ -1240,7 +1150,7 @@ class TransactionResponse {
   factory TransactionResponse.fromJson(Map<String, dynamic> json) =>
       TransactionResponse(
         status:
-            json['status']?.toString() ??
+        json['status']?.toString() ??
             json['responseCode']?.toString() ??
             '',
         statusDescription: json['statusDescription'] ?? json['message'],

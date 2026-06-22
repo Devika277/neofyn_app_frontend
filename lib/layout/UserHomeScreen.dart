@@ -12,6 +12,7 @@ import 'package:my_app/services/Recharges/rechargeFragment.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app/screens/account/login_screen.dart';
+import '../screens/aeps/aeps_history_screen.dart';
 import '../screens/dmt/dmt_home_screen.dart';
 import '../screens/account/Profile_screen.dart';
 import '../screens/account/supportPage_screen.dart';
@@ -265,7 +266,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     onServiceTap: _onServiceTap, // ✅ now defined
                   ),
                   const ServicesPage(),
-                  const HistoryPage(),
+                  // const HistoryPage(),
+                  AepsHistoryScreen(),
                   ProfilePage(onLogout: _logout),
                 ],
               ),

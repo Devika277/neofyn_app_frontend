@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -25,7 +27,7 @@ class AppColors {
   static const Color success = Color(0xFF008169);
   static const Color error = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
-  static const Color pipePending = Color(0xFFF39C12); // ✅ Added this
+  static const Color pipePending = Color(0xFFF39C12);
   static const Color borderLight = Color(0xFFE5E7EB);
   static const Color borderFocus = Color(0xFF008169);
 }
@@ -107,6 +109,34 @@ class UpperCaseTextFormatter extends TextInputFormatter {
   }
 }
 
+// ─── Log Helper ───────────────────────────────────────────────
+void _logRequest(String apiName, Map<String, dynamic> request) {
+  print('═══════════════════════════════════════════════════════');
+  print('📤 REQUEST: $apiName');
+  print('───────────────────────────────────────────────────────');
+  print(jsonEncode(request));
+  print('═══════════════════════════════════════════════════════');
+}
+
+void _logResponse(String apiName, dynamic response, {bool isError = false}) {
+  print('═══════════════════════════════════════════════════════');
+  print('${isError ? '❌ ERROR' : '📥 RESPONSE'}: $apiName');
+  print('───────────────────────────────────────────────────────');
+  if (response is String) {
+    try {
+      final parsed = jsonDecode(response);
+      print(jsonEncode(parsed));
+    } catch (_) {
+      print(response);
+    }
+  } else if (response is Map) {
+    print(jsonEncode(response));
+  } else {
+    print(response.toString());
+  }
+  print('═══════════════════════════════════════════════════════');
+}
+
 class MerchantRegistrationScreen extends StatefulWidget {
   final bool isOtpPending;
   final Map<String, dynamic>? merchantData;
@@ -169,13 +199,17 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
   bool _isSendingOtp = false;
   bool _isVerifyingOtp = false;
 
+  // Timer for OTP
+  Timer? _otpTimer;
+  int _otpSecondsRemaining = 30;
+
   bool get _isOtpPending => widget.isOtpPending;
   String? get _pendingMerchantId =>
       widget.merchantData?['merchantId']?.toString();
   String? get _pendingMerchantRefId =>
       widget.merchantData?['merchantRefId']?.toString();
 
-  // ✅ Get current pipe
+  // Get current pipe
   String get _currentPipe {
     if (widget.pipe != null && widget.pipe!.isNotEmpty) {
       return widget.pipe!;
@@ -193,29 +227,25 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     _panController.addListener(_onPanChanged);
     _shopPanController.addListener(_onShopPanChanged);
 
+    print('🔵 INIT: MerchantRegistrationScreen');
+    print('🔵 isOtpPending: ${widget.isOtpPending}');
+    print('🔵 merchantData: ${jsonEncode(widget.merchantData)}');
+    print('🔵 pipe: ${widget.pipe}');
+    print('🔵 phone: ${widget.phone}');
+    print('🔵 Current Pipe: $_currentPipe');
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AepsProvider>().fetchStates();
       context.read<AepsProvider>().fetchBanks();
+
+      // Check merchant status and show OTP popup if needed
+      _checkMerchantStatusAndShowOtp();
     });
-
-    // ✅ If OTP is pending, show OTP popup immediately
-    if (_isOtpPending && widget.merchantData != null) {
-      final phone =
-          widget.phone ?? widget.merchantData!['phone']?.toString() ?? '';
-      _mobileController.text = phone;
-      _merchantId = _pendingMerchantId;
-      _merchantRefId = _pendingMerchantRefId;
-
-      // Auto-send OTP and show popup
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _sendOtp(); // Send OTP automatically
-        _showOtpPopup(); // Show OTP popup immediately
-      });
-    }
   }
 
   @override
   void dispose() {
+    _otpTimer?.cancel();
     _dobController.removeListener(_onDobChanged);
     _panController.removeListener(_onPanChanged);
     _shopPanController.removeListener(_onShopPanChanged);
@@ -237,6 +267,118 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     _shopPinCodeController.dispose();
     _otpController.dispose();
     super.dispose();
+  }
+
+  // ─── Check Merchant Status & Show OTP ────────────────────────
+  Future<void> _checkMerchantStatusAndShowOtp() async {
+    print('🔍 Checking merchant status...');
+
+    // Case 1: If OTP is pending (from widget parameter)
+    if (_isOtpPending && widget.merchantData != null) {
+      final phone = widget.phone ?? widget.merchantData!['phone']?.toString() ?? '';
+      _mobileController.text = phone;
+      _merchantId = _pendingMerchantId;
+      _merchantRefId = _pendingMerchantRefId;
+
+      print('📱 OTP Pending - MerchantId: $_merchantId');
+      print('📱 OTP Pending - MerchantRefId: $_merchantRefId');
+      print('📱 OTP Pending - Phone: $phone');
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleResendOtp();
+        _showOtpPopup();
+      });
+      return;
+    }
+
+    // Case 2: Check if merchant data exists in provider
+    try {
+      final provider = context.read<AepsProvider>();
+      final currentPipe = _currentPipe;
+
+      print('🔍 Fetching pipe status for pipe: $currentPipe');
+
+      final statusData = await provider.fetchPipeStatus(currentPipe);
+
+      if (statusData != null && mounted) {
+        _logResponse('fetchPipeStatus', statusData);
+
+        final registrationStatus = statusData['registrationStatus']?.toString() ?? '';
+        final merchantId = statusData['merchantId']?.toString() ?? provider.merchantId;
+        final merchantRefId = statusData['merchantRefId']?.toString() ?? provider.merchantRefId;
+        final phoneNumber = statusData['phone']?.toString() ?? provider.mobileNo ?? '';
+        final errorMessage = statusData['message']?.toString() ?? statusData['error']?.toString() ?? '';
+
+        print('📊 Registration Status: "$registrationStatus"');
+        print('📊 MerchantId: $merchantId');
+        print('📊 MerchantRefId: $merchantRefId');
+        print('📊 Phone: $phoneNumber');
+        print('📊 Error/Message: $errorMessage');
+
+        // Check if merchant is already registered
+        if (errorMessage.toLowerCase().contains('already registered') ||
+            errorMessage.toLowerCase().contains('already exist')) {
+          print('⚠️ Merchant already registered in pipe $currentPipe');
+          _showError('This merchant is already registered in Pipe $currentPipe');
+          return;
+        }
+
+        // Show OTP popup for 'otp_sent' or 'otp_pending' status
+        if ((registrationStatus == 'otp_sent' || registrationStatus == 'otp_pending') &&
+            merchantId != null && merchantId.isNotEmpty) {
+
+          if (phoneNumber.isNotEmpty) {
+            _mobileController.text = phoneNumber;
+          } else if (widget.phone != null) {
+            _mobileController.text = widget.phone!;
+          }
+
+          setState(() {
+            _merchantId = merchantId;
+            _merchantRefId = merchantRefId;
+          });
+
+          print('📱 Status is "$registrationStatus" - Showing OTP popup');
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleResendOtp();
+            _showOtpPopup();
+          });
+        }
+        // For 'otp_verified' status, navigate directly to EKYC
+        else if (registrationStatus == 'otp_verified') {
+          print('✅ Status is otp_verified - Navigating to EKYC');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EKYC_Screen(
+                  merchantId: merchantId ?? '',
+                  merchantRefId: merchantRefId ?? '',
+                  pipe: currentPipe,
+                  aadhaarNumber: provider.aadhaarNo ?? '',
+                ),
+              ),
+            );
+          });
+        }
+        // For 'active' status, navigate to main screen
+        else if (registrationStatus == 'active') {
+          print('✅ Status is active - Navigating to AEPS wrapper');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
+            );
+          });
+        } else {
+          print('ℹ️ Registration status: "$registrationStatus" - No special action needed');
+        }
+      }
+    } catch (e) {
+      print('❌ Error checking merchant status: $e');
+      _logResponse('checkMerchantStatus', {'error': e.toString()}, isError: true);
+    }
   }
 
   // ─── PAN Auto Uppercase ──────────────────────────────────────
@@ -277,8 +419,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         TextPosition(offset: _shopPanController.text.length),
       );
     }
-    final filtered =
-    _shopPanController.text.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final filtered = _shopPanController.text.replaceAll(RegExp(r'[^A-Z0-9]'), '');
     if (_shopPanController.text != filtered) {
       _shopPanController.text = filtered;
       _shopPanController.selection = TextSelection.fromPosition(
@@ -357,12 +498,31 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         final location = await _locationService.getLocationMap();
         setState(() => _location = location);
         _showSuccess('Location captured successfully');
+        print('📍 Location captured: $location');
       }
     } catch (e) {
       _showError('Failed to get location: $e');
+      print('❌ Location error: $e');
     } finally {
       setState(() => _isGettingLocation = false);
     }
+  }
+
+  // ─── OTP Timer ───────────────────────────────────────────────
+  void _startOtpTimer() {
+    _otpTimer?.cancel();
+    _otpSecondsRemaining = 30;
+    _otpTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_otpSecondsRemaining > 0) {
+            _otpSecondsRemaining--;
+          } else {
+            timer.cancel();
+          }
+        });
+      }
+    });
   }
 
   // ─── Searchable Dropdown Dialog ──────────────────────────────
@@ -392,8 +552,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
               child: Container(
-                constraints:
-                const BoxConstraints(maxHeight: 500, maxWidth: 400),
+                constraints: const BoxConstraints(maxHeight: 500, maxWidth: 400),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -420,8 +579,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: AppColors.primary.withOpacity(0.3)),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
                       ),
                       child: TextField(
                         controller: searchController,
@@ -470,12 +628,9 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                             )
                                 : null,
                             shape: RoundedRectangleBorder(
-                                borderRadius:
-                                BorderRadius.circular(8)),
-                            hoverColor:
-                            AppColors.primary.withOpacity(0.1),
-                            onTap: () =>
-                                Navigator.pop(context, item),
+                                borderRadius: BorderRadius.circular(8)),
+                            hoverColor: AppColors.primary.withOpacity(0.1),
+                            onTap: () => Navigator.pop(context, item),
                           );
                         },
                       ),
@@ -507,367 +662,526 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       if (_location == null) return;
     }
 
-    // Validate phone number
     if (_mobileController.text.trim().length != 10) {
       _showError('Please enter a valid 10-digit mobile number');
       return;
     }
 
     final provider = context.read<AepsProvider>();
-    final currentPipe = _currentPipe; // ✅ Use dynamic pipe
+    final currentPipe = _currentPipe;
+
+    final requestData = {
+      'firstName': _firstNameController.text.trim(),
+      'middleName': _middleNameController.text.trim(),
+      'lastName': _lastNameController.text.trim(),
+      'dob': _dobController.text.trim(),
+      'emailId': _emailController.text.trim(),
+      'mobileNo': _mobileController.text.trim(),
+      'aadhaarNo': _aadhaarController.text.replaceAll(' ', '').trim(),
+      'panNo': _panController.text.trim().toUpperCase(),
+      'merchantAddress1': _addressController.text.trim(),
+      'merchantAddress2': '',
+      'merchantState': _selectedStateCode!,
+      'merchantDistrict': _selectedDistrictCode!,
+      'merchantPinCode': _pincodeController.text.trim(),
+      'shopPan': _shopPanController.text.trim().toUpperCase(),
+      'bankAccountNumber': _bankAccountController.text.trim(),
+      'bankIfscCode': _bankIfscController.text.trim().toUpperCase(),
+      'bankName': _selectedBankCode ?? '',
+      'accountType': _accountType,
+      'shopAddress': _shopAddressController.text.trim(),
+      'shopDistrict': _selectedDistrictCode!,
+      'shopState': _selectedStateCode!,
+      'shopPinCode': _shopPinCodeController.text.trim(),
+      'shopLat': _location!['latitude']!,
+      'shopLong': _location!['longitude']!,
+      'lat': _location!['latitude']!,
+      'long': _location!['longitude']!,
+      'ipAddress': '',
+      'merchantRefId': '',
+      'pipe': currentPipe,
+      'gender': _selectedGender,
+    };
+
+    _logRequest('registerMerchant (Pipe: $currentPipe)', requestData);
 
     print('📝 Registering merchant for Pipe: $currentPipe');
 
     final request = MerchantRegistrationRequest(
-      firstName: _firstNameController.text.trim(),
-      middleName: _middleNameController.text.trim(),
-      lastName: _lastNameController.text.trim(),
-      dob: _dobController.text.trim(),
-      emailId: _emailController.text.trim(),
-      mobileNo: _mobileController.text.trim(),
-      aadhaarNo: _aadhaarController.text.replaceAll(' ', '').trim(),
-      panNo: _panController.text.trim().toUpperCase(),
-      merchantAddress1: _addressController.text.trim(),
-      merchantAddress2: '',
-      merchantState: _selectedStateCode!,
-      merchantDistrict: _selectedDistrictCode!,
-      merchantPinCode: _pincodeController.text.trim(),
-      shopPan: _shopPanController.text.trim().toUpperCase(),
-      bankAccountNumber: _bankAccountController.text.trim(),
-      bankIfscCode: _bankIfscController.text.trim().toUpperCase(),
-      bankName: _selectedBankCode ?? '',
-      accountType: _accountType,
-      shopAddress: _shopAddressController.text.trim(),
-      shopDistrict: _selectedDistrictCode!,
-      shopState: _selectedStateCode!,
-      shopPinCode: _shopPinCodeController.text.trim(),
-      shopLat: _location!['latitude']!,
-      shopLong: _location!['longitude']!,
-      lat: _location!['latitude']!,
-      long: _location!['longitude']!,
-      ipAddress: '',
-      merchantRefId: '',
-      pipe: currentPipe, // ✅ Use dynamic pipe instead of hardcoded '1'
-      gender: _selectedGender,
+      firstName: requestData['firstName'] as String,
+      middleName: requestData['middleName'] as String,
+      lastName: requestData['lastName'] as String,
+      dob: requestData['dob'] as String,
+      emailId: requestData['emailId'] as String,
+      mobileNo: requestData['mobileNo'] as String,
+      aadhaarNo: requestData['aadhaarNo'] as String,
+      panNo: requestData['panNo'] as String,
+      merchantAddress1: requestData['merchantAddress1'] as String,
+      merchantAddress2: requestData['merchantAddress2'] as String,
+      merchantState: requestData['merchantState'] as String,
+      merchantDistrict: requestData['merchantDistrict'] as String,
+      merchantPinCode: requestData['merchantPinCode'] as String,
+      shopPan: requestData['shopPan'] as String,
+      bankAccountNumber: requestData['bankAccountNumber'] as String,
+      bankIfscCode: requestData['bankIfscCode'] as String,
+      bankName: requestData['bankName'] as String,
+      accountType: requestData['accountType'] as String,
+      shopAddress: requestData['shopAddress'] as String,
+      shopDistrict: requestData['shopDistrict'] as String,
+      shopState: requestData['shopState'] as String,
+      shopPinCode: requestData['shopPinCode'] as String,
+      shopLat: requestData['shopLat'] as double,
+      shopLong: requestData['shopLong'] as double,
+      lat: requestData['lat'] as double,
+      long: requestData['long'] as double,
+      ipAddress: requestData['ipAddress'] as String,
+      merchantRefId: requestData['merchantRefId'] as String,
+      pipe: requestData['pipe'] as String,
+      gender: requestData['gender'] as String,
     );
 
     final success = await provider.registerMerchant(request);
+
+    // Log the response from provider
+    _logResponse('registerMerchant', {
+      'success': success,
+      'merchantId': provider.merchantId,
+      'merchantRefId': provider.merchantRefId,
+      'errorMessage': provider.errorMessage,
+      'pipe': currentPipe,
+    });
 
     if (success) {
       setState(() {
         _merchantId = provider.merchantId;
         _merchantRefId = provider.merchantRefId;
       });
-      print('✅ Registration success for Pipe $currentPipe, merchantId: $_merchantId');
-      _showOtpPopup(); // ✅ Show OTP popup after successful registration
+      print('✅ Registration success for Pipe $currentPipe');
+      print('✅ MerchantId: $_merchantId');
+      print('✅ MerchantRefId: $_merchantRefId');
+      _showOtpPopup();
     } else {
-      _showError(provider.errorMessage ?? 'Registration failed');
+      final errorMsg = provider.errorMessage ?? 'Registration failed';
+      print('❌ Registration failed for Pipe $currentPipe');
+      print('❌ Error: $errorMsg');
+      _showError(errorMsg);
+    }
+  }
+
+  // ─── Handle OTP Verification ─────────────────────────────────
+  Future<void> _handleOtpVerification(
+      BuildContext dialogContext,
+      StateSetter setDialogState) async {
+
+    if (_otpController.text.length != 6) {
+      _showError('Please enter complete 6-digit OTP');
+      return;
+    }
+
+    setDialogState(() => _isVerifyingOtp = true);
+
+    final merchantId = _isOtpPending ? _pendingMerchantId : _merchantId;
+    final merchantRefId = _isOtpPending ? _pendingMerchantRefId : _merchantRefId;
+    final currentPipe = _currentPipe;
+
+    final verifyRequest = {
+      'merchantId': merchantId,
+      'merchantRefId': merchantRefId,
+      'otp': _otpController.text,
+      'pipe': currentPipe,
+    };
+
+    _logRequest('verifyOtp', verifyRequest);
+
+    if (merchantId == null || merchantRefId == null) {
+      _showError('Merchant information missing. Please restart.');
+      setDialogState(() => _isVerifyingOtp = false);
+      return;
+    }
+
+    try {
+      final provider = context.read<AepsProvider>();
+      print('🔐 Verifying OTP for Pipe: $currentPipe, MerchantId: $merchantId');
+
+      final success = await provider.verifyOtp(
+        merchantId,
+        _otpController.text,
+        merchantRefId,
+      );
+
+      _logResponse('verifyOtp', {
+        'success': success,
+        'errorMessage': provider.errorMessage,
+        'pipe': currentPipe,
+        'merchantId': merchantId,
+      });
+
+      if (!mounted) return;
+
+      if (success) {
+        // Close dialog immediately
+        Navigator.pop(dialogContext);
+        _otpTimer?.cancel();
+
+        setState(() {
+          _isOtpVerified = true;
+          _isVerifyingOtp = false;
+        });
+
+        _showSuccess('OTP verified successfully!');
+        print('✅ OTP Verified successfully for Pipe $currentPipe');
+
+        // Navigate directly for smooth flow
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EKYC_Screen(
+              merchantId: merchantId,
+              merchantRefId: merchantRefId,
+              pipe: currentPipe,
+              aadhaarNumber: provider.aadhaarNo ?? '',
+            ),
+          ),
+        );
+      } else {
+        setDialogState(() => _isVerifyingOtp = false);
+        final errorMsg = provider.errorMessage ?? 'OTP verification failed';
+        print('❌ OTP verification failed: $errorMsg');
+        _showError(errorMsg);
+      }
+    } catch (e) {
+      if (mounted) {
+        setDialogState(() => _isVerifyingOtp = false);
+        print('❌ OTP verification exception: $e');
+        _logResponse('verifyOtp', {'exception': e.toString()}, isError: true);
+        _showError('Verification failed: ${e.toString()}');
+      }
+    }
+  }
+
+  // ─── Handle Resend OTP ───────────────────────────────────────
+  Future<bool> _handleResendOtp() async {
+    final merchantId = _isOtpPending ? _pendingMerchantId : _merchantId;
+
+    if (merchantId == null || merchantId.isEmpty) {
+      print('❌ Resend OTP failed: No merchant ID available');
+      _showError('Merchant information missing');
+      return false;
+    }
+
+    if (_mobileController.text.trim().length != 10) {
+      print('❌ Resend OTP failed: Invalid mobile number');
+      _showError('Invalid mobile number');
+      return false;
+    }
+
+    final resendRequest = {
+      'merchantId': merchantId,
+      'mobile': _mobileController.text.trim(),
+      'pipe': _currentPipe,
+    };
+
+    _logRequest('sendOtp (Resend)', resendRequest);
+
+    try {
+      final provider = context.read<AepsProvider>();
+      final currentPipe = _currentPipe;
+
+      print('📤 Sending/Resending OTP for Pipe: $currentPipe, MerchantId: $merchantId');
+
+      final success = await provider.sendOtp(merchantId, _mobileController.text.trim());
+
+      _logResponse('sendOtp', {
+        'success': success,
+        'errorMessage': provider.errorMessage,
+        'pipe': currentPipe,
+        'merchantId': merchantId,
+      });
+
+      if (!mounted) return false;
+
+      if (success) {
+        setState(() => _isOtpSent = true);
+        _showSuccess('OTP sent successfully!');
+        _otpController.clear();
+        print('✅ OTP sent successfully for Pipe $currentPipe');
+        return true;
+      } else {
+        final errorMsg = provider.errorMessage ?? 'Failed to send OTP';
+        print('❌ Send OTP failed: $errorMsg');
+        _showError(errorMsg);
+        return false;
+      }
+    } catch (e) {
+      if (mounted) {
+        print('❌ Send OTP exception: $e');
+        _logResponse('sendOtp', {'exception': e.toString()}, isError: true);
+        _showError('Failed to send OTP: ${e.toString()}');
+      }
+      return false;
     }
   }
 
   // ─── OTP Popup (MODAL) ───────────────────────────────────────
   void _showOtpPopup() {
     _otpController.clear();
-    final currentPipe = _currentPipe; // ✅ Capture pipe value
+    _startOtpTimer();
+
+    print('🔔 Showing OTP popup');
+    print('🔔 MerchantId: ${_isOtpPending ? _pendingMerchantId : _merchantId}');
+    print('🔔 Phone: ${_mobileController.text}');
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Dialog(
               backgroundColor: const Color(0xFF1A1F1A),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24)),
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 400),
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header with icon
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.primary, AppColors.primaryLight],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.4),
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.sms_outlined,
-                        size: 40,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Title
-                    const Text(
-                      'Verify Your Mobile',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Description
-                    const Text(
-                      'Enter the 6-digit OTP sent to',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _mobileController.text,
-                      style: const TextStyle(
-                        color: AppColors.primaryLight,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // OTP Input
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.primary.withOpacity(0.3),
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _otpController,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 12,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(6),
-                        ],
-                        decoration: InputDecoration(
-                          counterText: '',
-                          border: InputBorder.none,
-                          hintText: '••••••',
-                          hintStyle: TextStyle(
-                            color: Colors.white.withOpacity(0.2),
-                            fontSize: 28,
-                            letterSpacing: 12,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Verify Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: Container(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: SingleChildScrollView(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header with icon
+                      Container(
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [AppColors.primary, AppColors.primaryLight],
                           ),
-                          borderRadius: BorderRadius.circular(16),
+                          shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primary.withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
+                              color: AppColors.primary.withOpacity(0.4),
+                              blurRadius: 20,
+                              spreadRadius: 2,
                             ),
                           ],
                         ),
-                        child: ElevatedButton(
-                          onPressed: _isVerifyingOtp
-                              ? null
-                              : () async {
-                            if (_otpController.text.length != 6) {
-                              _showError('Please enter complete 6-digit OTP');
-                              return;
-                            }
-                            setDialogState(() => _isVerifyingOtp = true);
-                            setState(() => _isVerifyingOtp = true);
+                        child: const Icon(Icons.sms_outlined, size: 40, color: Colors.white),
+                      ),
+                      const SizedBox(height: 24),
 
-                            final merchantId = _merchantId!;
-                            final merchantRefId = _merchantRefId!;
+                      // Title
+                      const Text(
+                        'Verify Your Mobile',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
 
-                            try {
-                              final provider = context.read<AepsProvider>();
-                              final success = await provider.verifyOtp(
-                                merchantId,
-                                _otpController.text,
-                                merchantRefId,
-                              );
+                      // Description
+                      const Text(
+                        'Enter the 6-digit OTP sent to',
+                        style: TextStyle(color: Colors.white60, fontSize: 14),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _mobileController.text.isNotEmpty
+                            ? _mobileController.text
+                            : 'your registered mobile',
+                        style: const TextStyle(
+                          color: AppColors.primaryLight,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
 
-                              if (success) {
-                                setState(() => _isOtpVerified = true);
-                                Navigator.pop(context); // Close popup
-                                _showSuccess('OTP verified successfully!');
-
-                                // ✅ Fetch pipe status for current pipe
-                                final updatedStatus = await provider.fetchPipeStatus(currentPipe);
-                                final regStatus = updatedStatus?['registrationStatus'] ?? '';
-
-                                // Navigate based on status
-                                if (regStatus == 'active') {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const AepsWrapperScreen(),
-                                    ),
-                                  );
-                                } else if (regStatus == 'otp_verified') {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => EKYC_Screen(
-                                        merchantId: merchantId,
-                                        merchantRefId: merchantRefId,
-                                        pipe: currentPipe, // ✅ Pass correct pipe
-                                        aadhaarNumber: provider.aadhaarNo ?? '',
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const UserHomeScreen(),
-                                    ),
-                                  );
-                                }
-                              } else {
-                                _showError(provider.errorMessage ?? 'OTP verification failed');
-                              }
-                            } catch (e) {
-                              _showError(e.toString());
-                            } finally {
-                              if (mounted) {
-                                setDialogState(() => _isVerifyingOtp = false);
-                                setState(() => _isVerifyingOtp = false);
-                              }
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            disabledBackgroundColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                      // Show merchant ID for debugging
+                      if (_merchantId != null || _pendingMerchantId != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'ID: ${(_merchantId ?? _pendingMerchantId ?? '').length > 12
+                                ? (_merchantId ?? _pendingMerchantId ?? '').substring(0, 12)
+                                : (_merchantId ?? _pendingMerchantId ?? '')}...',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.3),
+                              fontSize: 10,
                             ),
                           ),
-                          child: _isVerifyingOtp
-                              ? const SizedBox(
-                            height: 28,
-                            width: 28,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 3,
+                        ),
+
+                      const SizedBox(height: 24),
+
+                      // OTP Input
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                        ),
+                        child: TextField(
+                          controller: _otpController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 12,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          decoration: InputDecoration(
+                            counterText: '',
+                            border: InputBorder.none,
+                            hintText: '••••••',
+                            hintStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.2),
+                              fontSize: 28,
+                              letterSpacing: 12,
                             ),
-                          )
-                              : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.white, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                'Verify OTP',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
+                          ),
+                          onChanged: (value) {
+                            if (value.length == 6 && !_isVerifyingOtp) {
+                              print('🔢 Auto-verifying OTP: $value');
+                              _handleOtpVerification(dialogContext, setDialogState);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Verify Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [AppColors.primary, AppColors.primaryLight],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withOpacity(0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
+                          child: ElevatedButton(
+                            onPressed: (_isVerifyingOtp || _otpController.text.length != 6)
+                                ? null
+                                : () {
+                              print('🔘 Verify button pressed');
+                              _handleOtpVerification(dialogContext, setDialogState);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              disabledBackgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: _isVerifyingOtp
+                                ? const SizedBox(
+                              height: 28,
+                              width: 28,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                                : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Verify OTP',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // Resend OTP
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          "Didn't receive OTP? ",
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                        GestureDetector(
-                          onTap: _isSendingOtp
-                              ? null
-                              : () async {
-                            setDialogState(() => _isSendingOtp = true);
-                            setState(() => _isSendingOtp = true);
-                            await _sendOtp();
-                            if (mounted) {
-                              setDialogState(() => _isSendingOtp = false);
-                              setState(() => _isSendingOtp = false);
-                            }
-                          },
-                          child: _isSendingOtp
-                              ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              color: AppColors.primaryLight,
-                              strokeWidth: 2,
+                      // Resend OTP with timer
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_otpSecondsRemaining > 0) ...[
+                            const Text(
+                              "Resend OTP in ",
+                              style: TextStyle(color: Colors.white54, fontSize: 14),
                             ),
-                          )
-                              : const Text(
-                            'Resend OTP',
-                            style: TextStyle(
-                              color: AppColors.primaryLight,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            Text(
+                              '${_otpSecondsRemaining}s',
+                              style: TextStyle(
+                                color: _otpSecondsRemaining <= 10
+                                    ? AppColors.error
+                                    : AppColors.primaryLight,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Timer
-                    const SizedBox(height: 12),
-                    TweenAnimationBuilder<Duration>(
-                      duration: const Duration(seconds: 30),
-                      tween: Tween(begin: const Duration(seconds: 30), end: Duration.zero),
-                      onEnd: () {},
-                      builder: (context, Duration value, child) {
-                        final seconds = value.inSeconds;
-                        return Text(
-                          'OTP expires in ${seconds}s',
-                          style: TextStyle(
-                            color: seconds <= 10 ? AppColors.error : Colors.white38,
-                            fontSize: 12,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                          ] else ...[
+                            const Text(
+                              "Didn't receive OTP? ",
+                              style: TextStyle(color: Colors.white54, fontSize: 14),
+                            ),
+                            GestureDetector(
+                              onTap: _isSendingOtp
+                                  ? null
+                                  : () async {
+                                print('🔄 Resend OTP tapped');
+                                setDialogState(() => _isSendingOtp = true);
+                                final success = await _handleResendOtp();
+                                if (success) {
+                                  _startOtpTimer();
+                                }
+                                if (mounted) {
+                                  setDialogState(() => _isSendingOtp = false);
+                                }
+                              },
+                              child: _isSendingOtp
+                                  ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primaryLight,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                                  : const Text(
+                                'Resend OTP',
+                                style: TextStyle(
+                                  color: AppColors.primaryLight,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -877,107 +1191,10 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     );
   }
 
-  // ─── OTP Methods ─────────────────────────────────────────────
-  Future<void> _sendOtp() async {
-    if (_mobileController.text.isEmpty) {
-      _showError('Mobile number not found');
-      return;
-    }
-    if (_mobileController.text.trim().length != 10) {
-      _showError('Please enter a valid 10-digit mobile number');
-      return;
-    }
-    setState(() => _isSendingOtp = true);
-    try {
-      final provider = context.read<AepsProvider>();
-      final currentPipe = _currentPipe;
-      final merchantId = _isOtpPending ? _pendingMerchantId! : _merchantId!;
-
-      print('📤 Sending OTP for Pipe: $currentPipe, MerchantId: $merchantId');
-
-      final success = await provider.sendOtp(merchantId, _mobileController.text.trim());
-      if (success) {
-        setState(() => _isOtpSent = true);
-        _showSuccess('OTP sent successfully!');
-      } else {
-        _showError(provider.errorMessage ?? 'Failed to send OTP');
-      }
-    } catch (e) {
-      _showError(e.toString());
-    } finally {
-      setState(() => _isSendingOtp = false);
-    }
-  }
-
-  Future<void> _verifyOtp() async {
-    if (_otpController.text.length != 6) {
-      _showError('Enter valid 6‑digit OTP');
-      return;
-    }
-
-    final currentPipe = _currentPipe;
-    final merchantId = _isOtpPending ? _pendingMerchantId : _merchantId;
-    final merchantRefId = _isOtpPending ? _pendingMerchantRefId : _merchantRefId;
-
-    if (merchantId == null || merchantRefId == null) {
-      _showError('Merchant information missing. Please restart.');
-      return;
-    }
-
-    setState(() => _isVerifyingOtp = true);
-    try {
-      final provider = context.read<AepsProvider>();
-
-      print('🔐 Verifying OTP for Pipe: $currentPipe, MerchantId: $merchantId');
-
-      final success = await provider.verifyOtp(
-        merchantId,
-        _otpController.text,
-        merchantRefId,
-      );
-
-      if (success) {
-        setState(() => _isOtpVerified = true);
-        _showSuccess('OTP verified!');
-
-        // ✅ Fetch status for current pipe
-        final updatedStatus = await provider.fetchPipeStatus(currentPipe);
-        final regStatus = updatedStatus?['registrationStatus'] ?? '';
-
-        if (regStatus == 'active') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
-          );
-        } else if (regStatus == 'otp_verified') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EKYC_Screen(
-                merchantId: merchantId,
-                merchantRefId: merchantRefId,
-                pipe: currentPipe, // ✅ Pass correct pipe
-                aadhaarNumber: context.read<AepsProvider>().aadhaarNo ?? '',
-              ),
-            ),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const UserHomeScreen()),
-          );
-        }
-      } else {
-        _showError(context.read<AepsProvider>().errorMessage ?? 'OTP verification failed');
-      }
-    } catch (e) {
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _isVerifyingOtp = false);
-    }
-  }
-
+  // ─── Show Error ──────────────────────────────────────────────
   void _showError(String message) {
+    if (!mounted) return;
+    print('🛑 ERROR SHOWN: $message');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -996,7 +1213,10 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     );
   }
 
+  // ─── Show Success ────────────────────────────────────────────
   void _showSuccess(String message) {
+    if (!mounted) return;
+    print('✅ SUCCESS SHOWN: $message');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -1223,12 +1443,14 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                 child: Icon(icon, color: AppColors.primary, size: 20),
               ),
               const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -1289,8 +1511,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
           maxLines: maxLines,
           maxLength: maxLength,
           style: const TextStyle(fontSize: 15, color: Colors.white),
-          decoration:
-          AppTheme.inputDecoration(hintText: hint).copyWith(
+          decoration: AppTheme.inputDecoration(hintText: hint).copyWith(
             counterStyle: const TextStyle(color: Colors.white30, fontSize: 10),
           ),
           validator: validator,
@@ -1334,8 +1555,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                   groupValue: _selectedGender,
                   onChanged: (v) => setState(() => _selectedGender = v!),
                   activeColor: AppColors.primary,
-                  contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                   dense: true,
                 ),
               ),
@@ -1361,8 +1581,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                   groupValue: _selectedGender,
                   onChanged: (v) => setState(() => _selectedGender = v!),
                   activeColor: AppColors.primary,
-                  contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                   dense: true,
                 ),
               ),
@@ -1394,8 +1613,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
           items: const ['Savings Account', 'Current Account']
               .map((type) => DropdownMenuItem(
               value: type,
-              child: Text(type,
-                  style: TextStyle(color: Colors.white))))
+              child: Text(type, style: TextStyle(color: Colors.white))))
               .toList(),
           onChanged: (v) => setState(() => _accountType = v!),
         ),
@@ -1424,7 +1642,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         ),
         child: Stack(
           children: [
-            _buildBackgroundDecorations(), // ✅ Added this method
+            _buildBackgroundDecorations(),
             SafeArea(
               child: Column(
                 children: [
@@ -1453,7 +1671,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              // ✅ Show current pipe
                               Text(
                                 'Pipe $_currentPipe',
                                 style: const TextStyle(
@@ -1470,8 +1687,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                     ),
                   ),
 
-                  // ✅ Show OTP pending notice at top (NOT as form section)
-                  if (_isOtpPending && !_isOtpVerified)
+                  // OTP pending notice - shows for both otp_sent and otp_pending
+                  if ((_isOtpPending || (_isOtpSent && _merchantId != null)) && !_isOtpVerified)
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       padding: const EdgeInsets.all(16),
@@ -1502,12 +1719,39 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'OTP verification pending - Please verify to complete registration',
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'OTP Verification Required',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Please verify OTP to complete registration',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              _handleResendOtp();
+                              _showOtpPopup();
+                            },
+                            child: const Text(
+                              'Verify',
                               style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
+                                color: AppColors.primaryLight,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
@@ -1516,588 +1760,532 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                     ),
 
                   Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 20),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 20),
 
-                            // Header (only show if not OTP pending)
-                            if (!_isOtpPending) ...[
-                              Center(
-                                child: Column(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [
-                                            AppColors.primary,
-                                            AppColors.primaryLight
-                                          ],
-                                        ),
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppColors.primary.withOpacity(0.3),
-                                            blurRadius: 20,
-                                            spreadRadius: 5,
+                                  // Header
+                                  if (!_isOtpPending) ...[
+                                    Center(
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(20),
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                colors: [
+                                                  AppColors.primary,
+                                                  AppColors.primaryLight
+                                                ],
+                                              ),
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: AppColors.primary.withOpacity(0.3),
+                                                  blurRadius: 20,
+                                                  spreadRadius: 5,
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(Icons.storefront,
+                                                size: 50, color: Colors.white),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          const Text(
+                                            'Register as Merchant',
+                                            style: TextStyle(
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(20),
+                                            ),
+                                            child: const Text(
+                                              'Complete your registration to start AEPS services',
+                                              style: TextStyle(
+                                                color: AppColors.primaryLight,
+                                                fontSize: 13,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
                                           ),
                                         ],
                                       ),
-                                      child: const Icon(Icons.storefront,
-                                          size: 50, color: Colors.white),
                                     ),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      'Register as Merchant',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: const Text(
-                                        'Complete your registration to start AEPS services',
-                                        style: TextStyle(
-                                          color: AppColors.primaryLight,
-                                          fontSize: 13,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
+                                    const SizedBox(height: 30),
                                   ],
-                                ),
-                              ),
-                              const SizedBox(height: 30),
-                            ],
 
-                            // Personal Details Section
-                            _buildSectionContainer(
-                              icon: Icons.person,
-                              title: 'Personal Details',
-                              children: [
-                                _buildTextField(
-                                  label: 'First Name *',
-                                  controller: _firstNameController,
-                                  hint: 'Enter first name',
-                                  validator: (v) => v!.isEmpty
-                                      ? 'First name required'
-                                      : null,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Middle Name',
-                                  controller: _middleNameController,
-                                  hint: 'Enter middle name (optional)',
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Last Name',
-                                  controller: _lastNameController,
-                                  hint: 'Enter last name',
-                                ),
-                                const SizedBox(height: 14),
-                                _buildDobField(),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Mobile Number *',
-                                  controller: _mobileController,
-                                  keyboardType: TextInputType.phone,
-                                  hint: 'Enter 10-digit mobile number',
-                                  maxLength: 10,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Mobile required';
-                                    if (v.trim().length != 10)
-                                      return 'Enter valid 10-digit number';
-                                    if (!RegExp(r'^[0-9]{10}$').hasMatch(v.trim()))
-                                      return 'Only numbers allowed';
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Email ID',
-                                  controller: _emailController,
-                                  keyboardType: TextInputType.emailAddress,
-                                  hint: 'Enter email address',
-                                  validator: (v) => (v != null &&
-                                      v.isNotEmpty &&
-                                      !v.contains('@'))
-                                      ? 'Enter valid email'
-                                      : null,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Aadhaar Number *',
-                                  controller: _aadhaarController,
-                                  keyboardType: TextInputType.number,
-                                  hint: 'Enter 12-digit Aadhaar',
-                                  maxLength: 12,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Aadhaar required';
-                                    if (v.trim().length != 12)
-                                      return 'Enter valid 12-digit Aadhaar';
-                                    if (!RegExp(r'^[0-9]{12}$').hasMatch(v.trim()))
-                                      return 'Only numbers allowed';
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'PAN Number *',
-                                  controller: _panController,
-                                  hint: 'Enter PAN (e.g., ABCDE1234F)',
-                                  maxLength: 10,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'PAN required';
-                                    final pan = v.trim().toUpperCase();
-                                    final panRegex = RegExp(
-                                        r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
-                                    if (!panRegex.hasMatch(pan)) {
-                                      return 'Invalid PAN (e.g., ABCDE1234F)';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                _buildGenderSelector(),
-                              ],
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            // Address Details
-                            _buildSectionContainer(
-                              icon: Icons.location_on,
-                              title: 'Address Details',
-                              children: [
-                                _buildTextField(
-                                  label: 'Address *',
-                                  controller: _addressController,
-                                  hint: 'Enter your shop address',
-                                  maxLines: 2,
-                                  validator: (v) =>
-                                  v!.isEmpty ? 'Address required' : null,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'City',
-                                  controller: _cityController,
-                                  hint: 'Enter city name',
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Merchant Pincode *',
-                                  controller: _pincodeController,
-                                  keyboardType: TextInputType.number,
-                                  hint: '6-digit pincode',
-                                  maxLength: 6,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Pincode required';
-                                    if (v.trim().length != 6)
-                                      return 'Enter valid 6-digit pincode';
-                                    if (!RegExp(r'^[0-9]{6}$').hasMatch(v.trim()))
-                                      return 'Only numbers allowed';
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                _buildSearchableDropdownField(
-                                  label: 'State *',
-                                  value: _selectedStateCode,
-                                  hint: 'Search and select state',
-                                  isLoading: provider.isLoading,
-                                  onTap: () async {
-                                    final selected =
-                                    await _showSearchableDropdown(
-                                      title: 'Select State',
-                                      items: provider.states
-                                          .map((s) => s)
-                                          .toList(),
-                                      displayText: (s) => s.name,
-                                      itemValue: (s) => s.code,
-                                      searchHint: 'Type state name...',
-                                    );
-                                    if (selected != null) {
-                                      setState(() {
-                                        _selectedStateCode = selected.code;
-                                        _selectedDistrictCode = null;
-                                      });
-                                      provider.fetchDistricts(selected.code);
-                                    }
-                                  },
-                                  displayText: _selectedStateCode != null
-                                      ? provider.states
-                                      .firstWhere((s) =>
-                                  s.code == _selectedStateCode)
-                                      .name
-                                      : null,
-                                ),
-                                const SizedBox(height: 14),
-                                if (_selectedStateCode != null)
-                                  _buildSearchableDropdownField(
-                                    label: 'District *',
-                                    value: _selectedDistrictCode,
-                                    hint: 'Search and select district',
-                                    isLoading: provider.isLoadingDistricts,
-                                    onTap: () async {
-                                      final selected =
-                                      await _showSearchableDropdown(
-                                        title: 'Select District',
-                                        items: provider.districts
-                                            .map((d) => d)
-                                            .toList(),
-                                        displayText: (d) => d.name,
-                                        itemValue: (d) => d.code,
-                                        searchHint: 'Type district name...',
-                                      );
-                                      if (selected != null) {
-                                        setState(() {
-                                          _selectedDistrictCode =
-                                              selected.code;
-                                        });
-                                      }
-                                    },
-                                    displayText: _selectedDistrictCode != null
-                                        ? provider.districts
-                                        .firstWhere((d) =>
-                                    d.code ==
-                                        _selectedDistrictCode)
-                                        .name
-                                        : null,
-                                  ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            // Bank & Shop Details
-                            _buildSectionContainer(
-                              icon: Icons.account_balance,
-                              title: 'Bank & Shop Details',
-                              children: [
-                                _buildTextField(
-                                  label: 'Shop PAN *',
-                                  controller: _shopPanController,
-                                  hint: 'Enter shop PAN',
-                                  maxLength: 10,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Shop PAN required';
-                                    final pan = v.trim().toUpperCase();
-                                    final panRegex = RegExp(
-                                        r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
-                                    if (!panRegex.hasMatch(pan)) {
-                                      return 'Invalid PAN format';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Bank Account Number *',
-                                  controller: _bankAccountController,
-                                  keyboardType: TextInputType.number,
-                                  hint: 'Enter account number',
-                                  validator: (v) => v!.isEmpty
-                                      ? 'Account number required'
-                                      : null,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Bank IFSC Code *',
-                                  controller: _bankIfscController,
-                                  hint: 'e.g. BARB0GEETAP',
-                                  maxLength: 11,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'IFSC required';
-                                    final ifscRegex =
-                                    RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$');
-                                    if (!ifscRegex
-                                        .hasMatch(v.trim().toUpperCase())) {
-                                      return 'Invalid IFSC (e.g., ABCD0123456)';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                _buildSearchableDropdownField(
-                                  label: 'Bank Name *',
-                                  value: _selectedBankCode,
-                                  hint: 'Search and select bank',
-                                  isLoading: provider.banks.isEmpty,
-                                  onTap: () async {
-                                    final selected =
-                                    await _showSearchableDropdown(
-                                      title: 'Select Bank',
-                                      items: provider.banks
-                                          .map((b) => b)
-                                          .toList(),
-                                      displayText: (b) =>
-                                      '${b.name} (${b.code})',
-                                      itemValue: (b) => b.code,
-                                      searchHint: 'Type bank name...',
-                                    );
-                                    if (selected != null) {
-                                      setState(() {
-                                        _selectedBankCode = selected.code;
-                                        _selectedBankName = selected.name;
-                                      });
-                                    }
-                                  },
-                                  displayText: _selectedBankCode != null
-                                      ? provider.banks
-                                      .firstWhere((b) =>
-                                  b.code == _selectedBankCode)
-                                      .name
-                                      : null,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildAccountTypeDropdown(),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Shop Address *',
-                                  controller: _shopAddressController,
-                                  hint: 'Shop address',
-                                  maxLines: 2,
-                                  validator: (v) => v!.isEmpty
-                                      ? 'Shop address required'
-                                      : null,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildTextField(
-                                  label: 'Shop Pincode *',
-                                  controller: _shopPinCodeController,
-                                  keyboardType: TextInputType.number,
-                                  hint: '6-digit pincode',
-                                  maxLength: 6,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Shop pincode required';
-                                    if (v.trim().length != 6)
-                                      return 'Enter valid 6-digit pincode';
-                                    if (!RegExp(r'^[0-9]{6}$').hasMatch(v.trim()))
-                                      return 'Only numbers allowed';
-                                    return null;
-                                  },
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            // Location Section
-                            _buildSectionContainer(
-                              icon: Icons.gps_fixed,
-                              title: 'Shop Location',
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color:
-                                      AppColors.primary.withOpacity(0.2),
-                                    ),
-                                  ),
-                                  child: const Row(
+                                  // Personal Details Section
+                                  _buildSectionContainer(
+                                    icon: Icons.person,
+                                    title: 'Personal Details',
                                     children: [
-                                      Icon(Icons.info_outline,
-                                          color: AppColors.primaryLight,
-                                          size: 16),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Location is mandatory for AEPS registration',
-                                          style: TextStyle(
-                                              color: Colors.white60,
-                                              fontSize: 12),
+                                      _buildTextField(
+                                        label: 'First Name *',
+                                        controller: _firstNameController,
+                                        hint: 'Enter first name',
+                                        validator: (v) => v!.isEmpty ? 'First name required' : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Middle Name',
+                                        controller: _middleNameController,
+                                        hint: 'Enter middle name (optional)',
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Last Name',
+                                        controller: _lastNameController,
+                                        hint: 'Enter last name',
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildDobField(),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Mobile Number *',
+                                        controller: _mobileController,
+                                        keyboardType: TextInputType.phone,
+                                        hint: 'Enter 10-digit mobile number',
+                                        maxLength: 10,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'Mobile required';
+                                          if (v.trim().length != 10) return 'Enter valid 10-digit number';
+                                          if (!RegExp(r'^[0-9]{10}$').hasMatch(v.trim())) return 'Only numbers allowed';
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Email ID',
+                                        controller: _emailController,
+                                        keyboardType: TextInputType.emailAddress,
+                                        hint: 'Enter email address',
+                                        validator: (v) => (v != null && v.isNotEmpty && !v.contains('@'))
+                                            ? 'Enter valid email'
+                                            : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Aadhaar Number *',
+                                        controller: _aadhaarController,
+                                        keyboardType: TextInputType.number,
+                                        hint: 'Enter 12-digit Aadhaar',
+                                        maxLength: 12,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'Aadhaar required';
+                                          if (v.trim().length != 12) return 'Enter valid 12-digit Aadhaar';
+                                          if (!RegExp(r'^[0-9]{12}$').hasMatch(v.trim())) return 'Only numbers allowed';
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'PAN Number *',
+                                        controller: _panController,
+                                        hint: 'Enter PAN (e.g., ABCDE1234F)',
+                                        maxLength: 10,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'PAN required';
+                                          final pan = v.trim().toUpperCase();
+                                          final panRegex = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
+                                          if (!panRegex.hasMatch(pan)) {
+                                            return 'Invalid PAN (e.g., ABCDE1234F)';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildGenderSelector(),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 20),
+
+                                  // Address Details
+                                  _buildSectionContainer(
+                                    icon: Icons.location_on,
+                                    title: 'Address Details',
+                                    children: [
+                                      _buildTextField(
+                                        label: 'Address *',
+                                        controller: _addressController,
+                                        hint: 'Enter your shop address',
+                                        maxLines: 2,
+                                        validator: (v) => v!.isEmpty ? 'Address required' : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'City',
+                                        controller: _cityController,
+                                        hint: 'Enter city name',
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Merchant Pincode *',
+                                        controller: _pincodeController,
+                                        keyboardType: TextInputType.number,
+                                        hint: '6-digit pincode',
+                                        maxLength: 6,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'Pincode required';
+                                          if (v.trim().length != 6) return 'Enter valid 6-digit pincode';
+                                          if (!RegExp(r'^[0-9]{6}$').hasMatch(v.trim())) return 'Only numbers allowed';
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildSearchableDropdownField(
+                                        label: 'State *',
+                                        value: _selectedStateCode,
+                                        hint: 'Search and select state',
+                                        isLoading: provider.isLoading,
+                                        onTap: () async {
+                                          final selected = await _showSearchableDropdown(
+                                            title: 'Select State',
+                                            items: provider.states.map((s) => s).toList(),
+                                            displayText: (s) => s.name,
+                                            itemValue: (s) => s.code,
+                                            searchHint: 'Type state name...',
+                                          );
+                                          if (selected != null) {
+                                            setState(() {
+                                              _selectedStateCode = selected.code;
+                                              _selectedDistrictCode = null;
+                                            });
+                                            provider.fetchDistricts(selected.code);
+                                          }
+                                        },
+                                        displayText: _selectedStateCode != null
+                                            ? provider.states.firstWhere((s) => s.code == _selectedStateCode).name
+                                            : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      if (_selectedStateCode != null)
+                                        _buildSearchableDropdownField(
+                                          label: 'District *',
+                                          value: _selectedDistrictCode,
+                                          hint: 'Search and select district',
+                                          isLoading: provider.isLoadingDistricts,
+                                          onTap: () async {
+                                            final selected = await _showSearchableDropdown(
+                                              title: 'Select District',
+                                              items: provider.districts.map((d) => d).toList(),
+                                              displayText: (d) => d.name,
+                                              itemValue: (d) => d.code,
+                                              searchHint: 'Type district name...',
+                                            );
+                                            if (selected != null) {
+                                              setState(() {
+                                                _selectedDistrictCode = selected.code;
+                                              });
+                                            }
+                                          },
+                                          displayText: _selectedDistrictCode != null
+                                              ? provider.districts.firstWhere((d) => d.code == _selectedDistrictCode).name
+                                              : null,
                                         ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 20),
+
+                                  // Bank & Shop Details
+                                  _buildSectionContainer(
+                                    icon: Icons.account_balance,
+                                    title: 'Bank & Shop Details',
+                                    children: [
+                                      _buildTextField(
+                                        label: 'Shop PAN *',
+                                        controller: _shopPanController,
+                                        hint: 'Enter shop PAN',
+                                        maxLength: 10,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'Shop PAN required';
+                                          final pan = v.trim().toUpperCase();
+                                          final panRegex = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
+                                          if (!panRegex.hasMatch(pan)) {
+                                            return 'Invalid PAN format';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Bank Account Number *',
+                                        controller: _bankAccountController,
+                                        keyboardType: TextInputType.number,
+                                        hint: 'Enter account number',
+                                        validator: (v) => v!.isEmpty ? 'Account number required' : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Bank IFSC Code *',
+                                        controller: _bankIfscController,
+                                        hint: 'e.g. BARB0GEETAP',
+                                        maxLength: 11,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'IFSC required';
+                                          final ifscRegex = RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$');
+                                          if (!ifscRegex.hasMatch(v.trim().toUpperCase())) {
+                                            return 'Invalid IFSC (e.g., ABCD0123456)';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildSearchableDropdownField(
+                                        label: 'Bank Name *',
+                                        value: _selectedBankCode,
+                                        hint: 'Search and select bank',
+                                        isLoading: provider.banks.isEmpty,
+                                        onTap: () async {
+                                          final selected = await _showSearchableDropdown(
+                                            title: 'Select Bank',
+                                            items: provider.banks.map((b) => b).toList(),
+                                            displayText: (b) => '${b.name} (${b.code})',
+                                            itemValue: (b) => b.code,
+                                            searchHint: 'Type bank name...',
+                                          );
+                                          if (selected != null) {
+                                            setState(() {
+                                              _selectedBankCode = selected.code;
+                                              _selectedBankName = selected.name;
+                                            });
+                                          }
+                                        },
+                                        displayText: _selectedBankCode != null
+                                            ? provider.banks.firstWhere((b) => b.code == _selectedBankCode).name
+                                            : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildAccountTypeDropdown(),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Shop Address *',
+                                        controller: _shopAddressController,
+                                        hint: 'Shop address',
+                                        maxLines: 2,
+                                        validator: (v) => v!.isEmpty ? 'Shop address required' : null,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _buildTextField(
+                                        label: 'Shop Pincode *',
+                                        controller: _shopPinCodeController,
+                                        keyboardType: TextInputType.number,
+                                        hint: '6-digit pincode',
+                                        maxLength: 6,
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) return 'Shop pincode required';
+                                          if (v.trim().length != 6) return 'Enter valid 6-digit pincode';
+                                          if (!RegExp(r'^[0-9]{6}$').hasMatch(v.trim())) return 'Only numbers allowed';
+                                          return null;
+                                        },
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(height: 16),
-                                if (_isGettingLocation)
-                                  const Center(
-                                    child: CircularProgressIndicator(
-                                        color: AppColors.primary),
-                                  )
-                                else if (_location != null)
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.success
-                                          .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                          color: AppColors.success),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        const Row(
+
+                                  const SizedBox(height: 20),
+
+                                  // Location Section
+                                  _buildSectionContainer(
+                                    icon: Icons.gps_fixed,
+                                    title: 'Shop Location',
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: AppColors.primary.withOpacity(0.2),
+                                          ),
+                                        ),
+                                        child: const Row(
                                           children: [
-                                            Icon(Icons.check_circle,
-                                                color: AppColors.success,
-                                                size: 16),
+                                            Icon(Icons.info_outline,
+                                                color: AppColors.primaryLight, size: 16),
                                             SizedBox(width: 8),
-                                            Text('Location Captured',
-                                                style: TextStyle(
-                                                    color: AppColors.success,
-                                                    fontWeight:
-                                                    FontWeight.bold)),
+                                            Expanded(
+                                              child: Text(
+                                                'Location is mandatory for AEPS registration',
+                                                style: TextStyle(color: Colors.white60, fontSize: 12),
+                                              ),
+                                            ),
                                           ],
                                         ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Lat: ${_location!['latitude']!.toStringAsFixed(6)}, '
-                                              'Lng: ${_location!['longitude']!.toStringAsFixed(6)}',
-                                          style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      if (_isGettingLocation)
+                                        const Center(
+                                          child: CircularProgressIndicator(color: AppColors.primary),
+                                        )
+                                      else if (_location != null)
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.success.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: AppColors.success),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              const Row(
+                                                children: [
+                                                  Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                                                  SizedBox(width: 8),
+                                                  Text('Location Captured',
+                                                      style: TextStyle(
+                                                          color: AppColors.success,
+                                                          fontWeight: FontWeight.bold)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Lat: ${_location!['latitude']!.toStringAsFixed(6)}, '
+                                                    'Lng: ${_location!['longitude']!.toStringAsFixed(6)}',
+                                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      else
+                                        CustomButton(
+                                          text: 'Get Current Location',
+                                          onPressed: _getCurrentLocation,
+                                          icon: Icons.my_location,
+                                          backgroundColor: AppColors.primary,
+                                          textColor: Colors.white,
                                         ),
-                                      ],
-                                    ),
-                                  )
-                                else
-                                  CustomButton(
-                                    text: 'Get Current Location',
-                                    onPressed: _getCurrentLocation,
-                                    icon: Icons.my_location,
-                                    backgroundColor: AppColors.primary,
-                                    textColor: Colors.white,
-                                  ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 30),
-
-                            // Register Button (only if not OTP pending)
-                            if (!_isOtpPending && !_isOtpSent)
-                              Container(
-                                height: 50,
-                                margin: const EdgeInsets.only(bottom: 50),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.primary,
-                                      AppColors.primaryLight
                                     ],
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primary.withOpacity(0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton(
-                                  onPressed: provider.isLoading
-                                      ? null
-                                      : _registerMerchant,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    disabledBackgroundColor: Colors.transparent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: provider.isLoading
-                                      ? const SizedBox(
-                                    height: 24,
-                                    width: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                      : const Text(
-                                    'Register Merchant',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
 
-                            // ✅ Show "Verify OTP" button for OTP pending
-                            if (_isOtpPending && !_isOtpVerified)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 50, top: 30),
-                                child: Container(
-                                  height: 56,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        AppColors.warning,
-                                        AppColors.warning.withOpacity(0.8),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.warning.withOpacity(0.3),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
+                                  const SizedBox(height: 30),
+
+                                  // Register Button
+                                  if (!_isOtpPending && !_isOtpSent)
+                                    Container(
+                                      height: 50,
+                                      margin: const EdgeInsets.only(bottom: 50),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [AppColors.primary, AppColors.primaryLight],
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.3),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      _sendOtp();
-                                      _showOtpPopup();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.transparent,
-                                      shadowColor: Colors.transparent,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.sms, color: Colors.white, size: 20),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Verify OTP Now',
+                                      child: ElevatedButton(
+                                        onPressed: provider.isLoading ? null : _registerMerchant,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.transparent,
+                                          shadowColor: Colors.transparent,
+                                          disabledBackgroundColor: Colors.transparent,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                        child: provider.isLoading
+                                            ? const SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                            : const Text(
+                                          'Register Merchant',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.white,
                                           ),
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
+
+                                  // Verify OTP button for pending/sent
+                                  if ((_isOtpPending || _isOtpSent) && !_isOtpVerified)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 50, top: 30),
+                                      child: Container(
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              AppColors.warning,
+                                              AppColors.warning.withOpacity(0.8),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.warning.withOpacity(0.3),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            print('🔘 "Verify OTP Now" button pressed');
+                                            _handleResendOtp();
+                                            _showOtpPopup();
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            shadowColor: Colors.transparent,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.sms, color: Colors.white, size: 20),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Verify OTP Now',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                          ],
-                        ),
-                      ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],

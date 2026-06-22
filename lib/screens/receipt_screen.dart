@@ -1,0 +1,1137 @@
+// lib/screens/receipt_screen.dart
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import '../models/receipt_model.dart';
+
+class ReceiptScreen extends StatefulWidget {
+  final ReceiptModel receipt;
+
+  const ReceiptScreen({Key? key, required this.receipt}) : super(key: key);
+
+  @override
+  State<ReceiptScreen> createState() => _ReceiptScreenState();
+}
+
+class _ReceiptScreenState extends State<ReceiptScreen> {
+  bool _isGeneratingPDF = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0E0A),
+      appBar: AppBar(
+        title: const Text(
+          'Transaction Receipt',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: const Color(0xFF0A0E0A),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: Colors.white70),
+            onPressed: () => _showReceiptOptions(context),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              child: _buildReceiptCard(),
+            ),
+          ),
+          _buildBottomButtons(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptCard() {
+    final isSuccess = widget.receipt.isSuccess;
+    final statusColor = isSuccess
+        ? const Color(0xFF2ECC71)
+        : const Color(0xFFEF4444);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F1A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Status Icon
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: statusColor.withOpacity(0.1),
+              border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
+            ),
+            child: Icon(
+              isSuccess ? Icons.check_circle_rounded : Icons.cancel_rounded,
+              size: 48,
+              color: statusColor,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Title
+          const Text(
+            'VimoPay AEPS',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Poppins',
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              widget.receipt.typeLabel,
+              style: TextStyle(
+                fontSize: 14,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Dashed line
+          _buildDashedLine(),
+          const SizedBox(height: 20),
+
+          // Transaction Details
+          _buildDetailRow(
+            'Status',
+            widget.receipt.status,
+            valueColor: statusColor,
+          ),
+          const SizedBox(height: 8),
+
+          if (widget.receipt.txnRefId != null &&
+              widget.receipt.txnRefId!.isNotEmpty)
+            _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
+
+          _buildDetailRow('Merchant Ref ID', widget.receipt.merchantRefId),
+          _buildDetailRow('Merchant ID', widget.receipt.merchantId),
+          _buildDetailRow(
+            'Date & Time',
+            _formatDate(widget.receipt.transactionDateTime),
+          ),
+
+          // Amount Section
+          if (widget.receipt.isAmountRequired &&
+              widget.receipt.transactionAmount != '0') ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: statusColor.withOpacity(0.1)),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Transaction Amount',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹ ${widget.receipt.transactionAmount}',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                      color: statusColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Balance (for BE and MS)
+          if ((widget.receipt.transactionType == 'BE' ||
+                  widget.receipt.transactionType == 'MS') &&
+              widget.receipt.availableBalance != null &&
+              widget.receipt.availableBalance != '0') ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1AA88A).withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF1AA88A).withOpacity(0.1),
+                ),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Available Balance',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹ ${widget.receipt.availableBalance}',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                      color: Color(0xFF1AA88A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+          _buildDetailRow('Bank IIN', widget.receipt.bankIIN),
+          _buildDetailRow(
+            'Aadhaar',
+            _maskAadhaar(widget.receipt.aadhaarNumber ?? ''),
+          ),
+          _buildDetailRow('Mobile', widget.receipt.mobileNumber),
+
+          // NPCI Message
+          if (widget.receipt.npciMessage != null &&
+              widget.receipt.npciMessage!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                widget.receipt.npciMessage!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 12,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ),
+          ],
+
+          // RRN
+          if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
+            _buildDetailRow('RRN', widget.receipt.rrn!),
+
+          // ✅ MINI STATEMENT TABLE
+          if (widget.receipt.isMiniStatement &&
+              widget.receipt.miniStatementEntries != null &&
+              widget.receipt.miniStatementEntries!.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _buildDashedLine(),
+            const SizedBox(height: 16),
+
+            // Mini Statement Header
+            Row(
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  color: Color(0xFFE67E22),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Transaction History',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Poppins',
+                    color: Color(0xFFE67E22),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${widget.receipt.miniStatementEntries!.length} entries',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'Poppins',
+                    color: Colors.white38,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Table Header
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF008169).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'Date',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Expanded(
+                    flex: 1,
+                    child: Text(
+                      'Txn',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'Amount',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Expanded(
+                    flex: 4,
+                    child: Text(
+                      'Narration',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Table Rows
+            ...widget.receipt.miniStatementEntries!.map(
+              (entry) => Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 6,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.white.withOpacity(0.04)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        entry.date,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: entry.isCredit
+                              ? Colors.green.withOpacity(0.15)
+                              : Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          entry.isCredit ? 'Cr' : 'Dr',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: entry.isCredit ? Colors.green : Colors.red,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '₹${entry.amount}',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: entry.isCredit ? Colors.green : Colors.red,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 4,
+                      child: Text(
+                        entry.narration.trim(),
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            _buildDashedLine(),
+          ],
+
+          const SizedBox(height: 20),
+
+          // Footer
+          const Text(
+            'Thank you for using VimoPay',
+            style: TextStyle(
+              fontSize: 13,
+              fontFamily: 'Poppins',
+              color: Colors.white60,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Powered by Vidual Technologies',
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'Poppins',
+              color: Colors.white38,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Generated on ${_formatDate(DateTime.now().toString())}',
+            style: const TextStyle(
+              fontSize: 10,
+              fontFamily: 'Poppins',
+              color: Colors.white24,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    TextStyle? valueStyle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontFamily: 'Poppins',
+                color: Colors.white60,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style:
+                  valueStyle ??
+                  TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600,
+                    color: valueColor ?? Colors.white,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDashedLine() {
+    return CustomPaint(
+      size: const Size(double.infinity, 1),
+      painter: DashedLinePainter(),
+    );
+  }
+
+  Widget _buildBottomButtons(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0E0A),
+        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _showReceiptOptions(context),
+              icon: const Icon(Icons.download_rounded, size: 20),
+              label: const Text('Download / Share'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF008169),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close_rounded, size: 20),
+              label: const Text('Close'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── BOTTOM SHEET: RECEIPT OPTIONS ──────────────────────────
+  void _showReceiptOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1F1A),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            const Text(
+              'Receipt Options',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poppins',
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Download, print or share your receipt',
+              style: TextStyle(
+                fontSize: 13,
+                fontFamily: 'Poppins',
+                color: Colors.white.withOpacity(0.5),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildOptionButton(
+                  icon: Icons.download_rounded,
+                  label: 'Download\nPDF',
+                  color: const Color(0xFF008169),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _downloadPDF();
+                  },
+                ),
+                _buildOptionButton(
+                  icon: Icons.print_rounded,
+                  label: 'Print\nReceipt',
+                  color: const Color(0xFF3498DB),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _printReceipt();
+                  },
+                ),
+                _buildOptionButton(
+                  icon: Icons.share_rounded,
+                  label: 'Share\nPDF',
+                  color: const Color(0xFFE67E22),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _sharePDF();
+                  },
+                ),
+                _buildOptionButton(
+                  icon: Icons.image_rounded,
+                  label: 'Share\nImage',
+                  color: const Color(0xFF9B59B6),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _sharePDF();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontFamily: 'Poppins',
+                    color: Colors.white.withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 80,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── PDF OPERATIONS ─────────────────────────────────────────
+  Future<void> _downloadPDF() async {
+    setState(() => _isGeneratingPDF = true);
+    try {
+      final pdf = await _generatePDF();
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName =
+          'VimoPay_Receipt_${widget.receipt.merchantRefId}_$timestamp.pdf';
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsBytes(await pdf.save());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Color(0xFF2ECC71)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'PDF saved: $fileName',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1A1F1A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Color(0xFFEF4444)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Error saving PDF: $e',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1A1F1A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isGeneratingPDF = false);
+    }
+  }
+
+  Future<void> _printReceipt() async {
+    try {
+      final pdf = await _generatePDF();
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+        name: 'VimoPay_Receipt_${widget.receipt.merchantRefId}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Print error: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sharePDF() async {
+    try {
+      final pdf = await _generatePDF();
+      final directory = await getTemporaryDirectory();
+      final fileName = 'VimoPay_Receipt_${widget.receipt.merchantRefId}.pdf';
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsBytes(await pdf.save());
+
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'VimoPay Transaction Receipt - ${widget.receipt.typeLabel}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Share error: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<pw.Document> _generatePDF() async {
+    final pdf = pw.Document();
+    final isSuccess = widget.receipt.isSuccess;
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(10),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              // Header
+              pw.Text(
+                'VimoPay AEPS',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                widget.receipt.typeLabel,
+                style: const pw.TextStyle(fontSize: 12),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Text(
+                isSuccess ? 'SUCCESS' : 'FAILED',
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                  color: isSuccess ? PdfColors.green : PdfColors.red,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Divider(),
+              pw.SizedBox(height: 8),
+
+              // Details
+              _pdfRow('Status', widget.receipt.status),
+              if (widget.receipt.txnRefId != null &&
+                  widget.receipt.txnRefId!.isNotEmpty)
+                _pdfRow('Txn Ref ID', widget.receipt.txnRefId!),
+              _pdfRow('Merchant Ref ID', widget.receipt.merchantRefId),
+              _pdfRow(
+                'Date & Time',
+                _formatDate(widget.receipt.transactionDateTime),
+              ),
+
+              if (widget.receipt.isAmountRequired &&
+                  widget.receipt.transactionAmount != '0')
+                _pdfRow('Amount', 'Rs.${widget.receipt.transactionAmount}'),
+
+              if (widget.receipt.availableBalance != null &&
+                  widget.receipt.availableBalance != '0')
+                _pdfRow('Balance', 'Rs.${widget.receipt.availableBalance}'),
+
+              _pdfRow('Bank IIN', widget.receipt.bankIIN),
+              _pdfRow(
+                'Aadhaar',
+                _maskAadhaar(widget.receipt.aadhaarNumber ?? ''),
+              ),
+              _pdfRow('Mobile', widget.receipt.mobileNumber),
+
+              if (widget.receipt.npciMessage != null &&
+                  widget.receipt.npciMessage!.isNotEmpty)
+                _pdfRow('Message', widget.receipt.npciMessage!),
+
+              if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
+                _pdfRow('RRN', widget.receipt.rrn!),
+
+              // ✅ Mini Statement Table in PDF
+              if (widget.receipt.isMiniStatement &&
+                  widget.receipt.miniStatementEntries != null &&
+                  widget.receipt.miniStatementEntries!.isNotEmpty) ...[
+                pw.SizedBox(height: 8),
+                pw.Divider(),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  'Transaction History',
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+
+                // Table Header
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                  child: pw.Row(
+                    children: [
+                      pw.Expanded(
+                        flex: 2,
+                        child: pw.Text(
+                          'Date',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 1,
+                        child: pw.Text(
+                          'Txn',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 2,
+                        child: pw.Text(
+                          'Amount',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                          textAlign: pw.TextAlign.right,
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 3,
+                        child: pw.Text(
+                          'Narration',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                          textAlign: pw.TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Table Rows
+                ...widget.receipt.miniStatementEntries!.map(
+                  (entry) => pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(
+                        bottom: pw.BorderSide(
+                          color: PdfColors.grey300,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: pw.Row(
+                      children: [
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            entry.date,
+                            style: const pw.TextStyle(fontSize: 7),
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 1,
+                          child: pw.Text(
+                            entry.txnType,
+                            style: pw.TextStyle(
+                              fontSize: 7,
+                              color: entry.isCredit
+                                  ? PdfColors.green
+                                  : PdfColors.red,
+                            ),
+                            textAlign: pw.TextAlign.center,
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            'Rs.${entry.amount}',
+                            style: const pw.TextStyle(fontSize: 7),
+                            textAlign: pw.TextAlign.right,
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 3,
+                          child: pw.Text(
+                            entry.narration.trim(),
+                            style: const pw.TextStyle(fontSize: 7),
+                            textAlign: pw.TextAlign.right,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              pw.SizedBox(height: 8),
+              pw.Divider(),
+              pw.SizedBox(height: 8),
+
+              // Footer
+              pw.Text(
+                'Thank you for using VimoPay',
+                style: const pw.TextStyle(fontSize: 10),
+              ),
+              pw.Text(
+                'Generated: ${_formatDate(DateTime.now().toString())}',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  pw.Widget _pdfRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Expanded(
+            flex: 2,
+            child: pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
+          ),
+          pw.Expanded(
+            flex: 3,
+            child: pw.Text(
+              value,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── UTILITY METHODS ────────────────────────────────────────
+  String _formatDate(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:${date.second.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  String _maskAadhaar(String aadhaar) {
+    if (aadhaar.isEmpty) return 'XXXXXXXXXXXX';
+    if (aadhaar.length < 4) return aadhaar;
+    if (aadhaar.length >= 8) {
+      return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
+    }
+    return aadhaar;
+  }
+}
+
+// ─── DASHED LINE PAINTER ──────────────────────────────────────
+class DashedLinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.1)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    const dashWidth = 5.0;
+    const dashSpace = 3.0;
+    double startX = 0;
+
+    while (startX < size.width) {
+      canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
+      startX += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
