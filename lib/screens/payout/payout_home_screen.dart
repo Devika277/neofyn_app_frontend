@@ -8,19 +8,21 @@ import '../payout/payout_history_screen.dart';
 
 class PayoutHomeScreen extends StatefulWidget {
   const PayoutHomeScreen({Key? key}) : super(key: key);
-  
+
   @override
   State<PayoutHomeScreen> createState() => _PayoutHomeScreenState();
 }
 
 class _PayoutHomeScreenState extends State<PayoutHomeScreen> {
-  // Track if master data has been loaded to avoid multiple calls
   bool _dataLoadTriggered = false;
+
+  static const Color bg = Color(0xFF0A0E0A);
+  static const Color primary = Color(0xFF008169);
+  static const Color error = Color(0xFFEF4444);
 
   @override
   void initState() {
     super.initState();
-    // Load master data exactly once when screen first appears
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_dataLoadTriggered && mounted) {
         _dataLoadTriggered = true;
@@ -32,57 +34,40 @@ class _PayoutHomeScreenState extends State<PayoutHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Payout Transfer'),
-        backgroundColor: Colors.blue,
+        title: const Text('Payout Transfer', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+        backgroundColor: bg,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () {
-              // Navigate to transaction history
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PayoutHistoryScreen()),
-              );
-            },
+            icon: const Icon(Icons.history_rounded, color: Colors.white70),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoutHistoryScreen())),
+            tooltip: 'History',
           ),
         ],
       ),
-      body: Consumer<PayoutProvider>(
-        builder: (context, provider, child) {
-          // Show loader while master data is loading AND no data yet
-          if (provider.isLoading && provider.banks.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          
-          // Show error with retry button
-          if (provider.errorMessage.isNotEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(provider.errorMessage),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      // ✅ Fixed: Clear error and reload instead of calling reset()
-                      provider.clearError();
-                      provider.loadMasterData();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            );
-          }
-          
-          // Once data is loaded, render the form
-          return const PayoutFormScreen();
-        },
-      ),
+      body: Consumer<PayoutProvider>(builder: (context, provider, _) {
+        if (provider.isLoading && provider.banks.isEmpty) {
+          return const Center(child: CircularProgressIndicator(color: primary));
+        }
+        if (provider.errorMessage.isNotEmpty) {
+          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: error.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.error_outline, size: 56, color: error)),
+            const SizedBox(height: 16),
+            Text(provider.errorMessage, style: const TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () { provider.clearError(); provider.loadMasterData(); },
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            ),
+          ]));
+        }
+        return const PayoutFormScreen();
+      }),
     );
   }
 }
