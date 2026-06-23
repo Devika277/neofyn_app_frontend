@@ -53,6 +53,10 @@ dependencies:
   connectivity_plus: ^5.0.2
   flutter_speed_dial: ^7.0.0
 
+  iconsax: ^0.0.8
+  percent_indicator: ^4.2.3
+  flutter_svg: ^2.0.9
+
   pdf: ^3.10.8
   printing: ^5.11.1
   path_provider: ^2.1.2

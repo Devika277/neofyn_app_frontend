@@ -1,8 +1,8 @@
 // screens/dmt/dmt_entry_screen.dart
 import 'package:flutter/material.dart';
 import 'package:my_app/services/storage_service.dart';
-import 'package:my_app/screens/dmt/sender_onboarding_form.dart';
-import 'package:my_app/screens/dmt/sender_lookup_screen.dart';
+import 'package:my_app/screens/dmt1/sender_onboarding_form.dart';
+import 'package:my_app/screens/dmt1/sender_lookup_screen.dart';
 
 
 class DmtEntryScreen extends StatelessWidget {

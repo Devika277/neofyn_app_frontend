@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:my_app/models/beneficiary_model.dart';
-import '../services/payout/payout_service.dart';  // ✅ Use consistent path
+import '../services/payout/payout_service.dart';
 
 class BeneficiaryProvider extends ChangeNotifier {
   List<Beneficiary> _beneficiaries = [];
@@ -13,23 +13,22 @@ class BeneficiaryProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
 
-  // ✅ DECLARE the payout service instance
   final PayoutService _payoutService = PayoutService();
 
-  // ✅ Load beneficiaries from local storage
+  // ✅ Load beneficiaries from BACKEND
   Future<void> loadBeneficiaries() async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
 
     try {
-      final result = await _payoutService.getLocalBeneficiaries();
+      final result = await _payoutService.getBeneficiaries();
       if (result is List) {
         _beneficiaries = result;
       } else {
         _beneficiaries = [];
       }
-      print('✅ Loaded ${_beneficiaries.length} beneficiaries from local storage');
+      print('✅ Loaded ${_beneficiaries.length} beneficiaries from backend');
     } catch (e) {
       _errorMessage = e.toString();
       _beneficiaries = [];
@@ -40,7 +39,7 @@ class BeneficiaryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ Add beneficiary (local storage)
+  // ✅ Add beneficiary to BACKEND
   Future<void> addBeneficiary(Beneficiary beneficiary) async {
     _isLoading = true;
     _errorMessage = '';
@@ -58,7 +57,25 @@ class BeneficiaryProvider extends ChangeNotifier {
     }
   }
 
-  // ✅ Delete beneficiary (local storage)
+  // ✅ Update beneficiary
+  Future<void> updateBeneficiary(Beneficiary beneficiary) async {
+    _isLoading = true;
+    _errorMessage = '';
+    notifyListeners();
+
+    try {
+      await _payoutService.updateBeneficiary(beneficiary);
+      await loadBeneficiaries();
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ Delete beneficiary from BACKEND
   Future<void> deleteBeneficiary(String beneficiaryId) async {
     _isLoading = true;
     _errorMessage = '';
@@ -89,6 +106,4 @@ class BeneficiaryProvider extends ChangeNotifier {
     _errorMessage = '';
     notifyListeners();
   }
-
-  Future<void> updateBeneficiary(Beneficiary beneficiary) async {}
 }

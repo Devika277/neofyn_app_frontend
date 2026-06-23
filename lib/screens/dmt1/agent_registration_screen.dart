@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/DMT/dmt_service.dart';
 import '../../services/storage_service.dart';
-import '../dmt/sender_lookup_screen.dart';
+import 'sender_lookup_screen.dart';
 
 
 class AgentRegistrationScreen extends StatefulWidget {

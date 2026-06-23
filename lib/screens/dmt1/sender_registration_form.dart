@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/DMT/dmt_service.dart';
 import '../../services/storage_service.dart';
-import '../../screens/dmt/sender_otp_screen.dart';
-import '../dmt/agent_registration_screen.dart';
+import 'sender_otp_screen.dart';
+import 'agent_registration_screen.dart';
 
 class SenderRegistrationForm extends StatefulWidget {
   final String mobileNumber;

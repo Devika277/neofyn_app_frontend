@@ -118,7 +118,7 @@ class PayoutService {
     }
   }
   
-  // ✅ Get Beneficiaries
+  // ✅ Get Beneficiaries from BACKEND (agent_bank_accounts where is_primary = false)
   Future<List<Beneficiary>> getBeneficiaries() async {
     try {
       final token = await _getValidToken();
@@ -146,6 +146,7 @@ class PayoutService {
       
       if (response.statusCode == 200) {
         final dynamic data = json.decode(response.body);
+        
         if (data is Map<String, dynamic>) {
           if (data['status'] == 'success') {
             final beneficiariesData = data['data'];
@@ -155,6 +156,9 @@ class PayoutService {
           }
         }
         return [];
+      } else if (response.statusCode == 401) {
+        await _storage.delete(key: 'jwt_token');
+        throw Exception('Session expired. Please login again.');
       } else {
         return [];
       }
@@ -164,110 +168,115 @@ class PayoutService {
     }
   }
 
-  // ✅ Save Beneficiary - Local storage
+  // ✅ Save Beneficiary to BACKEND (agent_bank_accounts with is_primary = false)
   Future<Map<String, dynamic>?> saveBeneficiary(Beneficiary beneficiary) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedBeneficiaries = prefs.getStringList('beneficiaries') ?? [];
-      
-      final beneJson = json.encode({
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'name': beneficiary.name,
-        'accountNumber': beneficiary.accountNumber,
-        'ifsc': beneficiary.ifsc,
-        'mobile': beneficiary.mobile,
-        'bankCode': beneficiary.bankCode,
-        'bankName': beneficiary.bankName,
-        'stateCode': beneficiary.stateCode,
-        'stateName': beneficiary.stateName,
-        'paymentMode': beneficiary.paymentMode,
-      });
-      
-      savedBeneficiaries.add(beneJson);
-      await prefs.setStringList('beneficiaries', savedBeneficiaries);
-      
-      print('✅ Beneficiary saved locally');
-      
-      return {
-        'status': 'success',
-        'message': 'Beneficiary added successfully'
-      };
-      
-    } catch (e) {
-      print('❌ Save beneficiary error: $e');
-      rethrow;
-    }
-  }
+  try {
+    final token = await _getValidToken();
+    final userId = await _getUserId();
 
-  // ✅ Delete Beneficiary - Local storage
+    if (userId == null) throw Exception('User not logged in');
+    if (token == null) throw Exception('No valid token found');
+
+    final body = {
+      'userId': int.parse(userId),
+      'phone': beneficiary.mobile,
+      'beneData': {
+        'account_name': beneficiary.name,
+        'account_number': beneficiary.accountNumber,
+        'ifsc_code': beneficiary.ifsc.toUpperCase(),
+        'bank_code': beneficiary.bankCode,
+        'bank_name': beneficiary.bankName,  // ✅ ADD THIS
+        'state_code': beneficiary.stateCode,
+        'payment_mode': beneficiary.paymentMode,
+        'mobile': beneficiary.mobile,
+      }
+    };
+
+    print('=== SAVING BENEFICIARY ===');
+    print('📤 Request body: ${json.encode(body)}');
+
+    final response = await LoggedHttpClient.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/payout/beneficiary/add'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': ApiConfig.contentType,
+      },
+      body: json.encode(body),
+    );
+
+    print('📥 Response status: ${response.statusCode}');
+    print('📥 Response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'success') {
+        return data;
+      } else {
+        throw Exception(data['message'] ?? 'Failed to add beneficiary');
+      }
+    } else if (response.statusCode == 401) {
+      await _storage.delete(key: 'jwt_token');
+      throw Exception('Session expired. Please login again.');
+    } else {
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['message'] ?? 'Failed to add beneficiary: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('❌ Save beneficiary error: $e');
+    rethrow;
+  }
+}
+
+  // ✅ Delete Beneficiary from BACKEND
   Future<void> deleteBeneficiary(String id) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedBeneficiaries = prefs.getStringList('beneficiaries') ?? [];
+      final token = await _getValidToken();
+      final userId = await _getUserId();
       
-      final updatedList = savedBeneficiaries.where((jsonStr) {
-        try {
-          final data = json.decode(jsonStr);
-          return data['id'].toString() != id;
-        } catch (e) {
-          return true;
+      if (userId == null) throw Exception('User not logged in');
+      if (token == null) throw Exception('No valid token found');
+      
+      final response = await LoggedHttpClient.delete(
+        Uri.parse('${ApiConfig.baseUrl}/api/payout/beneficiary/$id?userId=$userId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': ApiConfig.contentType,
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] != 'success') {
+          throw Exception(data['message'] ?? 'Failed to delete beneficiary');
         }
-      }).toList();
-      
-      await prefs.setStringList('beneficiaries', updatedList);
-      print('✅ Beneficiary deleted locally');
-      
+      } else if (response.statusCode == 401) {
+        await _storage.delete(key: 'jwt_token');
+        throw Exception('Session expired. Please login again.');
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to delete: ${response.statusCode}');
+      }
     } catch (e) {
       print('❌ Delete beneficiary error: $e');
       rethrow;
     }
   }
 
-  // ✅ Get Local Beneficiaries
-  Future<List<Beneficiary>> getLocalBeneficiaries() async {
+  // ✅ Update Beneficiary
+  Future<Map<String, dynamic>?> updateBeneficiary(Beneficiary beneficiary) async {
+    // For now, delete and re-add (or implement proper update)
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedBeneficiaries = prefs.getStringList('beneficiaries') ?? [];
-      
-      print('📥 Found ${savedBeneficiaries.length} beneficiaries in local storage');
-      
-      return savedBeneficiaries.map((jsonStr) {
-        try {
-          final data = json.decode(jsonStr);
-          return Beneficiary(
-            id: data['id'] is int ? data['id'] : int.tryParse(data['id']?.toString() ?? ''),
-            name: data['name'] ?? '',
-            accountNumber: data['accountNumber'] ?? '',
-            ifsc: data['ifsc'] ?? '',
-            mobile: data['mobile'] ?? '',
-            bankCode: data['bankCode'] ?? '',
-            bankName: data['bankName'] ?? '',
-            stateCode: data['stateCode'] ?? '',
-            stateName: data['stateName'] ?? '',
-            paymentMode: data['paymentMode'] ?? 'IMPS',
-          );
-        } catch (e) {
-          print('⚠️ Error parsing beneficiary: $e');
-          return Beneficiary(
-            name: 'Error',
-            accountNumber: '',
-            ifsc: '',
-            mobile: '',
-            bankCode: '',
-            bankName: '',
-            stateCode: '',
-            stateName: '',
-          );
-        }
-      }).where((b) => b.name != 'Error').toList();
-      
+      if (beneficiary.id != null) {
+        await deleteBeneficiary(beneficiary.id!.toString());
+      }
+      return await saveBeneficiary(beneficiary);
     } catch (e) {
-      print('Get local beneficiaries error: $e');
-      return [];
+      print('❌ Update beneficiary error: $e');
+      rethrow;
     }
   }
 
-  // ✅ Initiate Payout - MATCHES BACKEND
+  // ✅ Initiate Payout
   Future<Map<String, dynamic>> initiatePayout(Map<String, dynamic> payoutData) async {
     try {
       final token = await _getValidToken();
@@ -314,54 +323,52 @@ class PayoutService {
   }
   
   // ✅ Get Transaction Status
-  // ✅ Get Transaction Status - Use merchant_ref_id
-Future<Map<String, dynamic>> getTransactionStatus(String merchantRefId) async {
-  try {
-    final token = await _getValidToken();
-    
-    if (token == null) {
-      throw Exception('No valid token found. Please login again.');
+  Future<Map<String, dynamic>> getTransactionStatus(String merchantRefId) async {
+    try {
+      final token = await _getValidToken();
+      
+      if (token == null) {
+        throw Exception('No valid token found. Please login again.');
+      }
+      
+      print('Fetching status for merchantRefId: $merchantRefId');
+      
+      final response = await LoggedHttpClient.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/payout/status/$merchantRefId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': ApiConfig.contentType,
+        },
+      );
+      
+      print('Status response status: ${response.statusCode}');
+      print('Status response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data['data'] ?? data,
+          'message': data['message'] ?? 'Success'
+        };
+      } else if (response.statusCode == 401) {
+        await _storage.delete(key: 'jwt_token');
+        throw Exception('Session expired. Please login again.');
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'message': 'Transaction not found (still processing)',
+          'data': null
+        };
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Get transaction status error: $e');
+      rethrow;
     }
-    
-    print('Fetching status for merchantRefId: $merchantRefId');
-    
-    final response = await LoggedHttpClient.get(
-      Uri.parse('${ApiConfig.baseUrl}/api/payout/status/$merchantRefId'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': ApiConfig.contentType,
-      },
-    );
-    
-    print('Status response status: ${response.statusCode}');
-    print('Status response body: ${response.body}');
-    
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return {
-        'success': true,
-        'data': data['data'] ?? data,
-        'message': data['message'] ?? 'Success'
-      };
-    } else if (response.statusCode == 401) {
-      await _storage.delete(key: 'jwt_token');
-      throw Exception('Session expired. Please login again.');
-    } else if (response.statusCode == 404) {
-      // ✅ Check if transaction exists but not found - keep polling
-      return {
-        'success': false,
-        'message': 'Transaction not found (still processing)',
-        'data': null
-      };
-    } else {
-      final errorData = json.decode(response.body);
-      throw Exception(errorData['message'] ?? 'Server error: ${response.statusCode}');
-    }
-  } catch (e) {
-    print('Get transaction status error: $e');
-    rethrow;
   }
-}
 
   // ✅ Get Transaction History
   Future<List<dynamic>> getTransactionHistory() async {

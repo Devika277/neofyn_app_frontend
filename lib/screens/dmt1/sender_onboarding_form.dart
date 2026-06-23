@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../services/DMT/dmt_service.dart' ;
 import '../../services/storage_service.dart';
-import './sender_lookup_screen.dart';
+import 'sender_lookup_screen.dart';
 
 class SenderOnboardingForm extends StatefulWidget {
   const SenderOnboardingForm({super.key});

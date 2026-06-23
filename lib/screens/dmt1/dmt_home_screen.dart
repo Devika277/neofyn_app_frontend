@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:my_app/screens/dmt/sender_lookup_screen.dart';
+import 'package:my_app/screens/dmt1/sender_lookup_screen.dart';
 
 class DmtHomeScreen extends StatelessWidget {
   const DmtHomeScreen({super.key});

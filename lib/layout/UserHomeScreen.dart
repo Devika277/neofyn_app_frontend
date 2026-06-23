@@ -13,7 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app/screens/account/login_screen.dart';
 import '../screens/aeps/aeps_history_screen.dart';
-import '../screens/dmt/dmt_home_screen.dart';
+import '../screens/dmt1/dmt_home_screen.dart';
 import '../screens/account/Profile_screen.dart';
 import '../screens/account/supportPage_screen.dart';
 import '../services/AEPS/api_service.dart';
@@ -28,6 +28,9 @@ import '../screens/BBPS/recharge_history_screen.dart';
 import '../services/AEPS/matm_service.dart';
 import '../screens/ppi_dmt/dmt_phone_entry.dart';
 import '../../services/session_service.dart';
+import '../screens/dmt/dmt_selector_screen.dart';
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BRAND COLORS
@@ -213,8 +216,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         break;
 
       case 'DMT':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtHomeScreen()));
-        break;
+Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const DMTSelectorScreen(), // UPDATED
+        ),
+      );        break;
       case 'Payout':
         Navigator.push(
           context,

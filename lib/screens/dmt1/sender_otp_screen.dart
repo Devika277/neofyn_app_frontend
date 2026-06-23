@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/DMT/dmt_service.dart';
 import '../../services/storage_service.dart';
-import './sender_dashboard_screen.dart';
+import 'sender_dashboard_screen.dart';
 
 class SenderOtpScreen extends StatefulWidget {
   final String mobileNumber;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/DMT/dmt_service.dart';
 import '../../services/storage_service.dart';
-import '../dmt/agent_registration_screen.dart';
+import 'agent_registration_screen.dart';
 
 class AddBeneficiaryScreen extends StatefulWidget {
   final String senderMobile;
