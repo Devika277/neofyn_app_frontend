@@ -453,19 +453,20 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _navigateToTpin() {
-    // Use the class variable directly - no need for async
+  void _navigateToTpin() async {
     if (tpin) {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const ChangeTpinScreen()),
       );
     } else {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const SetTPINScreen()),
       );
     }
+    // Refresh profile after returning from TPIN screens
+    _loadProfile();
   }
 
   void _showLogoutDialog() {
@@ -619,21 +620,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         color: Colors.white24,
                         size: _iconSize * 0.8,
                       ),
-                onTap: () {
-                  if (tpin ) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ChangeTpinScreen(),
-                      ),
-                    );
-                  } else {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SetTPINScreen()),
-                    );
-                  }
-                },
+                onTap:_navigateToTpin,
               );
             },
           ),

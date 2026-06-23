@@ -275,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
             );
             await prefs.setBool(
               'tpin',
-              data['user']?['tpin'] ?? '',
+              data['user']?['tpin'] ?? false,  // ✅ false is a bool
             );
             final aeps = Provider.of<AepsProvider>(context, listen: false);
             aeps.setAuthDetails(

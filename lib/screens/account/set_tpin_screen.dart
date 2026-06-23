@@ -1,6 +1,7 @@
 // lib/screens/account/set_tpin_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/AEPS/auth_service.dart';
 import '../../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
@@ -107,6 +108,10 @@ class _SetTPINScreenState extends State<SetTPINScreen> {
       }
 
       await context.read<AuthProvider>().updateUser(tpinSet: true);
+
+      // ✅ ADD THIS: Update SharedPreferences
+      final prefs = await SharedPreferences.getInstance();  // ← Add this import
+      await prefs.setBool('tpin', true);  // ← Save to SharedPreferences
       HapticFeedback.heavyImpact();
 
       if (mounted) {
@@ -117,7 +122,7 @@ class _SetTPINScreenState extends State<SetTPINScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       setState(() {
