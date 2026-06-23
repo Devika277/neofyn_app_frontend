@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -102,7 +103,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
           // Title
           const Text(
-            'VimoPay AEPS',
+            'Neofyn Fin Tech',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -193,7 +194,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
           // Balance (for BE and MS)
           if ((widget.receipt.transactionType == 'BE' ||
-                  widget.receipt.transactionType == 'MS') &&
+              widget.receipt.transactionType == 'MS') &&
               widget.receipt.availableBalance != null &&
               widget.receipt.availableBalance != '0') ...[
             const SizedBox(height: 16),
@@ -371,7 +372,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
             // Table Rows
             ...widget.receipt.miniStatementEntries!.map(
-              (entry) => Container(
+                  (entry) => Container(
                 padding: const EdgeInsets.symmetric(
                   vertical: 10,
                   horizontal: 6,
@@ -458,7 +459,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
           // Footer
           const Text(
-            'Thank you for using VimoPay',
+            'Thank you for using Neofyn Fin Tech',
             style: TextStyle(
               fontSize: 13,
               fontFamily: 'Poppins',
@@ -467,7 +468,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Powered by Vidual Technologies',
+            'Powered by Neofyn Fin Tech',
             style: TextStyle(
               fontSize: 11,
               fontFamily: 'Poppins',
@@ -489,11 +490,11 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   }
 
   Widget _buildDetailRow(
-    String label,
-    String value, {
-    Color? valueColor,
-    TextStyle? valueStyle,
-  }) {
+      String label,
+      String value, {
+        Color? valueColor,
+        TextStyle? valueStyle,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -517,7 +518,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               value,
               textAlign: TextAlign.right,
               style:
-                  valueStyle ??
+              valueStyle ??
                   TextStyle(
                     fontSize: 13,
                     fontFamily: 'Poppins',
@@ -744,53 +745,147 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
   }
 
-  // ─── PDF OPERATIONS ─────────────────────────────────────────
+// Update _downloadPDF method:
   Future<void> _downloadPDF() async {
     setState(() => _isGeneratingPDF = true);
     try {
+      // Request storage permission for Android
+      if (Platform.isAndroid) {
+        var status = await Permission.storage.status;
+        if (!status.isGranted) {
+          status = await Permission.storage.request();
+          if (!status.isGranted) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Storage permission required to save PDF'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+        }
+      }
+
       final pdf = await _generatePDF();
-      final directory = await getApplicationDocumentsDirectory();
+
+      // Get the Downloads directory
+      Directory? downloadsDir;
+
+      if (Platform.isAndroid) {
+        // For Android 10+ (API 29+), use external storage
+        if (await _requestStoragePermission()) {
+          // Try common downloads paths
+          final paths = [
+            '/storage/emulated/0/Download',
+            '/storage/emulated/0/Downloads',
+            '/sdcard/Download',
+            '/sdcard/Downloads',
+          ];
+
+          for (final path in paths) {
+            final dir = Directory(path);
+            if (await dir.exists()) {
+              downloadsDir = dir;
+              break;
+            }
+          }
+
+          // If no common path found, use app-specific external storage
+          if (downloadsDir == null) {
+            final directory = await getExternalStorageDirectory();
+            if (directory != null) {
+              // Navigate up to find Downloads
+              final parentDir = Directory(directory.path.replaceAll('/Android/data/${await _getPackageName()}/files', ''));
+              downloadsDir = Directory('${parentDir.path}/Download');
+              if (!await downloadsDir!.exists()) {
+                downloadsDir = Directory('${parentDir.path}/Downloads');
+              }
+            }
+          }
+        }
+      }
+
+      // Fallback to app documents directory if no Downloads found
+      downloadsDir ??= await getApplicationDocumentsDirectory();
+
+      // Create Neofyn receipts subfolder
+      final receiptDir = Directory('${downloadsDir!.path}/Neofyn_Receipts');
+      if (!await receiptDir.exists()) {
+        await receiptDir.create(recursive: true);
+      }
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName =
-          'VimoPay_Receipt_${widget.receipt.merchantRefId}_$timestamp.pdf';
-      final file = File('${directory.path}/$fileName');
+      final fileName = 'Neofyn_Receipt_${widget.receipt.merchantRefId}_$timestamp.pdf';
+      final file = File('${receiptDir.path}/$fileName');
+
+      // Save the PDF
       await file.writeAsBytes(await pdf.save());
+
+      // Verify file was saved
+      final fileExists = await file.exists();
+      final fileSize = fileExists ? await file.length() : 0;
+
+      debugPrint('✅ PDF saved successfully!');
+      debugPrint('📁 Path: ${file.path}');
+      debugPrint('📏 Size: $fileSize bytes');
+      debugPrint('📄 Exists: $fileExists');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.check_circle, color: Color(0xFF2ECC71)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'PDF saved: $fileName',
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Color(0xFF2ECC71), size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'PDF saved successfully!',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Find in Downloads/Neofyn_Receipts',
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
               ],
             ),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'OPEN',
+              textColor: const Color(0xFF2ECC71),
+              onPressed: () {
+                // Open the file using intent
+                _openPdfFile(file.path);
+              },
+            ),
           ),
         );
       }
     } catch (e) {
+      debugPrint('❌ Error saving PDF: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.error, color: Color(0xFFEF4444)),
+                const Icon(Icons.error, color: Color(0xFFEF4444), size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Error saving PDF: $e',
+                    'Error saving PDF: ${e.toString()}',
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
@@ -798,10 +893,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             ),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -810,12 +904,58 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
+// Add these helper methods:
+  Future<bool> _requestStoragePermission() async {
+    if (Platform.isAndroid) {
+      // For Android 13+ (API 33+)
+      if (await _getAndroidVersion() >= 33) {
+        return true; // No storage permission needed for API 33+
+      }
+      // For Android 10-12
+      else if (await _getAndroidVersion() >= 29) {
+        return true; // Scoped storage, use MediaStore or app-specific
+      }
+      // For Android 9 and below
+      else {
+        var status = await Permission.storage.status;
+        if (!status.isGranted) {
+          status = await Permission.storage.request();
+        }
+        return status.isGranted;
+      }
+    }
+    return true; // iOS doesn't need this
+  }
+
+  Future<int> _getAndroidVersion() async {
+    if (Platform.isAndroid) {
+      // Simple way to get API level without additional packages
+      try {
+        final rawVersion = await Process.run('getprop', ['ro.build.version.sdk']);
+        return int.tryParse(rawVersion.stdout.toString().trim()) ?? 29;
+      } catch (e) {
+        return 29; // Default to Android 10
+      }
+    }
+    return 29;
+  }
+
+  Future<String> _getPackageName() async {
+    // Return your actual package name from AndroidManifest.xml
+    return 'com.example.my_app'; // Replace with your actual package name
+  }
+
+  void _openPdfFile(String filePath) {
+    // This will try to open the PDF with a suitable app
+    Share.shareXFiles([XFile(filePath)], text: 'Open PDF');
+  }
+
   Future<void> _printReceipt() async {
     try {
       final pdf = await _generatePDF();
       await Printing.layoutPdf(
         onLayout: (format) async => pdf.save(),
-        name: 'VimoPay_Receipt_${widget.receipt.merchantRefId}',
+        name: 'Neofyn_Receipt_${widget.receipt.merchantRefId}',
       );
     } catch (e) {
       if (mounted) {
@@ -832,14 +972,22 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Future<void> _sharePDF() async {
     try {
       final pdf = await _generatePDF();
-      final directory = await getTemporaryDirectory();
-      final fileName = 'VimoPay_Receipt_${widget.receipt.merchantRefId}.pdf';
-      final file = File('${directory.path}/$fileName');
+
+      // Use same Neofyn directory for consistency
+      final directory = await getApplicationDocumentsDirectory();
+      final receiptDir = Directory('${directory.path}/Neofyn_Receipts');
+
+      if (!await receiptDir.exists()) {
+        await receiptDir.create(recursive: true);
+      }
+
+      final fileName = 'Neofyn_Receipt_${widget.receipt.merchantRefId}.pdf';
+      final file = File('${receiptDir.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
       await Share.shareXFiles([
         XFile(file.path),
-      ], text: 'VimoPay Transaction Receipt - ${widget.receipt.typeLabel}');
+      ], text: 'Neofyn Fin Tech Transaction Receipt - ${widget.receipt.typeLabel}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -866,11 +1014,16 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             children: [
               // Header
               pw.Text(
-                'VimoPay AEPS',
+                'Neofyn Fin Tech',
                 style: pw.TextStyle(
                   fontSize: 16,
                   fontWeight: pw.FontWeight.bold,
                 ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'AEPS Services',
+                style: const pw.TextStyle(fontSize: 10),
               ),
               pw.SizedBox(height: 4),
               pw.Text(
@@ -993,7 +1146,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
                 // Table Rows
                 ...widget.receipt.miniStatementEntries!.map(
-                  (entry) => pw.Container(
+                      (entry) => pw.Container(
                     padding: const pw.EdgeInsets.symmetric(vertical: 2),
                     decoration: const pw.BoxDecoration(
                       border: pw.Border(
@@ -1054,8 +1207,13 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
               // Footer
               pw.Text(
-                'Thank you for using VimoPay',
+                'Thank you for using Neofyn Fin Tech',
                 style: const pw.TextStyle(fontSize: 10),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Powered by Neofyn Fin Tech',
+                style: const pw.TextStyle(fontSize: 8),
               ),
               pw.Text(
                 'Generated: ${_formatDate(DateTime.now().toString())}',
