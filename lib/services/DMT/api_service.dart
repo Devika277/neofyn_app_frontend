@@ -56,6 +56,25 @@ class ApiService {
     }
   }
 
+
+  // In api_service.dart
+Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
+  try {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/dmt/remitter/$remitterId'),
+      headers: await _getAuthHeaders(),
+    );
+    
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to get remitter details');
+    }
+  } catch (e) {
+    print('❌ Error getting remitter details: $e');
+    rethrow;
+  }
+}
   // Get bank list
   Future<List<Map<String, String>>> getBankList() async {
     try {
@@ -270,27 +289,34 @@ class ApiService {
 
   // Create DMT transfer
   Future<Map<String, dynamic>> createTransfer(DMTTransferRequest request) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/dmt/transfer'),
-        headers: await _getAuthHeaders(),
-        body: json.encode(request.toJson()),
-      );
-      
-      print('📡 Create Transfer Response: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else if (response.statusCode == 401) {
-        throw Exception('Session expired. Please login again.');
-      } else {
-        throw Exception('Failed to create transfer');
-      }
-    } catch (e) {
-      print('❌ Error creating transfer: $e');
-      rethrow;
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/dmt/transfer'),
+      headers: await _getAuthHeaders(),
+      body: json.encode(request.toJson()),
+    );
+    
+    print('📡 Create Transfer Response: ${response.statusCode}');
+    print('📡 Response Body: ${response.body}');
+    
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return {
+        'success': true,
+        'transactionId': data['transactionId'],
+        'utrNumber': data['utrNumber'],
+        'providerStatus': data['providerStatus'],
+        'message': data['message'] ?? 'Transfer successful',
+      };
+    } else {
+      final error = json.decode(response.body);
+      throw Exception(error['error'] ?? 'Failed to create transfer');
     }
+  } catch (e) {
+    print('❌ Error creating transfer: $e');
+    rethrow;
   }
+}
 
   // Get transactions
   Future<List<DMTTransaction>> getTransactions({

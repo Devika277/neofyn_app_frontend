@@ -31,6 +31,11 @@ class _DMTAddBeneficiaryScreenState extends State<DMTAddBeneficiaryScreen> {
   List<Map<String, String>> _cities = [];
   List<Map<String, String>> _banks = [];
   
+
+    // Add these to store bank details
+  String? _selectedBankCode;
+  String? _selectedBankName;
+
   bool _isLoading = false;
   bool _loadingStates = true;
   bool _loadingBanks = true;
@@ -120,6 +125,13 @@ class _DMTAddBeneficiaryScreenState extends State<DMTAddBeneficiaryScreen> {
       return;
     }
 
+    if (_selectedBankCode == null) {
+      setState(() {
+        _errorMessage = 'Please select a bank';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -131,8 +143,9 @@ class _DMTAddBeneficiaryScreenState extends State<DMTAddBeneficiaryScreen> {
         accountHolderName: _nameController.text.trim(),
         accountNumber: _accountController.text.trim(),
         ifscCode: _ifscController.text.trim().toUpperCase(),
-        bankName: _bankController.text.trim(),
-        stateCode: _selectedState,
+        bankName: _selectedBankName ?? '',  // Send the bank name
+        bankCode: _selectedBankCode!,  // Send the bank code
+        stateCode: _selectedState!,
         cityCode: _selectedCity,
         beneficiaryMobile: _mobileController.text.trim().isEmpty 
             ? null 
@@ -162,6 +175,7 @@ class _DMTAddBeneficiaryScreenState extends State<DMTAddBeneficiaryScreen> {
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -290,40 +304,48 @@ class _DMTAddBeneficiaryScreenState extends State<DMTAddBeneficiaryScreen> {
                 const SizedBox(height: 16),
                 
                 // Bank Name
-                DropdownButtonFormField<String>(
-                  value: _bankController.text.isNotEmpty ? _bankController.text : null,
-                  decoration: InputDecoration(
-                    labelText: 'Bank Name',
-                    prefixIcon: const Icon(Iconsax.bank),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  items: _loadingBanks
-                      ? [
-                          const DropdownMenuItem<String>(
-                            value: '',
-                            child: Text('Loading banks...'),
-                          ),
-                        ]
-                      : _banks.map((bank) {
-                          return DropdownMenuItem<String>(
-                            value: bank['name'] ?? '',
-                            child: Text(bank['name'] ?? ''),
-                          );
-                        }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _bankController.text = value ?? '';
-                    });
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please select a bank';
-                    }
-                    return null;
-                  },
-                ),
+                  DropdownButtonFormField<String>(
+    value: _selectedBankCode,  // Use bank code as value
+    decoration: InputDecoration(
+      labelText: 'Bank Name',
+      prefixIcon: const Icon(Iconsax.bank),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    ),
+    items: _loadingBanks
+        ? [
+            const DropdownMenuItem<String>(
+              value: '',
+              child: Text('Loading banks...'),
+            ),
+          ]
+        : _banks.map((bank) {
+            return DropdownMenuItem<String>(
+              value: bank['code'] ?? '',  // Store the code
+              child: Text(bank['name'] ?? ''),
+            );
+          }).toList(),
+    onChanged: (value) {
+      setState(() {
+        _selectedBankCode = value;
+        // Find the bank name for this code
+        final selectedBank = _banks.firstWhere(
+          (bank) => bank['code'] == value,
+          orElse: () => {},
+        );
+        _selectedBankName = selectedBank['name'] ?? '';
+        _bankController.text = _selectedBankName ?? '';
+      });
+    },
+    validator: (value) {
+      if (value == null || value.isEmpty) {
+        return 'Please select a bank';
+      }
+      return null;
+    },
+  ),
+
                 const SizedBox(height: 16),
                 
                 // State
