@@ -220,28 +220,28 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: beneficiary.verified
-                                      ? Colors.green[100]
-                                      : Colors.orange[100],
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  beneficiary.verified ? 'Verified' : 'Pending',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: beneficiary.verified
-                                        ? Colors.green[700]
-                                        : Colors.orange[700],
-                                  ),
-                                ),
-                              ),
+                              // Container(
+                              //   padding: const EdgeInsets.symmetric(
+                              //     horizontal: 8,
+                              //     vertical: 4,
+                              //   ),
+                              //   decoration: BoxDecoration(
+                              //     color: beneficiary.verified
+                              //         ? Colors.green[100]
+                              //         : Colors.orange[100],
+                              //     borderRadius: BorderRadius.circular(12),
+                              //   ),
+                              //   child: Text(
+                              //     beneficiary.verified ? 'Verified' : 'Pending',
+                              //     style: GoogleFonts.poppins(
+                              //       fontSize: 10,
+                              //       fontWeight: FontWeight.w500,
+                              //       color: beneficiary.verified
+                              //           ? Colors.green[700]
+                              //           : Colors.orange[700],
+                              //     ),
+                              //   ),
+                              // ),
                               const SizedBox(height: 4),
                               Text(
                                 'Used ${beneficiary.useCount} times',

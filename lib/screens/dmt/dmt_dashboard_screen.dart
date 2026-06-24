@@ -37,23 +37,45 @@ class _DMTDashboardScreenState extends State<DMTDashboardScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    try {
-      final remitter = await _apiService.getRemitterDetails(widget.remitterId);
-      final beneficiaries = await _apiService.getBeneficiaries(widget.remitterId);
-      
-      setState(() {
-        _remitter = remitter;
-        _beneficiaries = beneficiaries;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
-        _isLoading = false;
-      });
-    }
+  // In dmt_dashboard_screen.dart _loadData method
+Future<void> _loadData() async {
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
+
+  try {
+    final response = await _apiService.getRemitterDetailsRaw(widget.remitterId);
+    print('📡 Raw response: $response');
+    
+    // Parse manually
+    final remitter = Remitter(
+      id: response['id'] ?? 0,
+      mobile: response['mobile']?.toString() ?? '',
+      firstName: response['first_name']?.toString() ?? '',
+      lastName: response['last_name']?.toString() ?? '',
+      monthlyLimit: double.parse(response['monthly_limit']?.toString() ?? '0'),
+      monthlyUsed: double.parse(response['monthly_used']?.toString() ?? '0'),
+      productType: response['product_type']?.toString() ?? 'lite',
+      isActive: response['is_active'] ?? false,
+      kycStatus: response['kyc_status']?.toString() ?? 'basic',
+    );
+    
+    final beneficiaries = await _apiService.getBeneficiaries(widget.remitterId);
+    
+    setState(() {
+      _remitter = remitter;
+      _beneficiaries = beneficiaries;
+      _isLoading = false;
+    });
+  } catch (e) {
+    print('❌ Error loading data: $e');
+    setState(() {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _isLoading = false;
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -289,31 +311,31 @@ class _DMTDashboardScreenState extends State<DMTDashboardScreen> {
               ),
             ],
           ),
-          if (_remitter!.kycStatus != 'verified') ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Iconsax.info_circle, color: Colors.orange[300], size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'KYC pending. Complete KYC to increase limits.',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          // if (_remitter!.kycStatus != 'verified') ...[
+          //   const SizedBox(height: 12),
+          //   Container(
+          //     padding: const EdgeInsets.all(8),
+          //     decoration: BoxDecoration(
+          //       color: Colors.orange.withOpacity(0.2),
+          //       borderRadius: BorderRadius.circular(8),
+          //     ),
+          //     child: Row(
+          //       children: [
+          //         Icon(Iconsax.info_circle, color: Colors.orange[300], size: 16),
+          //         const SizedBox(width: 8),
+          //         Expanded(
+          //           child: Text(
+          //             'KYC pending. Complete KYC to increase limits.',
+          //             style: GoogleFonts.poppins(
+          //               fontSize: 12,
+          //               color: Colors.white.withOpacity(0.9),
+          //             ),
+          //           ),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          // ],
         ],
       ),
     );
@@ -570,21 +592,21 @@ class _DMTDashboardScreenState extends State<DMTDashboardScreen> {
                       color: Colors.grey[600],
                     ),
                   ),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: beneficiary.verified ? Colors.green[100] : Colors.orange[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      beneficiary.verified ? 'Verified' : 'Pending',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: beneficiary.verified ? Colors.green[700] : Colors.orange[700],
-                      ),
-                    ),
-                  ),
+                  // trailing: Container(
+                  //   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  //   decoration: BoxDecoration(
+                  //     color: beneficiary.verified ? Colors.green[100] : Colors.orange[100],
+                  //     borderRadius: BorderRadius.circular(12),
+                  //   ),
+                  //   child: Text(
+                  //     beneficiary.verified ? 'Verified' : 'Pending',
+                  //     style: GoogleFonts.poppins(
+                  //       fontSize: 10,
+                  //       fontWeight: FontWeight.w500,
+                  //       color: beneficiary.verified ? Colors.green[700] : Colors.orange[700],
+                  //     ),
+                  //   ),
+                  // ),
                 );
               },
             ),

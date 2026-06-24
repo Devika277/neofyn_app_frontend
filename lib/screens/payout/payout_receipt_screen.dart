@@ -62,11 +62,11 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
         child: pw.Column(children: [
           pw.SizedBox(height: 10),
           pw.Text('₹ ${tx['amount']}', style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
-          pw.Text('Payout Transfer', style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text('Payout Transfer', style:  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 15),
           pw.Align(alignment: pw.Alignment.centerLeft, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Text('TRANSACTION ID', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-            pw.Text('${tx['txnId'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            pw.Text('${tx['txnId'] ?? 'N/A'}', style:  pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
             pw.Divider(thickness: 0.5),
           ])),
           _pdfRow('Number', tx['beneficiaryAccountNumber'] ?? 'N/A'),
@@ -78,7 +78,7 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
           pw.SizedBox(height: 20),
           pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
           pw.Align(alignment: pw.Alignment.centerLeft, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(tx['remitterName']?.toUpperCase() ?? 'SHOP NAME', style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text(tx['remitterName']?.toUpperCase() ?? 'SHOP NAME', style:  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.Text(tx['remitterPhone'] ?? '', style: const pw.TextStyle(fontSize: 10)),
             pw.Text(tx['beneficiaryLocation'] ?? 'Address not available', style: const pw.TextStyle(fontSize: 9)),
           ])),
@@ -95,7 +95,7 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
       padding: const pw.EdgeInsets.symmetric(vertical: 4),
       child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
         pw.Text(label, style: pw.TextStyle(color: PdfColors.grey700)),
-        pw.Text(value, style: const pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+        pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       ]),
     );
   }

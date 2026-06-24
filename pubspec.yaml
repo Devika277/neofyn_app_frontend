@@ -57,15 +57,11 @@ dependencies:
   percent_indicator: ^4.2.3
   flutter_svg: ^2.0.9
 
-  iconsax: ^0.0.8
-  percent_indicator: ^4.2.3
-  flutter_svg: ^2.0.9
-
-#  pdf: ^3.10.8
-#  printing: ^5.11.1
-#  path_provider: ^2.1.2
-#  share_plus: ^7.2.1
-
+  pdf: ^3.10.8
+  printing: ^5.11.1
+  path_provider: ^2.1.2
+  share_plus: ^7.2.1
+  
   # Biometric/Face Authentication (for device)
   local_auth: ^2.1.6
 
@@ -82,10 +78,10 @@ dependencies:
   flutter_dotenv: ^6.0.1
   # mantra_mfs100: 0.0.1   # latest version from pub.dev
   network_info_plus: ^7.0.0
-  pdf: ^3.13.0
-  printing: ^5.15.0
-  path_provider: ^2.1.6
-  share_plus: ^10.1.4
+  # pdf: ^3.13.0
+  # printing: ^5.15.0
+  # path_provider: ^2.1.6
+  # share_plus: ^10.1.4
 
 
 
