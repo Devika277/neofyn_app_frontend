@@ -157,6 +157,9 @@ class MerchantRegistrationScreen extends StatefulWidget {
 }
 
 class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen> {
+  bool _isSubmitting = false;
+  bool _isRegistrationComplete = false;
+
   final _formKey = GlobalKey<FormState>();
 
   // Personal & address controllers
@@ -237,8 +240,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AepsProvider>().fetchStates();
       context.read<AepsProvider>().fetchBanks();
-
-      // Check merchant status and show OTP popup if needed
       _checkMerchantStatusAndShowOtp();
     });
   }
@@ -273,7 +274,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
   Future<void> _checkMerchantStatusAndShowOtp() async {
     print('🔍 Checking merchant status...');
 
-    // Case 1: If OTP is pending (from widget parameter)
     if (_isOtpPending && widget.merchantData != null) {
       final phone = widget.phone ?? widget.merchantData!['phone']?.toString() ?? '';
       _mobileController.text = phone;
@@ -291,7 +291,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       return;
     }
 
-    // Case 2: Check if merchant data exists in provider
     try {
       final provider = context.read<AepsProvider>();
       final currentPipe = _currentPipe;
@@ -315,7 +314,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         print('📊 Phone: $phoneNumber');
         print('📊 Error/Message: $errorMessage');
 
-        // Check if merchant is already registered
         if (errorMessage.toLowerCase().contains('already registered') ||
             errorMessage.toLowerCase().contains('already exist')) {
           print('⚠️ Merchant already registered in pipe $currentPipe');
@@ -323,7 +321,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
           return;
         }
 
-        // Show OTP popup for 'otp_sent' or 'otp_pending' status
         if ((registrationStatus == 'otp_sent' || registrationStatus == 'otp_pending') &&
             merchantId != null && merchantId.isNotEmpty) {
 
@@ -344,9 +341,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
             _handleResendOtp();
             _showOtpPopup();
           });
-        }
-        // For 'otp_verified' status, navigate directly to EKYC
-        else if (registrationStatus == 'otp_verified') {
+        } else if (registrationStatus == 'otp_verified') {
           print('✅ Status is otp_verified - Navigating to EKYC');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Navigator.pushReplacement(
@@ -361,9 +356,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
               ),
             );
           });
-        }
-        // For 'active' status, navigate to main screen
-        else if (registrationStatus == 'active') {
+        } else if (registrationStatus == 'active') {
           print('✅ Status is active - Navigating to AEPS wrapper');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Navigator.pushReplacement(
@@ -647,6 +640,10 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
 
   // ─── Registration ────────────────────────────────────────────
   Future<void> _registerMerchant() async {
+    if (_isSubmitting || _isRegistrationComplete) {
+      print('⛔ Registration already in progress or completed');
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (_selectedStateCode == null) {
       _showError('Please select state');
@@ -666,6 +663,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       _showError('Please enter a valid 10-digit mobile number');
       return;
     }
+    setState(() => _isSubmitting = true);
 
     final provider = context.read<AepsProvider>();
     final currentPipe = _currentPipe;
@@ -742,7 +740,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
 
     final success = await provider.registerMerchant(request);
 
-    // Log the response from provider
     _logResponse('registerMerchant', {
       'success': success,
       'merchantId': provider.merchantId,
@@ -755,17 +752,207 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       setState(() {
         _merchantId = provider.merchantId;
         _merchantRefId = provider.merchantRefId;
+        _isRegistrationComplete = true;
+        _isSubmitting = false;
       });
       print('✅ Registration success for Pipe $currentPipe');
       print('✅ MerchantId: $_merchantId');
       print('✅ MerchantRefId: $_merchantRefId');
-      _showOtpPopup();
+      _showRegistrationSuccessPopup();
     } else {
+      setState(() => _isSubmitting = false);
       final errorMsg = provider.errorMessage ?? 'Registration failed';
       print('❌ Registration failed for Pipe $currentPipe');
       print('❌ Error: $errorMsg');
       _showError(errorMsg);
     }
+  }
+
+  // ─── Show Registration Success Popup ─────────────────────────
+  void _showRegistrationSuccessPopup() {
+    print('🎉 Showing registration success popup');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1A1F1A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.success, Color(0xFF1AA88A)],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.success.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 50,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Registration Successful! 🎉',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Congratulations! You have been successfully registered as a merchant for Pipe $_currentPipe.',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                if (_merchantId != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Your Merchant ID',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _merchantId!,
+                          style: const TextStyle(
+                            color: AppColors.primaryLight,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: AppColors.warning, size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Please verify your mobile number with OTP to activate your account.',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primary, AppColors.primaryLight],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          if (mounted) {
+                            _showOtpPopup();
+                          }
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.sms, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Proceed to OTP Verification',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text(
+                    'Verify Later',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ─── Handle OTP Verification ─────────────────────────────────
@@ -807,6 +994,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         merchantId,
         _otpController.text,
         merchantRefId,
+        pipe: _currentPipe,
       );
 
       _logResponse('verifyOtp', {
@@ -819,7 +1007,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       if (!mounted) return;
 
       if (success) {
-        // Close dialog immediately
         Navigator.pop(dialogContext);
         _otpTimer?.cancel();
 
@@ -831,7 +1018,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         _showSuccess('OTP verified successfully!');
         print('✅ OTP Verified successfully for Pipe $currentPipe');
 
-        // Navigate directly for smooth flow
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -889,7 +1075,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
 
       print('📤 Sending/Resending OTP for Pipe: $currentPipe, MerchantId: $merchantId');
 
-      final success = await provider.sendOtp(merchantId, _mobileController.text.trim());
+      final success = await provider.sendOtp(merchantId, _mobileController.text.trim(),pipe: _currentPipe,);
 
       _logResponse('sendOtp', {
         'success': success,
@@ -947,7 +1133,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Header with icon
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -966,8 +1151,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                         child: const Icon(Icons.sms_outlined, size: 40, color: Colors.white),
                       ),
                       const SizedBox(height: 24),
-
-                      // Title
                       const Text(
                         'Verify Your Mobile',
                         style: TextStyle(
@@ -977,8 +1160,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                         ),
                       ),
                       const SizedBox(height: 8),
-
-                      // Description
                       const Text(
                         'Enter the 6-digit OTP sent to',
                         style: TextStyle(color: Colors.white60, fontSize: 14),
@@ -995,8 +1176,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-
-                      // Show merchant ID for debugging
                       if (_merchantId != null || _pendingMerchantId != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
@@ -1010,10 +1189,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                             ),
                           ),
                         ),
-
                       const SizedBox(height: 24),
-
-                      // OTP Input
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.05),
@@ -1058,8 +1234,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                         ),
                       ),
                       const SizedBox(height: 24),
-
-                      // Verify Button
                       SizedBox(
                         width: double.infinity,
                         height: 56,
@@ -1120,8 +1294,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Resend OTP with timer
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -1646,7 +1818,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
             SafeArea(
               child: Column(
                 children: [
-                  // App Bar
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
@@ -1686,8 +1857,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                       ],
                     ),
                   ),
-
-                  // OTP pending notice - shows for both otp_sent and otp_pending
                   if ((_isOtpPending || (_isOtpSent && _merchantId != null)) && !_isOtpVerified)
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1758,7 +1927,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                         ],
                       ),
                     ),
-
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -1774,8 +1942,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                               child: Column(
                                 children: [
                                   const SizedBox(height: 20),
-
-                                  // Header
                                   if (!_isOtpPending) ...[
                                     Center(
                                       child: Column(
@@ -1832,8 +1998,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                     ),
                                     const SizedBox(height: 30),
                                   ],
-
-                                  // Personal Details Section
                                   _buildSectionContainer(
                                     icon: Icons.person,
                                     title: 'Personal Details',
@@ -1916,10 +2080,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                       _buildGenderSelector(),
                                     ],
                                   ),
-
                                   const SizedBox(height: 20),
-
-                                  // Address Details
                                   _buildSectionContainer(
                                     icon: Icons.location_on,
                                     title: 'Address Details',
@@ -2004,10 +2165,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                         ),
                                     ],
                                   ),
-
                                   const SizedBox(height: 20),
-
-                                  // Bank & Shop Details
                                   _buildSectionContainer(
                                     icon: Icons.account_balance,
                                     title: 'Bank & Shop Details',
@@ -2101,10 +2259,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                       ),
                                     ],
                                   ),
-
                                   const SizedBox(height: 20),
-
-                                  // Location Section
                                   _buildSectionContainer(
                                     icon: Icons.gps_fixed,
                                     title: 'Shop Location',
@@ -2176,20 +2331,19 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                         ),
                                     ],
                                   ),
-
                                   const SizedBox(height: 30),
-
-                                  // Register Button
                                   if (!_isOtpPending && !_isOtpSent)
                                     Container(
                                       height: 50,
                                       margin: const EdgeInsets.only(bottom: 50),
                                       decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [AppColors.primary, AppColors.primaryLight],
+                                        gradient: LinearGradient(
+                                          colors: _isRegistrationComplete
+                                              ? [Colors.grey.shade600, Colors.grey.shade700]
+                                              : [AppColors.primary, AppColors.primaryLight],
                                         ),
                                         borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
+                                        boxShadow: _isRegistrationComplete ? [] : [
                                           BoxShadow(
                                             color: AppColors.primary.withOpacity(0.3),
                                             blurRadius: 12,
@@ -2198,7 +2352,9 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                         ],
                                       ),
                                       child: ElevatedButton(
-                                        onPressed: provider.isLoading ? null : _registerMerchant,
+                                        onPressed: (provider.isLoading || _isSubmitting || _isRegistrationComplete)
+                                            ? null
+                                            : _registerMerchant,
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.transparent,
                                           shadowColor: Colors.transparent,
@@ -2207,7 +2363,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                         ),
-                                        child: provider.isLoading
+                                        child: _isSubmitting || provider.isLoading
                                             ? const SizedBox(
                                           height: 24,
                                           width: 24,
@@ -2215,6 +2371,22 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                             color: Colors.white,
                                             strokeWidth: 2,
                                           ),
+                                        )
+                                            : _isRegistrationComplete
+                                            ? const Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.check_circle, color: Colors.white, size: 20),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Registration Complete',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
                                         )
                                             : const Text(
                                           'Register Merchant',
@@ -2226,8 +2398,6 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                         ),
                                       ),
                                     ),
-
-                                  // Verify OTP button for pending/sent
                                   if ((_isOtpPending || _isOtpSent) && !_isOtpVerified)
                                     Padding(
                                       padding: const EdgeInsets.only(bottom: 50, top: 30),

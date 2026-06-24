@@ -16,6 +16,7 @@ import '../screens/aeps/aeps_history_screen.dart';
 import '../screens/dmt1/dmt_home_screen.dart';
 import '../screens/account/Profile_screen.dart';
 import '../screens/account/supportPage_screen.dart';
+import '../screens/history/history_dashboard_screen.dart';
 import '../services/AEPS/api_service.dart';
 import '../screens/aeps/aeps_wrapper_screen.dart';
 import '../providers/payout_provider.dart';
@@ -274,7 +275,8 @@ Navigator.push(
                   ),
                   const ServicesPage(),
                   // const HistoryPage(),
-                  AepsHistoryScreen(),
+                  // AepsHistoryScreen(),
+                  HistoryDashboardScreen(),
                   ProfilePage(onLogout: _logout),
                 ],
               ),

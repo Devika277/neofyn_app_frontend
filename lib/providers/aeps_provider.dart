@@ -585,14 +585,14 @@ class AepsProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> sendOtp(String merchantId, String mobileNo) async {
+  Future<bool> sendOtp(String merchantId, String mobileNo, {String? pipe}) async {
     _isLoading = true;
     try {
       final response = await _aepsService.sendOTP(
         aeps.OtpRequest(
           merchantId: merchantId,
           merchantRefId: 'OTP_${DateTime.now().millisecondsSinceEpoch}',
-          pipe: _pipe,
+          pipe: pipe ?? _pipe ?? '1',
         ),
       );
       return response.status == '000';
@@ -609,6 +609,7 @@ class AepsProvider extends ChangeNotifier {
       String merchantId,
       String otp,
       String merchantRefId,
+      {String? pipe}
       ) async {
     _isLoading = true;
     _errorMessage = null;
@@ -619,7 +620,7 @@ class AepsProvider extends ChangeNotifier {
           merchantId: merchantId,
           merchantRefId: merchantRefId,
           otp: otp,
-          pipe: _pipe,
+          pipe: pipe ?? _pipe ?? '1',
         ),
       );
       return response.status == '000';

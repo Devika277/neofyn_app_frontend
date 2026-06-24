@@ -19,7 +19,7 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
   bool _loading = true;
   bool _isPolling = true;
   int _attempts = 0;
-  static const int _maxAttempts = 20;
+  static const int _maxAttempts = 3;
 
   // ─── Theme Colors ─────────────────────────────────────
   static const Color bg = Color(0xFF0A0E0A);

@@ -10,15 +10,18 @@ class PayoutProvider extends ChangeNotifier {
   List<dynamic> _purposes = [];
   List<dynamic> _states = [];
   List<dynamic> _transactions = [];
-
+  List<Map<String, dynamic>> _bankAccounts = []; // ✅ NEW: Bank accounts list
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
   List<dynamic> get banks => _banks;
   List<dynamic> get purposes => _purposes;
   List<dynamic> get states => _states;
   List<dynamic> get transactions => _transactions;
+  List<Map<String, dynamic>> get bankAccounts => _bankAccounts; // ✅ NEW
+
 
   final PayoutService _payoutService = PayoutService();
+
 
   Future<void> loadMasterData() async {
     _isLoading = true;
@@ -35,6 +38,8 @@ class PayoutProvider extends ChangeNotifier {
       if (stateResponse['success'] == true) {
         _states = stateResponse['data'] ?? [];
       }
+      // ✅ Load bank accounts when loading master data
+      await fetchBankAccounts();
     } catch (e) {
       _errorMessage = e.toString();
       print('❌ Load master data error: $e');
@@ -137,6 +142,58 @@ class PayoutProvider extends ChangeNotifier {
     } catch (e) {
       print('❌ Get transaction status error: $e');
       rethrow;
+    }
+  }
+  // ✅ NEW: Fetch bank accounts
+  Future<void> fetchBankAccounts() async {
+    try {
+      final response = await _payoutService.getBankAccounts();
+      if (response['success'] == true) {
+        _bankAccounts = List<Map<String, dynamic>>.from(response['data'] ?? []);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('❌ Error fetching bank accounts: $e');
+    }
+  }
+  // ✅ NEW: Set default/primary bank account
+  Future<bool> setDefaultBankAccount(String accountId) async {
+    _isLoading = true;
+    _errorMessage = '';
+    notifyListeners();
+
+    try {
+      final response = await _payoutService.setDefaultBankAccount(accountId);
+
+      if (response['success'] == true) {
+        // Refresh bank accounts list
+        await fetchBankAccounts();
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = response['message'] ?? 'Failed to set primary account';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      print('❌ Error setting default account: $e');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ✅ NEW: Get primary bank account
+  Map<String, dynamic>? getPrimaryBankAccount() {
+    try {
+      return _bankAccounts.firstWhere(
+            (account) => account['is_primary'] == true,
+      );
+    } catch (e) {
+      return _bankAccounts.isNotEmpty ? _bankAccounts.first : null;
     }
   }
 }

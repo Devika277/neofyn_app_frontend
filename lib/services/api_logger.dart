@@ -34,7 +34,21 @@ class LoggedHttpClient {
       rethrow;
     }
   }
+  static Future<http.Response> patch(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
+    _counter++;
+    final start = DateTime.now();
+    print('📤 REQUEST #$_counter | PATCH | $url');
+    if (body != null) print('📦 ${_mask(body.toString())}');
 
+    try {
+      final response = await http.patch(url, headers: headers, body: body, encoding: encoding);
+      _logDone(response, start);
+      return response;
+    } catch (e) {
+      print('💥 ERROR #$_counter | $url | $e');
+      rethrow;
+    }
+  }
   static Future<http.Response> put(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
     _counter++;
     final start = DateTime.now();
