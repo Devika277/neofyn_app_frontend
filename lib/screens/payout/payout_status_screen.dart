@@ -29,6 +29,8 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
   static const Color error = Color(0xFFEF4444);
   static const Color success = Color(0xFF2ECC71);
   static const Color warning = Color(0xFFF59E0B);
+  static const Color blue = Color(0xFF3B82F6);
+  static const Color amber = Color(0xFFF59E0B);
 
   @override
   void initState() {
@@ -56,18 +58,17 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
             _isPolling = false;
             break;
           }
-          // ✅ Stop polling if transaction is older than 2 minutes (not 5)
           final createdAt = data?['created_at'];
           if (createdAt != null) {
             final created = DateTime.tryParse(createdAt.toString());
             if (created != null && DateTime.now().difference(created).inMinutes > 2) {
               debugPrint('Status polling stopped: transaction older than 2 minutes');
               _isPolling = false;
-              // ✅ Set a message so user knows what happened
               if (mounted) {
                 setState(() {
                   _loading = false;
                   _transaction = {
+                    ...data,
                     'status': 'pending',
                     'message': 'Transaction is pending. Please check later in history.',
                   };
@@ -79,7 +80,7 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
         }
       } catch (e) {
         debugPrint('Status polling error: $e');
-        _isPolling = false;  // ✅ Stop polling on error too
+        _isPolling = false;
       }
       if (_isPolling && _attempts < _maxAttempts) {
         await Future.delayed(const Duration(seconds: 5));
@@ -88,10 +89,12 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
     if (mounted && _loading) {
       setState(() {
         _loading = false;
-        _transaction = {
-          'status': 'pending',
-          'message': 'Status check completed. Please check transaction history for updates.'
-        };
+        if (_transaction == null) {
+          _transaction = {
+            'status': 'pending',
+            'message': 'Status check completed. Please check transaction history for updates.',
+          };
+        }
       });
     }
   }
@@ -155,7 +158,6 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
     final statusIcon = isSuccess ? Icons.check_circle_rounded : (isFailed ? Icons.cancel_rounded : Icons.access_time_rounded);
     final statusTitle = isSuccess ? 'Transaction Successful' : (isFailed ? 'Transaction Failed' : 'Processing');
 
-    // ✅ Parse deduction breakdown values
     final amount = double.tryParse(g('amount')) ?? 0;
     final charge = double.tryParse(g('payout_charge')) ?? 0;
     final totalDeduction = double.tryParse(g('total_deduction')) ?? amount;
@@ -166,59 +168,85 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(children: [
-        // ── Status Header Card ──────────────────────────
+        // ── Status Header Card with compact breakdown ────
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(16), border: Border.all(color: statusColor.withOpacity(0.3))),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: statusColor.withOpacity(0.3)),
+          ),
           child: Column(children: [
-            Container(width: 72, height: 72, decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle, border: Border.all(color: statusColor.withOpacity(0.3), width: 2)),
-                child: Icon(statusIcon, size: 40, color: statusColor)),
-            const SizedBox(height: 16),
-            Text(statusTitle, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: statusColor)),
-            const SizedBox(height: 4),
-            Text(isProcessing ? 'Your payout is being processed...' : g('message'), style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12), textAlign: TextAlign.center),
-            if (isProcessing) ...[const SizedBox(height: 16), const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: warning))],
+            // Status icon & title
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
+              ),
+              child: Icon(statusIcon, size: 36, color: statusColor),
+            ),
+            const SizedBox(height: 12),
+            Text(statusTitle, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: statusColor)),
+            const SizedBox(height: 2),
+            Text(
+              isProcessing ? 'Your payout is being processed...' : g('message'),
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11),
+              textAlign: TextAlign.center,
+            ),
+            if (isProcessing) ...[
+              const SizedBox(height: 12),
+              const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: warning)),
+            ],
+
+            // ── Compact deduction summary (inside header) ──
+            if (amount > 0) ...[
+              const SizedBox(height: 16),
+              Container(height: 1, color: Colors.white.withOpacity(0.08)),
+              const SizedBox(height: 12),
+              Row(children: [
+                _compactChip('AEPS', amount, blue),
+                const SizedBox(width: 8),
+                const Icon(Icons.add_rounded, color: Colors.white24, size: 14),
+                const SizedBox(width: 8),
+                _compactChip('Fee', charge, amber),
+                const SizedBox(width: 8),
+                const Icon(Icons.drag_handle_rounded, color: Colors.white24, size: 14),
+                const SizedBox(width: 8),
+                _compactChip('Total', totalDeduction, primary),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                _compactBalance('AEPS Bal', aepsBalance, blue),
+                const Spacer(),
+                _compactBalance('Main Bal', mainBalance, amber),
+              ]),
+            ],
           ]),
         ),
-        const SizedBox(height: 20),
 
-        // ── View Receipt Button (Success only) ──────────
+        // ── Receipt Button (Success) ─────────────────────
         if (isSuccess) ...[
+          const SizedBox(height: 16),
           Container(
-            width: double.infinity, height: 48,
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [primary, primaryLight]), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: primary.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
+            width: double.infinity, height: 50,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [primary, primaryLight]),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: primary.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
+            ),
             child: ElevatedButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PayoutReceiptScreen(merchantRefId: widget.merchantRefId))),
               icon: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 20),
-              label: const Text('View & Download Receipt', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+              label: const Text('View Full Receipt', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             ),
           ),
-          const SizedBox(height: 20),
         ],
 
-        // ✅ DEDUCTION BREAKDOWN (Show on success or failed)
-        if (isSuccess || isFailed) ...[
-          _buildCard('Deduction Breakdown', [
-            _breakdownRow('Transfer Amount', 'Deducted from AEPS Wallet', amount, const Color(0xFF3B82F6), Icons.account_balance_wallet_rounded),
-            const SizedBox(height: 10),
-            _breakdownRow('Commission Charge', 'Deducted from Main Wallet', charge, const Color(0xFFF59E0B), Icons.wallet_rounded),
-            const SizedBox(height: 10),
-            Container(height: 1, color: Colors.white.withOpacity(0.1)),
-            const SizedBox(height: 10),
-            _breakdownRow('Total Deduction', 'Combined from both wallets', totalDeduction, primary, Icons.summarize_rounded, isTotal: true),
-          ]),
-          const SizedBox(height: 12),
-
-          // ✅ CURRENT BALANCES
-          _buildCard('Current Wallet Balances', [
-            _balanceRow('AEPS Wallet', aepsBalance, const Color(0xFF3B82F6), Icons.account_balance_wallet_rounded),
-            const SizedBox(height: 8),
-            _balanceRow('Main Wallet', mainBalance, const Color(0xFFF59E0B), Icons.wallet_rounded),
-          ]),
-          const SizedBox(height: 12),
-        ],
+        const SizedBox(height: 16),
 
         // ── Transaction Details Card ────────────────────
         _buildCard('Transaction Details', [
@@ -264,40 +292,25 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
     );
   }
 
-  // ✅ NEW: Breakdown row widget
-  Widget _breakdownRow(String label, String source, double amount, Color color, IconData icon, {bool isTotal = false}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(isTotal ? 0.3 : 0.1)),
-      ),
-      child: Row(children: [
-        Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: isTotal ? Colors.white : Colors.white70, fontSize: 13, fontWeight: isTotal ? FontWeight.w600 : FontWeight.w500)),
-          Text(source, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10)),
-        ])),
-        Text('₹${amount.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: isTotal ? 16 : 14, fontWeight: FontWeight.bold)),
+  // ── Compact chip for header ───────────────────────────
+  Widget _compactChip(String label, double value, Color color) {
+    return Expanded(
+      child: Column(children: [
+        Text('₹${value.toStringAsFixed(0)}', style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w500)),
       ]),
     );
   }
 
-  // ✅ NEW: Balance row widget
-  Widget _balanceRow(String label, double balance, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: color.withOpacity(0.05), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.15))),
-      child: Row(children: [
-        Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
-        const SizedBox(width: 10),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
-        const Spacer(),
-        Text('₹${balance.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
-      ]),
-    );
+  // ── Compact balance row ───────────────────────────────
+  Widget _compactBalance(String label, double value, Color color) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 4),
+      Text('$label: ', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10)),
+      Text('₹${value.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+    ]);
   }
 
   Widget _buildCard(String title, List<Widget> children) {
