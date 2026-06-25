@@ -19,7 +19,7 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
   bool _loading = true;
   bool _isPolling = true;
   int _attempts = 0;
-  static const int _maxAttempts = 3;
+  static const int _maxAttempts = 2;
 
   // ─── Theme Colors ─────────────────────────────────────
   static const Color bg = Color(0xFF0A0E0A);
@@ -56,18 +56,42 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
             _isPolling = false;
             break;
           }
+          // ✅ Stop polling if transaction is older than 2 minutes (not 5)
+          final createdAt = data?['created_at'];
+          if (createdAt != null) {
+            final created = DateTime.tryParse(createdAt.toString());
+            if (created != null && DateTime.now().difference(created).inMinutes > 2) {
+              debugPrint('Status polling stopped: transaction older than 2 minutes');
+              _isPolling = false;
+              // ✅ Set a message so user knows what happened
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                  _transaction = {
+                    'status': 'pending',
+                    'message': 'Transaction is pending. Please check later in history.',
+                  };
+                });
+              }
+              break;
+            }
+          }
         }
       } catch (e) {
         debugPrint('Status polling error: $e');
+        _isPolling = false;  // ✅ Stop polling on error too
       }
       if (_isPolling && _attempts < _maxAttempts) {
-        await Future.delayed(const Duration(seconds: 3));
+        await Future.delayed(const Duration(seconds: 5));
       }
     }
-    if (mounted && _attempts >= _maxAttempts && _loading) {
+    if (mounted && _loading) {
       setState(() {
         _loading = false;
-        _transaction = {'status': 'pending', 'message': 'Taking longer than expected. Please check later.'};
+        _transaction = {
+          'status': 'pending',
+          'message': 'Status check completed. Please check transaction history for updates.'
+        };
       });
     }
   }
@@ -131,6 +155,13 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
     final statusIcon = isSuccess ? Icons.check_circle_rounded : (isFailed ? Icons.cancel_rounded : Icons.access_time_rounded);
     final statusTitle = isSuccess ? 'Transaction Successful' : (isFailed ? 'Transaction Failed' : 'Processing');
 
+    // ✅ Parse deduction breakdown values
+    final amount = double.tryParse(g('amount')) ?? 0;
+    final charge = double.tryParse(g('payout_charge')) ?? 0;
+    final totalDeduction = double.tryParse(g('total_deduction')) ?? amount;
+    final aepsBalance = double.tryParse(g('aeps_balance')) ?? 0;
+    final mainBalance = double.tryParse(g('main_balance')) ?? 0;
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
@@ -167,11 +198,34 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
           const SizedBox(height: 20),
         ],
 
+        // ✅ DEDUCTION BREAKDOWN (Show on success or failed)
+        if (isSuccess || isFailed) ...[
+          _buildCard('Deduction Breakdown', [
+            _breakdownRow('Transfer Amount', 'Deducted from AEPS Wallet', amount, const Color(0xFF3B82F6), Icons.account_balance_wallet_rounded),
+            const SizedBox(height: 10),
+            _breakdownRow('Commission Charge', 'Deducted from Main Wallet', charge, const Color(0xFFF59E0B), Icons.wallet_rounded),
+            const SizedBox(height: 10),
+            Container(height: 1, color: Colors.white.withOpacity(0.1)),
+            const SizedBox(height: 10),
+            _breakdownRow('Total Deduction', 'Combined from both wallets', totalDeduction, primary, Icons.summarize_rounded, isTotal: true),
+          ]),
+          const SizedBox(height: 12),
+
+          // ✅ CURRENT BALANCES
+          _buildCard('Current Wallet Balances', [
+            _balanceRow('AEPS Wallet', aepsBalance, const Color(0xFF3B82F6), Icons.account_balance_wallet_rounded),
+            const SizedBox(height: 8),
+            _balanceRow('Main Wallet', mainBalance, const Color(0xFFF59E0B), Icons.wallet_rounded),
+          ]),
+          const SizedBox(height: 12),
+        ],
+
         // ── Transaction Details Card ────────────────────
         _buildCard('Transaction Details', [
           _row('Transaction ID', g('id')),
           _row('Reference ID', g('merchantrefid')),
-          _row('Amount', '₹${g('amount')}'),
+          _row('Amount', '₹${amount.toStringAsFixed(2)}'),
+          if (charge > 0) _row('Commission', '₹${charge.toStringAsFixed(2)}'),
           _row('Payment Mode', g('paymentmode')),
           _row('Status', g('status').toUpperCase(), valueColor: statusColor),
           _row('Provider Ref ID', g('providerrefid')),
@@ -206,6 +260,42 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
           style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: BorderSide(color: Colors.white.withOpacity(0.2)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
         ),
         const SizedBox(height: 16),
+      ]),
+    );
+  }
+
+  // ✅ NEW: Breakdown row widget
+  Widget _breakdownRow(String label, String source, double amount, Color color, IconData icon, {bool isTotal = false}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(isTotal ? 0.3 : 0.1)),
+      ),
+      child: Row(children: [
+        Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(color: isTotal ? Colors.white : Colors.white70, fontSize: 13, fontWeight: isTotal ? FontWeight.w600 : FontWeight.w500)),
+          Text(source, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10)),
+        ])),
+        Text('₹${amount.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: isTotal ? 16 : 14, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
+  // ✅ NEW: Balance row widget
+  Widget _balanceRow(String label, double balance, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: color.withOpacity(0.05), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.15))),
+      child: Row(children: [
+        Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
+        const Spacer(),
+        Text('₹${balance.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
       ]),
     );
   }

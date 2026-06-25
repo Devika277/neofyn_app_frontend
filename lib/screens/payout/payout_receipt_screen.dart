@@ -8,7 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../services/Payout/payout_service.dart';
+import '../../services/payout/payout_service.dart';
 
 class PayoutReceiptScreen extends StatefulWidget {
   final String merchantRefId;
@@ -28,6 +28,9 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
   static const Color primary = Color(0xFF008169);
   static const Color primaryLight = Color(0xFF1AA88A);
   static const Color accent = Color(0xFFE67E22);
+  static const Color blue = Color(0xFF3B82F6);
+  static const Color amber = Color(0xFFF59E0B);
+  static const Color success = Color(0xFF2ECC71);
 
   @override
   void initState() {
@@ -50,52 +53,117 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
     }
   }
 
+  String g(String key, {String d = ''}) {
+    if (_transaction == null) return d;
+    return _transaction![key]?.toString() ?? d;
+  }
+
   Future<Uint8List> _generatePdf() async {
     final pdf = pw.Document();
     final tx = _transaction!;
-    final mobileFormat = PdfPageFormat(250 * PdfPageFormat.point, 550 * PdfPageFormat.point, marginAll: 10 * PdfPageFormat.point);
+    final amount = double.tryParse(g('amount')) ?? 0;
+    final charge = double.tryParse(g('payout_charge')) ?? 0;
+    final totalDeduction = double.tryParse(g('total_deduction')) ?? amount;
+    final aepsBalance = double.tryParse(g('aeps_balance')) ?? 0;
+    final mainBalance = double.tryParse(g('main_balance')) ?? 0;
+
+    final mobileFormat = PdfPageFormat(280 * PdfPageFormat.point, 650 * PdfPageFormat.point, marginAll: 12 * PdfPageFormat.point);
 
     pdf.addPage(pw.Page(pageFormat: mobileFormat, build: (ctx) {
       return pw.Container(
         padding: const pw.EdgeInsets.all(10),
-        decoration: pw.BoxDecoration(border: pw.Border.all(style: pw.BorderStyle.dashed, width: 1), borderRadius: pw.BorderRadius.circular(8)),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(style: pw.BorderStyle.solid, width: 1, color: PdfColors.grey300),
+          borderRadius: pw.BorderRadius.circular(8),
+        ),
         child: pw.Column(children: [
+          // Header
+          pw.Center(child: pw.Text('PAYOUT RECEIPT', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.green))),
+          pw.SizedBox(height: 8),
+          pw.Center(child: pw.Text('₹ ${amount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold, color: PdfColors.orange))),
+          pw.Center(child: pw.Text('via ${g('paymentmode')}', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700))),
+          pw.SizedBox(height: 12),
+
+          // ✅ Deduction Breakdown
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Column(children: [
+              pw.Text('DEDUCTION BREAKDOWN', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.SizedBox(height: 6),
+              _pdfBreakdownRow('Transfer Amount (AEPS Wallet)', '₹${amount.toStringAsFixed(2)}', PdfColors.blue),
+              _pdfBreakdownRow('Commission (Main Wallet)', '₹${charge.toStringAsFixed(2)}', PdfColors.orange),
+              pw.Divider(thickness: 0.5),
+              _pdfBreakdownRow('Total Deduction', '₹${totalDeduction.toStringAsFixed(2)}', PdfColors.green, bold: true),
+            ]),
+          ),
           pw.SizedBox(height: 10),
-          pw.Text('₹ ${tx['amount']}', style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
-          pw.Text('Payout Transfer', style:  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 15),
-          pw.Align(alignment: pw.Alignment.centerLeft, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('TRANSACTION ID', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-            pw.Text('${tx['txnId'] ?? 'N/A'}', style:  pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-            pw.Divider(thickness: 0.5),
-          ])),
-          _pdfRow('Number', tx['beneficiaryAccountNumber'] ?? 'N/A'),
-          _pdfRow('Provider Id', tx['txnId'] ?? '0'),
-          _pdfRow('Account Holder', tx['beneficiaryName'] ?? 'N/A'),
-          _pdfRow('Product', 'payout'),
-          _pdfRow('Bank', 'BANK: ${tx['beneficiaryAccountNumber']} IFSC: ${tx['beneficiaryIFSC']}'),
-          _pdfRow('Date Time', _formatDate(tx['createdAt'])),
+
+          // ✅ Current Balances
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Column(children: [
+              pw.Text('CURRENT BALANCES', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.SizedBox(height: 6),
+              _pdfBreakdownRow('AEPS Wallet', '₹${aepsBalance.toStringAsFixed(2)}', PdfColors.blue),
+              _pdfBreakdownRow('Main Wallet', '₹${mainBalance.toStringAsFixed(2)}', PdfColors.orange),
+            ]),
+          ),
+          pw.SizedBox(height: 12),
+
+          // Transaction Details
+          pw.Text('TRANSACTION DETAILS', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+          pw.SizedBox(height: 4),
+          _pdfRow('Transaction ID', g('id')),
+          _pdfRow('Reference ID', g('merchantrefid')),
+          _pdfRow('Provider Ref ID', g('providerrefid')),
+          _pdfRow('Bank Ref No', g('bankrefno')),
+          _pdfRow('Payment Mode', g('paymentmode')),
+          _pdfRow('Date & Time', _formatDate(tx['created_at'])),
+          pw.SizedBox(height: 8),
+
+          // Beneficiary Details
+          pw.Text('BENEFICIARY DETAILS', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+          pw.SizedBox(height: 4),
+          _pdfRow('Account Holder', g('beneficiaryname')),
+          _pdfRow('Account Number', g('beneficiaryaccountnumber')),
+          _pdfRow('IFSC Code', g('beneficiaryifsc')),
+
           pw.SizedBox(height: 20),
-          pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-          pw.Align(alignment: pw.Alignment.centerLeft, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text(tx['remitterName']?.toUpperCase() ?? 'SHOP NAME', style:  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-            pw.Text(tx['remitterPhone'] ?? '', style: const pw.TextStyle(fontSize: 10)),
-            pw.Text(tx['beneficiaryLocation'] ?? 'Address not available', style: const pw.TextStyle(fontSize: 9)),
-          ])),
-          pw.Spacer(),
-          pw.Container(alignment: pw.Alignment.center, child: pw.Text('NEOFYN FIN TECH', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.orange))),
+          pw.Center(child: pw.Text('NEOFYN FIN TECH', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green))),
+          pw.Center(child: pw.Text('Thank you for using our service', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500))),
         ]),
       );
     }));
     return pdf.save();
   }
 
+  pw.Widget _pdfBreakdownRow(String label, String value, PdfColor color, {bool bold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Expanded(child: pw.Text(label, style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700))),
+          pw.Text(value, style: pw.TextStyle(fontSize: 9, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
+        ],
+      ),
+    );
+  }
+
   pw.Widget _pdfRow(String label, String value) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
       child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-        pw.Text(label, style: pw.TextStyle(color: PdfColors.grey700)),
-        pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+        pw.Text(value.isNotEmpty ? value : 'N/A', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
       ]),
     );
   }
@@ -132,8 +200,6 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
     await Printing.sharePdf(bytes: bytes, filename: 'Neofyn_Receipt_${widget.merchantRefId}.pdf');
   }
 
-  static const success = Color(0xFF2ECC71);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,7 +217,12 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
   }
 
   Widget _buildReceiptUI() {
-    final tx = _transaction!;
+    final amount = double.tryParse(g('amount')) ?? 0;
+    final charge = double.tryParse(g('payout_charge')) ?? 0;
+    final totalDeduction = double.tryParse(g('total_deduction')) ?? amount;
+    final aepsBalance = double.tryParse(g('aeps_balance')) ?? 0;
+    final mainBalance = double.tryParse(g('main_balance')) ?? 0;
+
     return Center(child: SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
@@ -159,38 +230,169 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.06))),
         child: Column(children: [
+          // Success Icon
           Container(width: 64, height: 64, decoration: BoxDecoration(color: accent.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.check_circle_rounded, size: 40, color: accent)),
           const SizedBox(height: 12),
-          Text('₹ ${tx['amount']}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: accent)),
-          const Text('Payout Transfer', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white)),
+          Text('₹ ${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: accent)),
+          Text('via ${g('paymentmode')}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white)),
           const SizedBox(height: 24),
+
+          // ✅ DEDUCTION BREAKDOWN CARD
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [
+                  Icon(Icons.receipt_long_rounded, color: primary, size: 16),
+                  SizedBox(width: 6),
+                  Text('Deduction Breakdown', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                ]),
+                const SizedBox(height: 14),
+                // Transfer Amount from AEPS
+                _breakdownTile(
+                  'Transfer Amount',
+                  'Deducted from AEPS Wallet',
+                  amount,
+                  blue,
+                  Icons.account_balance_wallet_rounded,
+                ),
+                const SizedBox(height: 10),
+                // Commission from Main Wallet
+                _breakdownTile(
+                  'Commission Charge',
+                  'Deducted from Main Wallet',
+                  charge,
+                  amber,
+                  Icons.wallet_rounded,
+                ),
+                const SizedBox(height: 10),
+                Container(height: 1, color: Colors.white.withOpacity(0.1)),
+                const SizedBox(height: 10),
+                // Total
+                _breakdownTile(
+                  'Total Deduction',
+                  'Combined from both wallets',
+                  totalDeduction,
+                  primary,
+                  Icons.summarize_rounded,
+                  isTotal: true,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // ✅ CURRENT BALANCES CARD
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [
+                  Icon(Icons.account_balance_rounded, color: primary, size: 16),
+                  SizedBox(width: 6),
+                  Text('Current Balances', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                ]),
+                const SizedBox(height: 14),
+                _balanceTile('AEPS Wallet', aepsBalance, blue, Icons.account_balance_wallet_rounded),
+                const SizedBox(height: 8),
+                _balanceTile('Main Wallet', mainBalance, amber, Icons.wallet_rounded),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Transaction ID
           Align(alignment: Alignment.centerLeft, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('TRANSACTION ID', style: TextStyle(color: Colors.white38, fontSize: 11)),
             const SizedBox(height: 2),
-            Text(tx['txnId'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+            Text(g('id'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
           ])),
           const SizedBox(height: 12),
           divider(),
           const SizedBox(height: 12),
-          _r('Number', tx['beneficiaryAccountNumber'] ?? 'N/A'),
-          _r('Provider Id', tx['txnId'] ?? '0'),
-          _r('Account Holder', tx['beneficiaryName'] ?? 'N/A'),
-          _r('Product', 'payout'),
-          _r('Bank', 'BANK: ${tx['beneficiaryAccountNumber']}\nIFSC: ${tx['beneficiaryIFSC']}'),
-          _r('Date Time', _formatDate(tx['createdAt'])),
+
+          // Details
+          _r('Reference ID', g('merchantrefid')),
+          _r('Provider Ref ID', g('providerrefid')),
+          _r('Bank Ref No', g('bankrefno')),
+          _r('Payment Mode', g('paymentmode')),
+          _r('Account Holder', g('beneficiaryname')),
+          _r('Account Number', g('beneficiaryaccountnumber')),
+          _r('IFSC Code', g('beneficiaryifsc')),
+          _r('Date & Time', _formatDate(_transaction!['created_at'])),
           const SizedBox(height: 20),
           divider(),
           const SizedBox(height: 16),
-          Align(alignment: Alignment.centerLeft, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tx['remitterName']?.toUpperCase() ?? 'SHOP NAME', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
-            Text(tx['remitterPhone'] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            Text(tx['beneficiaryLocation'] ?? '', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-          ])),
-          const SizedBox(height: 24),
           const Text('NEOFYN FIN TECH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: accent)),
+          const SizedBox(height: 4),
+          const Text('Thank you for using our service', style: TextStyle(color: Colors.white38, fontSize: 10)),
         ]),
       ),
     ));
+  }
+
+  // ✅ Breakdown tile widget
+  Widget _breakdownTile(String title, String subtitle, double amount, Color color, IconData icon, {bool isTotal = false}) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(isTotal ? 0.3 : 0.1)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: TextStyle(color: isTotal ? Colors.white : Colors.white70, fontSize: 12, fontWeight: isTotal ? FontWeight.w600 : FontWeight.w500)),
+            Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 9)),
+          ]),
+        ),
+        Text('₹${amount.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: isTotal ? 15 : 13, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
+  // ✅ Balance tile widget
+  Widget _balanceTile(String label, double balance, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+        const Spacer(),
+        Text('₹${balance.toStringAsFixed(2)}', style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
+      ]),
+    );
   }
 
   Widget divider() => Container(height: 1, color: Colors.white.withOpacity(0.06));
@@ -200,7 +402,7 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(width: 90, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-        Expanded(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
+        Expanded(child: Text(value.isNotEmpty ? value : 'N/A', textAlign: TextAlign.right, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
       ]),
     );
   }

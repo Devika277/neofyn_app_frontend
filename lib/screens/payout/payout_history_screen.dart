@@ -93,6 +93,7 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
   Widget _buildTransactionCard(Map<String, dynamic> txn) {
     final status = txn['status']?.toString() ?? 'unknown';
     final amount = double.tryParse(txn['amount']?.toString() ?? '0') ?? 0;
+    final charge = double.tryParse(txn['payout_charge']?.toString() ?? '0') ?? 0;
     final date = txn['created_at']?.toString().substring(0, 10) ?? '';
     final time = txn['created_at']?.toString().substring(11, 19) ?? '';
     final refId = txn['merchant_ref_id']?.toString() ?? '';
@@ -149,6 +150,12 @@ class _PayoutHistoryScreenState extends State<PayoutHistoryScreen> {
                         '₹${amount.toStringAsFixed(2)}',
                         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                       ),
+                      // ✅ Show commission if exists
+                      if (charge > 0)
+                        Text(
+                          'Commission: ₹${charge.toStringAsFixed(2)}',
+                          style: TextStyle(color: const Color(0xFFF59E0B).withOpacity(0.6), fontSize: 10),
+                        ),
                       const SizedBox(height: 2),
                       Text(
                         'via $mode',

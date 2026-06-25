@@ -1272,6 +1272,10 @@ class _TransferPageState extends State<_TransferPage> {
       });
 
       if (response['success'] == true) {
+        // ✅ Refresh wallet balances immediately
+        if (mounted) {
+          context.read<WalletProvider>().fetchAllWalletData();
+        }
         // ✅ GET AND SAVE LAST TRANSACTION REFERENCE
         // final refId =
         //     response['merchantRefId'] ??
@@ -1393,6 +1397,7 @@ class _TransferPageState extends State<_TransferPage> {
               ),
             ),
             const SizedBox(height: 12),
+            // AEPS Wallet Balance
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -1402,27 +1407,76 @@ class _TransferPageState extends State<_TransferPage> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.wallet_rounded, color: _primary, size: 16),
+                  const Icon(Icons.account_balance_wallet_rounded, color: _primary, size: 16),
                   const SizedBox(width: 6),
-                  const Text(
-                    'Balance',
-                    style: TextStyle(color: _textSec, fontSize: 12),
-                  ),
+                  const Text('AEPS Balance', style: TextStyle(color: _textSec, fontSize: 12)),
                   const Spacer(),
                   Text(
                     '₹${widget.aepsBalance.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: _primary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: _primary, fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 8),
+            // ✅ Main Wallet Balance (for commission)
+            Consumer<WalletProvider>(
+              builder: (context, wp, _) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.15)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wallet_rounded, color: Color(0xFFF59E0B), size: 16),
+                      const SizedBox(width: 6),
+                      const Text('Main Wallet (for charges)', style: TextStyle(color: _textSec, fontSize: 12)),
+                      const Spacer(),
+                      Text(
+                        '₹${(wp.mainWallet?.balance ?? 0).toStringAsFixed(2)}',
+                        style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 16),
-            Row(children: [_modeChip('NEFT', Icons.account_balance_rounded)]),
-            const SizedBox(height: 16),
+            // Row(children: [_modeChip('NEFT', Icons.account_balance_rounded)]),
+            // const SizedBox(height: 12),
+            // Container(
+            //   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            //   decoration: BoxDecoration(
+            //     color: _primary.withOpacity(0.06),
+            //     borderRadius: BorderRadius.circular(10),
+            //     border: Border.all(color: _primary.withOpacity(0.15)),
+            //   ),
+            //   child: Row(
+            //     children: [
+            //       const Icon(Icons.wallet_rounded, color: _primary, size: 16),
+            //       const SizedBox(width: 6),
+            //       const Text(
+            //         'Balance',
+            //         style: TextStyle(color: _textSec, fontSize: 12),
+            //       ),
+            //       const Spacer(),
+            //       Text(
+            //         '₹${widget.aepsBalance.toStringAsFixed(2)}',
+            //         style: const TextStyle(
+            //           color: _primary,
+            //           fontSize: 14,
+            //           fontWeight: FontWeight.w600,
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
+            // const SizedBox(height: 16),
+            // Row(children: [_modeChip('NEFT', Icons.account_balance_rounded)]),
+            // const SizedBox(height: 16),
             _input(
               'Amount',
               _amountCtrl,
