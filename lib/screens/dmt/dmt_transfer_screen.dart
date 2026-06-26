@@ -13,29 +13,18 @@ import 'dmt_status_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AppColors {
-  // Primary palette - New Green Theme
   static const Color primary = Color(0xFF008169);
   static const Color primaryDark = Color(0xFF005F4E);
   static const Color primaryLight = Color(0xFF1AA88A);
-
-  // Backgrounds
-  static const Color background = Color(0xFFF6FAF9);
-  static const Color cardColor = Colors.white;
-  static const Color surface = Color(0xFFFFFFFF);
-
-  // Text colors
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xFF6B7280);
-  static const Color textHint = Color(0xFF9CA3AF);
+  static const Color darkBg = Color(0xFF0A0E0A);
+  static const Color darkSurface = Color(0xFF1A1F1A);
   static const Color textWhite = Color(0xFFFFFFFF);
-
-  // Status
+  static const Color textDarkSecondary = Color(0xFF9CA3AF);
+  static const Color textDarkHint = Color(0xFF6B7280);
   static const Color success = Color(0xFF10B981);
   static const Color error = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
-
-  // Border & Effects
-  static const Color borderLight = Color(0xFFE5E7EB);
+  static const Color borderDark = Color(0xFF2A342A);
   static const Color borderFocus = Color(0xFF008169);
 }
 
@@ -63,6 +52,7 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
   final _remarkController = TextEditingController();
 
   int? _selectedBeneficiaryId;
+  String? _selectedBeneficiaryName;
   String _transferMode = 'IMPS';
   bool _isLoading = false;
   bool _isTpinVisible = false;
@@ -81,9 +71,7 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
     return amount + _surcharge;
   }
 
-  double get _maxAmount {
-    return widget.productType == 'lite' ? 5000 : 50000;
-  }
+  double get _maxAmount => widget.productType == 'lite' ? 5000 : 50000;
 
   @override
   void dispose() {
@@ -91,6 +79,64 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
     _tpinController.dispose();
     _remarkController.dispose();
     super.dispose();
+  }
+
+  void _showBeneficiaryPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.darkSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.8,
+        expand: false,
+        builder: (context, scrollController) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Text('Select Beneficiary', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textWhite)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  itemCount: widget.beneficiaries.length,
+                  separatorBuilder: (_, __) => Divider(color: Colors.white.withOpacity(0.05)),
+                  itemBuilder: (context, index) {
+                    final b = widget.beneficiaries[index];
+                    final isSelected = _selectedBeneficiaryId == b.id;
+                    final initials = b.accountHolderName.split(' ').take(2).map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').join();
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      leading: Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(color: isSelected ? AppColors.primary.withOpacity(0.2) : Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
+                        child: Center(child: Text(initials, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: isSelected ? AppColors.primaryLight : AppColors.textDarkSecondary))),
+                      ),
+                      title: Text(b.accountHolderName, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textWhite)),
+                      subtitle: Text('${b.bankName} • ${_maskAccountNumber(b.accountNumber)}', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textDarkSecondary)),
+                      trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primary, size: 22) : null,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _selectedBeneficiaryId = b.id;
+                          _selectedBeneficiaryName = b.accountHolderName;
+                          _errorMessage = null;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _transfer() async {
@@ -108,7 +154,17 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
       _errorMessage = null;
     });
 
+    // ✅ Get selected beneficiary FIRST
+    final selectedBeneficiary = widget.beneficiaries.firstWhere(
+          (b) => b.id == _selectedBeneficiaryId,
+    );
+
     try {
+      // ✅ Get state code from REMITTER (not beneficiary)
+      final remitterData = await _apiService.getRemitterDetailsRaw(widget.remitterId);
+      final stateCode = remitterData['state_code']?.toString() ?? '';
+      print('🔍 Using State Code from Remitter: $stateCode');
+
       final request = DMTTransferRequest(
         remitterId: widget.remitterId,
         beneficiaryId: _selectedBeneficiaryId!,
@@ -118,27 +174,43 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
         remark: _remarkController.text.trim().isEmpty
             ? null
             : _remarkController.text.trim(),
+        stateCode: stateCode, // ✅ Now using state from remitter
       );
+
+      print('📡 Transfer Request: ${request.toJson()}');
 
       // Call API
       final response = await _apiService.createTransfer(request);
+
+      print('📡 Transfer Response: $response');
 
       // Get user details for status page
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId') ?? '';
       final userName = prefs.getString('name') ?? 'User';
 
-      // Get remitter details
-      final remitter = await _apiService.getRemitterDetails(widget.remitterId);
-
-      // Get selected beneficiary
-      final selectedBeneficiary = widget.beneficiaries.firstWhere(
-            (b) => b.id == _selectedBeneficiaryId,
-      );
+      // Get remitter details for status page
+      Remitter remitter;
+      try {
+        remitter = await _apiService.getRemitterDetails(widget.remitterId);
+      } catch (e) {
+        print('⚠️ Could not fetch remitter details: $e');
+        remitter = Remitter(
+          id: widget.remitterId,
+          mobile: '',
+          firstName: '',
+          lastName: '',
+          monthlyLimit: 0,
+          monthlyUsed: 0,
+          productType: widget.productType,
+          isActive: true,
+          kycStatus: 'basic',
+        );
+      }
 
       // Prepare transfer details for status page
       final transferDetails = {
-        'transactionId': response['transactionId'],
+        'transactionId': response['transactionId'] ?? 'N/A',
         'amount': double.parse(_amountController.text),
         'transferMode': _transferMode,
         'remitterName': '${remitter.firstName} ${remitter.lastName}',
@@ -160,7 +232,6 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
 
       HapticFeedback.heavyImpact();
 
-      // Navigate to status screen
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -168,9 +239,9 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
             builder: (context) => DMTStatusScreen(
               transferResult: {
                 'success': true,
-                'transactionId': response['transactionId'],
+                'transactionId': response['transactionId'] ?? 'N/A',
                 'utrNumber': response['utrNumber'],
-                'providerStatus': response['providerStatus'],
+                'providerStatus': response['providerStatus'] ?? 'N/A',
                 'message': 'Transfer completed successfully',
                 'error': null,
               },
@@ -182,15 +253,26 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
 
     } catch (e) {
       String errorMessage = e.toString().replaceFirst('Exception: ', '');
-
+      print('❌ Transfer error: $errorMessage');
       HapticFeedback.heavyImpact();
 
-      // Get remitter details for status page (even on error)
       try {
-        final remitter = await _apiService.getRemitterDetails(widget.remitterId);
-        final selectedBeneficiary = widget.beneficiaries.firstWhere(
-              (b) => b.id == _selectedBeneficiaryId,
-        );
+        Remitter remitter;
+        try {
+          remitter = await _apiService.getRemitterDetails(widget.remitterId);
+        } catch (e2) {
+          remitter = Remitter(
+            id: widget.remitterId,
+            mobile: '',
+            firstName: '',
+            lastName: '',
+            monthlyLimit: 0,
+            monthlyUsed: 0,
+            productType: widget.productType,
+            isActive: true,
+            kycStatus: 'basic',
+          );
+        }
 
         final transferDetails = {
           'transactionId': 'N/A',
@@ -211,7 +293,6 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
               : _remarkController.text.trim(),
         };
 
-        // Navigate to status screen with error
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -228,7 +309,7 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
           );
         }
       } catch (e2) {
-        // If we can't get details, show error on current screen
+        print('❌ Error navigating to status: $e2');
         if (mounted) {
           setState(() {
             _errorMessage = errorMessage;
@@ -247,408 +328,142 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
 
   String _maskAccountNumber(String accountNumber) {
     if (accountNumber.length <= 4) return accountNumber;
-    final lastFour = accountNumber.substring(accountNumber.length - 4);
-    return '••••$lastFour';
+    return '••••${accountNumber.substring(accountNumber.length - 4)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedBeneficiary = _selectedBeneficiaryId != null
-        ? widget.beneficiaries.firstWhere((b) => b.id == _selectedBeneficiaryId)
-        : null;
-
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.darkBg,
       appBar: AppBar(
-        title: Text(
-          'Transfer Money',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-            color: AppColors.textWhite,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: AppColors.primary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left, color: AppColors.textWhite),
-          onPressed: () => Navigator.pop(context),
-        ),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(24),
-          ),
-        ),
+        title: Text('Transfer Money', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18, color: AppColors.textWhite)),
+        centerTitle: true, backgroundColor: Colors.transparent, elevation: 0,
+        leading: IconButton(icon: const Icon(Iconsax.arrow_left, color: AppColors.textWhite), onPressed: () => Navigator.pop(context)),
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Product Type Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.15),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      widget.productType == 'lite' ? Iconsax.wallet_3 : Iconsax.crown,
-                      size: 14,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${widget.productType.toUpperCase()} Plan',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Max: ₹${_maxAmount.toStringAsFixed(0)}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Plan Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.primary.withOpacity(0.2))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(widget.productType == 'lite' ? Iconsax.wallet_3 : Iconsax.crown, size: 12, color: AppColors.primaryLight),
+                const SizedBox(width: 4),
+                Text('${widget.productType.toUpperCase()} • Max ₹${_maxAmount.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primaryLight)),
+              ]),
+            ),
+            const SizedBox(height: 16),
 
-              const SizedBox(height: 24),
-
-              // Beneficiary Selection
-              _buildSectionHeader(
-                icon: Iconsax.people,
-                title: 'Select Beneficiary',
-                iconColor: AppColors.primary,
-              ),
-              const SizedBox(height: 12),
-              _buildBeneficiaryDropdown(selectedBeneficiary),
-
-              if (_selectedBeneficiaryId != null) ...[
-                const SizedBox(height: 12),
-                _buildSelectedBeneficiaryCard(selectedBeneficiary!),
-              ],
-
-              const SizedBox(height: 24),
-
-              // Transfer Amount
-              _buildSectionHeader(
-                icon: Iconsax.money_send,
-                title: 'Enter Amount',
-                iconColor: AppColors.primary,
-              ),
-              const SizedBox(height: 12),
-              _buildAmountField(),
-
-              // Surcharge details for DMT Lite
-              if (widget.productType == 'lite' && _amountController.text.isNotEmpty && (_surcharge > 0 || true)) ...[
-                const SizedBox(height: 12),
-                _buildSurchargeCard(),
-              ],
-
-              const SizedBox(height: 24),
-
-              // TPIN
-              _buildSectionHeader(
-                icon: Iconsax.lock,
-                title: 'Security PIN',
-                iconColor: const Color(0xFF6366F1),
-              ),
-              const SizedBox(height: 12),
-              _buildTpinField(),
-
-              const SizedBox(height: 20),
-
-              // Transfer Mode
-              _buildSectionHeader(
-                icon: Iconsax.flash_circle,
-                title: 'Transfer Mode',
-                iconColor: AppColors.warning,
-              ),
-              const SizedBox(height: 12),
-              _buildTransferModeSelector(),
-
-              const SizedBox(height: 20),
-
-              // Remark
-              _buildSectionHeader(
-                icon: Iconsax.message_text,
-                title: 'Remark (Optional)',
-                iconColor: AppColors.textSecondary,
-              ),
-              const SizedBox(height: 12),
-              _buildRemarkField(),
-
-              const SizedBox(height: 24),
-
-              // Error Message
-              if (_errorMessage != null) ...[
-                _buildErrorCard(),
-                const SizedBox(height: 16),
-              ],
-
-              // Transfer Summary
-              if (_amountController.text.isNotEmpty && _selectedBeneficiaryId != null) ...[
-                _buildTransferSummary(),
-                const SizedBox(height: 20),
-              ],
-
-              // Transfer Button
-              _buildTransferButton(),
-
-              const SizedBox(height: 20),
+            // Beneficiary Selection
+            _buildSectionLabel('Select Beneficiary'),
+            const SizedBox(height: 6),
+            _buildBeneficiarySelector(),
+            if (_selectedBeneficiaryId != null) ...[
+              const SizedBox(height: 8),
+              _buildSelectedBeneficiaryInfo(),
             ],
-          ),
+            const SizedBox(height: 18),
+
+            // Amount
+            _buildSectionLabel('Enter Amount'),
+            const SizedBox(height: 6),
+            _buildAmountField(),
+            if (widget.productType == 'lite' && _amountController.text.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _buildSurchargeCard(),
+            ],
+            const SizedBox(height: 18),
+
+            // TPIN
+            _buildSectionLabel('Enter TPIN'),
+            const SizedBox(height: 6),
+            _buildTpinField(),
+            const SizedBox(height: 16),
+
+            // Transfer Mode
+            _buildSectionLabel('Transfer Mode'),
+            const SizedBox(height: 6),
+            _buildTransferModeSelector(),
+            const SizedBox(height: 16),
+
+            // Remark
+            _buildSectionLabel('Remark (Optional)'),
+            const SizedBox(height: 6),
+            _buildRemarkField(),
+            const SizedBox(height: 20),
+
+            // Error
+            if (_errorMessage != null) ...[
+              _buildErrorCard(),
+              const SizedBox(height: 12),
+            ],
+
+            // Summary
+            if (_amountController.text.isNotEmpty && _selectedBeneficiaryId != null) ...[
+              _buildTransferSummary(),
+              const SizedBox(height: 16),
+            ],
+
+            // Button
+            _buildTransferButton(),
+            const SizedBox(height: 16),
+          ]),
         ),
       ),
     );
   }
 
-  Widget _buildSectionHeader({
-    required IconData icon,
-    required String title,
-    required Color iconColor,
-  }) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 16, color: iconColor),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: GoogleFonts.poppins(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ],
-    );
+  Widget _buildSectionLabel(String label) {
+    return Text(label, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textDarkSecondary));
   }
 
-  Widget _buildBeneficiaryDropdown(Beneficiary? selectedBeneficiary) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _selectedBeneficiaryId,
-          hint: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Icon(
-                  Iconsax.user_add,
-                  size: 18,
-                  color: AppColors.textHint,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Select beneficiary',
-                  style: GoogleFonts.poppins(
-                    color: AppColors.textHint,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          isExpanded: true,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          icon: const Icon(Iconsax.arrow_down_1, color: AppColors.primary),
-          borderRadius: BorderRadius.circular(14),
-          dropdownColor: AppColors.cardColor,
-          items: widget.beneficiaries.map((beneficiary) {
-            final initials = beneficiary.accountHolderName
-                .split(' ')
-                .take(2)
-                .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
-                .join();
-
-            return DropdownMenuItem(
-              value: beneficiary.id,
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Center(
-                      child: Text(
-                        initials,
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          beneficiary.accountHolderName,
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          '${beneficiary.bankName} • ${_maskAccountNumber(beneficiary.accountNumber)}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (beneficiary.verified)
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Iconsax.verify,
-                        size: 14,
-                        color: AppColors.success,
-                      ),
-                    ),
-                ],
-              ),
-            );
-          }).toList(),
-          onChanged: (value) {
-            HapticFeedback.selectionClick();
-            setState(() {
-              _selectedBeneficiaryId = value;
-              _errorMessage = null;
-            });
-          },
+  Widget _buildBeneficiarySelector() {
+    return GestureDetector(
+      onTap: _showBeneficiaryPicker,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.darkSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _selectedBeneficiaryId != null ? AppColors.borderFocus : AppColors.borderDark, width: _selectedBeneficiaryId != null ? 1.5 : 1),
         ),
-      ),
-    );
-  }
-
-  Widget _buildSelectedBeneficiaryCard(Beneficiary beneficiary) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.primary.withOpacity(0.1),
-        ),
-      ),
-      child: Row(
-        children: [
+        child: Row(children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Iconsax.bank,
-              size: 18,
-              color: AppColors.primary,
-            ),
+            margin: const EdgeInsets.only(right: 10),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Iconsax.people, color: AppColors.primaryLight, size: 16),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  beneficiary.accountHolderName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${beneficiary.bankName} • ${_maskAccountNumber(beneficiary.accountNumber)}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'IFSC: ${beneficiary.ifscCode}',
-              style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: AppColors.success,
-              ),
-            ),
-          ),
-        ],
+          Expanded(child: Text(_selectedBeneficiaryName ?? 'Tap to select beneficiary', style: GoogleFonts.poppins(fontSize: 13, color: _selectedBeneficiaryName != null ? AppColors.textWhite : Colors.white38))),
+          Icon(Iconsax.arrow_down_1, color: _selectedBeneficiaryId != null ? AppColors.primaryLight : Colors.white38, size: 16),
+        ]),
       ),
+    );
+  }
+
+  Widget _buildSelectedBeneficiaryInfo() {
+    final b = widget.beneficiaries.firstWhere((x) => x.id == _selectedBeneficiaryId);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.primary.withOpacity(0.1))),
+      child: Row(children: [
+        const Icon(Iconsax.bank, size: 14, color: AppColors.primaryLight),
+        const SizedBox(width: 8),
+        Expanded(child: Text('${b.bankName} • ${_maskAccountNumber(b.accountNumber)} • IFSC: ${b.ifscCode}', style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkSecondary), overflow: TextOverflow.ellipsis)),
+      ]),
     );
   }
 
   Widget _buildAmountField() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderDark),
       ),
       child: TextFormField(
         controller: _amountController,
@@ -656,271 +471,112 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
         style: GoogleFonts.poppins(
           fontSize: 28,
           fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
+          color: AppColors.textWhite,
         ),
         decoration: InputDecoration(
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Center(
-              child: Text(
-                '₹',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
+          prefixIcon: Padding(
+            padding: const EdgeInsets.only(left: 14, right: 8),
+            child: Text(
+              '₹',
+              style: GoogleFonts.poppins(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryLight,
               ),
             ),
           ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
           hintText: '0',
           hintStyle: GoogleFonts.poppins(
             fontSize: 28,
             fontWeight: FontWeight.w700,
-            color: AppColors.textHint,
+            color: Colors.white24,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.borderLight),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.borderLight),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5),
           ),
           errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.error),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return 'Please enter amount';
-          }
-          final amount = double.tryParse(value);
-          if (amount == null || amount < 100) {
-            return 'Minimum amount is ₹100';
-          }
-          if (amount > _maxAmount) {
-            return 'Maximum amount is ₹${_maxAmount.toStringAsFixed(0)}';
-          }
+        validator: (v) {
+          if (v == null || v.isEmpty) return 'Minimum amount is ₹100';
+          final a = double.tryParse(v);
+          if (a == null || a < 100) return 'Minimum amount is ₹100';
+          if (a > _maxAmount) return 'Maximum amount is ₹${_maxAmount.toStringAsFixed(0)}';
           return null;
         },
-        onChanged: (value) => setState(() {}),
+        onChanged: (_) => setState(() {}),
       ),
     );
   }
 
   Widget _buildSurchargeCard() {
     final hasSurcharge = _surcharge > 0;
-
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: hasSurcharge
-              ? AppColors.warning.withOpacity(0.3)
-              : AppColors.borderLight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.darkSurface, borderRadius: BorderRadius.circular(10), border: Border.all(color: hasSurcharge ? AppColors.warning.withOpacity(0.3) : AppColors.borderDark)),
+      child: Column(children: [
+        _buildSurchargeRow('Transfer Amount', '₹${_amountController.text}', AppColors.textDarkSecondary, false),
+        if (hasSurcharge) ...[
+          const SizedBox(height: 4),
+          _buildSurchargeRow('Processing Fee', '₹${_surcharge.toStringAsFixed(2)}', AppColors.warning, false),
+          const SizedBox(height: 4),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('${_surcharge == 10 ? 'Flat ₹10' : '1% of amount'}', style: GoogleFonts.poppins(fontSize: 9, color: AppColors.warning))),
         ],
-      ),
-      child: Column(
-        children: [
-          _buildSurchargeRow(
-            'Transfer Amount',
-            '₹${_amountController.text}',
-            AppColors.textSecondary,
-            false,
-          ),
-          if (hasSurcharge) ...[
-            const SizedBox(height: 8),
-            _buildSurchargeRow(
-              'Processing Fee',
-              '₹${_surcharge.toStringAsFixed(2)}',
-              AppColors.warning,
-              false,
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Iconsax.info_circle, size: 10, color: AppColors.warning),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Fee: ${_surcharge == 10 ? 'Flat ₹10' : '1% of amount'}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ] else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              margin: const EdgeInsets.only(top: 8),
-              decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Iconsax.tick_circle, size: 10, color: AppColors.success),
-                  const SizedBox(width: 4),
-                  Text(
-                    'No additional fees',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const Divider(height: 20),
-          _buildSurchargeRow(
-            'Total to Debit',
-            '₹${_totalAmount.toStringAsFixed(2)}',
-            AppColors.primary,
-            true,
-          ),
-        ],
-      ),
+        const Divider(height: 14, color: AppColors.borderDark),
+        _buildSurchargeRow('Total to Debit', '₹${_totalAmount.toStringAsFixed(2)}', AppColors.primaryLight, true),
+      ]),
     );
   }
 
   Widget _buildSurchargeRow(String label, String amount, Color color, bool isTotal) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: isTotal ? 15 : 13,
-            fontWeight: isTotal ? FontWeight.w600 : FontWeight.w400,
-            color: isTotal ? AppColors.textPrimary : AppColors.textSecondary,
-          ),
-        ),
-        Text(
-          amount,
-          style: GoogleFonts.poppins(
-            fontSize: isTotal ? 18 : 14,
-            fontWeight: isTotal ? FontWeight.w700 : FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ],
-    );
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label, style: GoogleFonts.poppins(fontSize: isTotal ? 13 : 11, fontWeight: isTotal ? FontWeight.w600 : FontWeight.w400, color: isTotal ? AppColors.textWhite : AppColors.textDarkSecondary)),
+      Text(amount, style: GoogleFonts.poppins(fontSize: isTotal ? 16 : 13, fontWeight: FontWeight.w700, color: color)),
+    ]);
   }
 
   Widget _buildTpinField() {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: AppColors.darkSurface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderDark)),
       child: TextFormField(
         controller: _tpinController,
         obscureText: !_isTpinVisible,
         maxLength: 6,
         keyboardType: TextInputType.number,
-        style: GoogleFonts.poppins(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-          letterSpacing: 8,
-        ),
+        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textWhite, letterSpacing: 6),
         decoration: InputDecoration(
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Iconsax.lock,
-              size: 18,
-              color: Color(0xFF6366F1),
-            ),
-          ),
-          suffixIcon: IconButton(
-            icon: Icon(
-              _isTpinVisible ? Iconsax.eye : Iconsax.eye_slash,
-              size: 18,
-              color: AppColors.textHint,
-            ),
-            onPressed: () {
-              HapticFeedback.selectionClick();
-              setState(() => _isTpinVisible = !_isTpinVisible);
-            },
-          ),
+          prefixIcon: Container(margin: const EdgeInsets.all(8), padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Iconsax.lock, size: 16, color: AppColors.primaryLight)),
+          suffixIcon: IconButton(icon: Icon(_isTpinVisible ? Iconsax.eye : Iconsax.eye_slash, size: 16, color: Colors.white38), onPressed: () { HapticFeedback.selectionClick(); setState(() => _isTpinVisible = !_isTpinVisible); }),
           hintText: '••••••',
-          hintStyle: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textHint,
-            letterSpacing: 8,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.borderLight),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.borderLight),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: AppColors.error),
-          ),
+          hintStyle: GoogleFonts.poppins(fontSize: 16, color: Colors.white24, letterSpacing: 6),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5)),
           counterText: '',
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return 'Please enter your TPIN';
-          }
-          if (value.length != 6) {
-            return 'TPIN must be 6 digits';
-          }
+        validator: (v) {
+          if (v == null || v.isEmpty) return 'Please enter your TPIN';
+          if (v.length != 6) return 'TPIN must be 6 digits';
           return null;
         },
       ),
@@ -929,176 +585,55 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
 
   Widget _buildTransferModeSelector() {
     return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: AppColors.darkSurface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderDark)),
+      child: Row(children: [
+        Expanded(child: GestureDetector(
+          onTap: () { HapticFeedback.selectionClick(); setState(() => _transferMode = 'IMPS'); },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: _transferMode == 'IMPS' ? AppColors.primary : Colors.transparent, borderRadius: BorderRadius.circular(8)),
+            child: Column(children: [
+              Icon(Iconsax.flash, size: 18, color: _transferMode == 'IMPS' ? Colors.white : AppColors.textDarkSecondary),
+              const SizedBox(height: 2),
+              Text('IMPS', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: _transferMode == 'IMPS' ? Colors.white : AppColors.textDarkSecondary)),
+            ]),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _transferMode = 'IMPS');
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: _transferMode == 'IMPS'
-                      ? AppColors.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Iconsax.flash,
-                      size: 20,
-                      color: _transferMode == 'IMPS'
-                          ? Colors.white
-                          : AppColors.textSecondary,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'IMPS',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _transferMode == 'IMPS'
-                            ? Colors.white
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      '24/7 Instant',
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        color: _transferMode == 'IMPS'
-                            ? Colors.white.withOpacity(0.7)
-                            : AppColors.textHint,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        )),
+        Expanded(child: GestureDetector(
+          onTap: () { HapticFeedback.selectionClick(); setState(() => _transferMode = 'NEFT'); },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: _transferMode == 'NEFT' ? AppColors.primary : Colors.transparent, borderRadius: BorderRadius.circular(8)),
+            child: Column(children: [
+              Icon(Iconsax.clock, size: 18, color: _transferMode == 'NEFT' ? Colors.white : AppColors.textDarkSecondary),
+              const SizedBox(height: 2),
+              Text('NEFT', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: _transferMode == 'NEFT' ? Colors.white : AppColors.textDarkSecondary)),
+            ]),
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _transferMode = 'NEFT');
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: _transferMode == 'NEFT'
-                      ? AppColors.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Iconsax.clock,
-                      size: 20,
-                      color: _transferMode == 'NEFT'
-                          ? Colors.white
-                          : AppColors.textSecondary,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'NEFT',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _transferMode == 'NEFT'
-                            ? Colors.white
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      'Bank Hours',
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        color: _transferMode == 'NEFT'
-                            ? Colors.white.withOpacity(0.7)
-                            : AppColors.textHint,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        )),
+      ]),
     );
   }
 
   Widget _buildRemarkField() {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: AppColors.darkSurface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderDark)),
       child: TextFormField(
         controller: _remarkController,
         maxLength: 50,
-        style: GoogleFonts.poppins(
-          fontSize: 14,
-          color: AppColors.textPrimary,
-        ),
+        style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textWhite),
         decoration: InputDecoration(
-          hintText: 'Add a remark (e.g., birthday gift)',
-          hintStyle: GoogleFonts.poppins(
-            fontSize: 13,
-            color: AppColors.textHint,
-          ),
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.textSecondary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Iconsax.message_text,
-              size: 16,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.borderLight),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.borderLight),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5),
-          ),
+          hintText: 'e.g., birthday gift',
+          hintStyle: GoogleFonts.poppins(fontSize: 12, color: Colors.white30),
+          prefixIcon: Container(margin: const EdgeInsets.all(8), padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(8)), child: const Icon(Iconsax.message_text, size: 14, color: Colors.white38)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5)),
           counterText: '',
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
       ),
     );
@@ -1106,170 +641,59 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
 
   Widget _buildErrorCard() {
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.error.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.error.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Iconsax.warning_2,
-              color: AppColors.error,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _errorMessage!,
-              style: GoogleFonts.poppins(
-                color: AppColors.error,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.error.withOpacity(0.3))),
+      child: Row(children: [
+        Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.error.withOpacity(0.2), borderRadius: BorderRadius.circular(6)), child: const Icon(Iconsax.warning_2, color: AppColors.error, size: 16)),
+        const SizedBox(width: 10),
+        Expanded(child: Text(_errorMessage!, style: GoogleFonts.poppins(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500))),
+      ]),
     );
   }
 
   Widget _buildTransferSummary() {
-    final selectedBeneficiary = widget.beneficiaries.firstWhere(
-          (b) => b.id == _selectedBeneficiaryId,
-    );
-
+    final b = widget.beneficiaries.firstWhere((x) => x.id == _selectedBeneficiaryId);
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppColors.primary.withOpacity(0.1),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Iconsax.document_text, size: 14, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Transfer Summary',
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _buildSummaryRow('To', selectedBeneficiary.accountHolderName),
-          _buildSummaryRow('Bank', '${selectedBeneficiary.bankName} (${selectedBeneficiary.ifscCode})'),
-          _buildSummaryRow('Account', _maskAccountNumber(selectedBeneficiary.accountNumber)),
-          _buildSummaryRow('Amount', '₹${_amountController.text}'),
-          _buildSummaryRow('Mode', _transferMode),
-          _buildSummaryRow('Total', '₹${_totalAmount.toStringAsFixed(2)}', isBold: true, color: AppColors.primary),
-        ],
-      ),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.primary.withOpacity(0.1))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [const Icon(Iconsax.document_text, size: 12, color: AppColors.primaryLight), const SizedBox(width: 6), Text('Transfer Summary', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primaryLight))]),
+        const SizedBox(height: 8),
+        _buildSummaryRow('To', b.accountHolderName),
+        _buildSummaryRow('Bank', '${b.bankName} • ${b.ifscCode}'),
+        _buildSummaryRow('Account', _maskAccountNumber(b.accountNumber)),
+        _buildSummaryRow('Amount', '₹${_amountController.text}'),
+        _buildSummaryRow('Mode', _transferMode),
+        _buildSummaryRow('Total', '₹${_totalAmount.toStringAsFixed(2)}', isBold: true, color: AppColors.primaryLight),
+      ]),
     );
   }
 
   Widget _buildSummaryRow(String label, String value, {bool isBold = false, Color? color}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
-              color: color ?? AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkSecondary)),
+        Text(value, style: GoogleFonts.poppins(fontSize: 10, fontWeight: isBold ? FontWeight.w600 : FontWeight.w400, color: color ?? AppColors.textWhite)),
+      ]),
     );
   }
 
   Widget _buildTransferButton() {
-    final isEnabled = _selectedBeneficiaryId != null &&
-        _amountController.text.isNotEmpty &&
-        _tpinController.text.length == 6;
-
+    final isEnabled = _selectedBeneficiaryId != null && _amountController.text.isNotEmpty && _tpinController.text.length == 6;
     return Container(
-      width: double.infinity,
-      height: 56,
+      width: double.infinity, height: 50,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isEnabled
-              ? [AppColors.primary, AppColors.primaryLight]
-              : [AppColors.textHint, AppColors.textHint],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isEnabled
-            ? [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ]
-            : [],
+        gradient: LinearGradient(colors: isEnabled ? [AppColors.primary, AppColors.primaryLight] : [Colors.grey[800]!, Colors.grey[700]!]),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: isEnabled ? [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 5))] : [],
       ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _transfer,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: EdgeInsets.zero),
         child: _isLoading
-            ? const SizedBox(
-          height: 24,
-          width: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-          ),
-        )
-            : Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Iconsax.send_2, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Text(
-              'Transfer Now',
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
+            ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+            : Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Iconsax.send_2, color: Colors.white, size: 18), const SizedBox(width: 8), Text('Transfer Now', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white))]),
       ),
     );
   }

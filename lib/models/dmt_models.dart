@@ -1,8 +1,5 @@
-
-
-
-
 // lib/models/dmt_models.dart
+
 class Remitter {
   final int id;
   final String mobile;
@@ -29,19 +26,47 @@ class Remitter {
   factory Remitter.fromJson(Map<String, dynamic> json) {
     return Remitter(
       id: json['id'] ?? 0,
-      mobile: json['mobile'] ?? '',
-      firstName: json['first_name'] ?? '',
-      lastName: json['last_name'] ?? '',
-      monthlyLimit: (json['monthly_limit'] ?? 0).toDouble(),
-      monthlyUsed: (json['monthly_used'] ?? 0).toDouble(),
-      productType: json['product_type'] ?? 'lite',
+      mobile: json['mobile']?.toString() ?? '',
+      firstName: json['first_name']?.toString() ?? '',
+      lastName: json['last_name']?.toString() ?? '',
+      monthlyLimit: _parseDouble(json['monthly_limit']),
+      monthlyUsed: _parseDouble(json['monthly_used']),
+      productType: json['product_type']?.toString() ?? 'lite',
       isActive: json['is_active'] ?? false,
-      kycStatus: json['kyc_status'] ?? 'basic',
+      kycStatus: json['kyc_status']?.toString() ?? 'basic',
     );
   }
 
+  // Safe double parsing helper
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    }
+    return 0.0;
+  }
+
   double get remainingLimit => monthlyLimit - monthlyUsed;
-  double get usagePercentage => (monthlyUsed / monthlyLimit) * 100;
+  double get usagePercentage {
+    if (monthlyLimit <= 0) return 0;
+    return (monthlyUsed / monthlyLimit) * 100;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'mobile': mobile,
+      'first_name': firstName,
+      'last_name': lastName,
+      'monthly_limit': monthlyLimit,
+      'monthly_used': monthlyUsed,
+      'product_type': productType,
+      'is_active': isActive,
+      'kyc_status': kycStatus,
+    };
+  }
 }
 
 class Beneficiary {
@@ -53,6 +78,10 @@ class Beneficiary {
   final String? beneficiaryMobile;
   final bool verified;
   final int useCount;
+  final String? stateCode;  // ADDED
+  final String? stateName;  // ADDED
+  final String? bankCode;   // ADDED
+  final String? cityCode;   // ADDED
 
   Beneficiary({
     required this.id,
@@ -63,19 +92,44 @@ class Beneficiary {
     this.beneficiaryMobile,
     required this.verified,
     required this.useCount,
+    this.stateCode,
+    this.stateName,
+    this.bankCode,
+    this.cityCode,
   });
 
   factory Beneficiary.fromJson(Map<String, dynamic> json) {
     return Beneficiary(
       id: json['id'] ?? 0,
-      accountHolderName: json['account_holder_name'] ?? '',
-      accountNumber: json['account_number'] ?? '',
-      ifscCode: json['ifsc_code'] ?? '',
-      bankName: json['bank_name'] ?? '',
-      beneficiaryMobile: json['beneficiary_mobile'],
+      accountHolderName: json['account_holder_name']?.toString() ?? '',
+      accountNumber: json['account_number']?.toString() ?? '',
+      ifscCode: json['ifsc_code']?.toString() ?? '',
+      bankName: json['bank_name']?.toString() ?? '',
+      beneficiaryMobile: json['beneficiary_mobile']?.toString(),
       verified: json['verified'] ?? false,
       useCount: json['use_count'] ?? 0,
+      stateCode: json['state_code']?.toString(),    // ADDED
+      stateName: json['state_name']?.toString(),    // ADDED
+      bankCode: json['bank_code']?.toString() ?? json['vimopay_bank_code']?.toString(),  // ADDED
+      cityCode: json['city_code']?.toString(),      // ADDED
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'account_holder_name': accountHolderName,
+      'account_number': accountNumber,
+      'ifsc_code': ifscCode,
+      'bank_name': bankName,
+      'beneficiary_mobile': beneficiaryMobile,
+      'verified': verified,
+      'use_count': useCount,
+      'state_code': stateCode,      // ✅ ADDED
+      'state_name': stateName,      // ✅ ADDED
+      'bank_code': bankCode,        // ✅ ADDED
+      'city_code': cityCode,        // ✅ ADDED
+    };
   }
 }
 
@@ -105,15 +159,42 @@ class DMTTransaction {
   factory DMTTransaction.fromJson(Map<String, dynamic> json) {
     return DMTTransaction(
       id: json['id'] ?? 0,
-      amount: (json['amount'] ?? 0).toDouble(),
-      status: json['status'] ?? 'pending',
-      utrNumber: json['utr_number'],
-      transferMode: json['transfer_mode'] ?? 'IMPS',
-      createdAt: json['created_at'] ?? '',
-      remitterName: json['remitter_name'] ?? '',
-      beneficiaryName: json['beneficiary_name'] ?? '',
-      commissionAmount: json['commission_amount']?.toDouble(),
+      amount: _parseDouble(json['amount']),
+      status: json['status']?.toString() ?? 'pending',
+      utrNumber: json['utr_number']?.toString(),
+      transferMode: json['transfer_mode']?.toString() ?? 'IMPS',
+      createdAt: json['created_at']?.toString() ?? '',
+      remitterName: json['remitter_name']?.toString() ?? '',
+      beneficiaryName: json['beneficiary_name']?.toString() ?? '',
+      commissionAmount: json['commission_amount'] != null
+          ? _parseDouble(json['commission_amount'])
+          : null,
     );
+  }
+
+  // Safe double parsing helper
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    }
+    return 0.0;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'amount': amount,
+      'status': status,
+      'utr_number': utrNumber,
+      'transfer_mode': transferMode,
+      'created_at': createdAt,
+      'remitter_name': remitterName,
+      'beneficiary_name': beneficiaryName,
+      'commission_amount': commissionAmount,
+    };
   }
 }
 
@@ -124,6 +205,7 @@ class DMTTransferRequest {
   final String tpin;
   final String transferMode;
   final String? remark;
+  final String? stateCode; // ADD THIS
 
   DMTTransferRequest({
     required this.remitterId,
@@ -132,6 +214,7 @@ class DMTTransferRequest {
     required this.tpin,
     this.transferMode = 'IMPS',
     this.remark,
+    this.stateCode,
   });
 
   Map<String, dynamic> toJson() => {
@@ -141,5 +224,6 @@ class DMTTransferRequest {
     'tpin': tpin,
     'transferMode': transferMode,
     'remark': remark,
+    'state_code': stateCode, // ADD THIS
   };
 }
