@@ -62,16 +62,41 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
         map[entry.key] = entry.value;
       }
 
-      setState(() {
-        pipeStatus = map;
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          pipeStatus = map;
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
-  void _onPipeSelected(String pipe, Map<String, dynamic>? status) {
+  // 🔄 Navigate to registration and refresh on return
+  Future<void> _navigateToRegistration(String pipe) async {
+    final provider = context.read<AepsProvider>();
+    provider.setActivePipe(pipe);
+
+    // Navigate and wait for result
+    final needsRefresh = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MerchantRegistrationScreen(pipe: pipe),
+      ),
+    );
+
+    // If returned with true (registration complete or verify later), refresh statuses
+    if (needsRefresh == true && mounted) {
+      setState(() => isLoading = true);
+      _loadPipeStatuses();
+    }
+  }
+
+  // 🔄 Navigate based on pipe status and refresh on return
+  Future<void> _navigateBasedOnStatus(String pipe, Map<String, dynamic>? status) async {
     final provider = context.read<AepsProvider>();
     provider.setActivePipe(pipe);
     final aadhaarNumber = provider.aadhaarNo ?? '';
@@ -86,62 +111,68 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
       });
 
       final regStatus = status['registrationStatus'] ?? '';
+      bool? needsRefresh;
 
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (!mounted) return;
+      switch (regStatus) {
+        case 'active':
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
+          );
+          break;
+        case 'otp_pending':
+          needsRefresh = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MerchantRegistrationScreen(
+                isOtpPending: true,
+                merchantData: status,
+                pipe: pipe,
+                phone: provider.mobileNo,
+              ),
+            ),
+          );
+          break;
+        case 'otp_verified':
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EKYC_Screen(
+                merchantId: status['merchantId'],
+                merchantRefId: status['merchantRefId'],
+                pipe: pipe,
+                aadhaarNumber: aadhaarNumber,
+              ),
+            ),
+          );
+          break;
+        default:
+          needsRefresh = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MerchantRegistrationScreen(pipe: pipe),
+            ),
+          );
+      }
 
-        switch (regStatus) {
-          case 'active':
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
-            );
-            break;
-          case 'otp_pending':
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MerchantRegistrationScreen(
-                  isOtpPending: true,
-                  merchantData: status,
-                  pipe: pipe,
-                  phone: provider.mobileNo,
-                ),
-              ),
-            );
-            break;
-          case 'otp_verified':
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EKYC_Screen(
-                  merchantId: status['merchantId'],
-                  merchantRefId: status['merchantRefId'],
-                  pipe: pipe,
-                  aadhaarNumber: aadhaarNumber,
-                ),
-              ),
-            );
-            break;
-          default:
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MerchantRegistrationScreen(pipe: pipe),
-              ),
-            );
-        }
-      });
+      // Refresh if needed
+      if (needsRefresh == true && mounted) {
+        setState(() => isLoading = true);
+        _loadPipeStatuses();
+      }
     } else {
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MerchantRegistrationScreen(pipe: pipe),
-          ),
-        );
-      });
+      // No merchant data, navigate to registration
+      final needsRefresh = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MerchantRegistrationScreen(pipe: pipe),
+        ),
+      );
+
+      if (needsRefresh == true && mounted) {
+        setState(() => isLoading = true);
+        _loadPipeStatuses();
+      }
     }
   }
 
@@ -268,7 +299,7 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          onTap: () => _onPipeSelected(pipe, status),
+          onTap: () => _navigateBasedOnStatus(pipe, status),
           borderRadius: BorderRadius.circular(14),
           splashColor: statusColor.withOpacity(0.1),
           child: Padding(

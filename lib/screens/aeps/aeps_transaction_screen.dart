@@ -34,6 +34,24 @@ enum DeviceType {
   const DeviceType(this.displayName, this.shortName, this.icon, this.apiValue);
 }
 
+// ─── SERVICE TYPE ENUM FOR TABS ───────────────────────────────
+enum AepsServiceType {
+  cashWithdrawal('CW', 'Cash Withdrawal', Icons.money_rounded, Color(0xFF2ECC71)),
+  balanceEnquiry('BE', 'Balance Enquiry', Icons.account_balance_wallet_rounded, Color(0xFF3498DB)),
+  miniStatement('MS', 'Mini Statement', Icons.receipt_long_rounded, Color(0xFFE67E22)),
+  cashDeposit('CD', 'Cash Deposit', Icons.attach_money_rounded, Color(0xFF16A085)),
+  aadhaarPay('AP', 'Aadhaar Pay', Icons.credit_card_rounded, Color(0xFF9B59B6));
+
+  final String code;
+  final String displayName;
+  final IconData icon;
+  final Color color;
+
+  const AepsServiceType(this.code, this.displayName, this.icon, this.color);
+
+  bool get isAmountRequired => ['CW', 'CD', 'AP'].contains(code);
+}
+
 class AepsTransactionScreen extends StatefulWidget {
   final String serviceType;
 
@@ -43,11 +61,17 @@ class AepsTransactionScreen extends StatefulWidget {
   State<AepsTransactionScreen> createState() => _AepsTransactionScreenState();
 }
 
-class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
+class _AepsTransactionScreenState extends State<AepsTransactionScreen>
+    with TickerProviderStateMixin {
+  // ─── CONTROLLERS (SHARED ACROSS TABS) ────────────────────
   final TextEditingController _aadhaarController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
 
+  // ─── TAB CONTROLLER ──────────────────────────────────────
+  late TabController _tabController;
+
+  // ─── STATE VARIABLES (SHARED) ────────────────────────────
   String? _selectedBankIIN;
   String? _selectedBankName;
   Map<String, double>? _location;
@@ -59,68 +83,46 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
 
   bool _isDeviceConnected = false;
   bool _isCheckingDevice = false;
-  String _searchQuery = '';
   final LocationService _locationService = LocationService();
 
   // ─── DEVICE SELECTION ───────────────────────────────────────
-  DeviceType _selectedDevice = DeviceType.mantra; // Default: Mantra
+  DeviceType _selectedDevice = DeviceType.mantra;
 
-  bool get _isAmountRequired => ['CW', 'CD', 'AP'].contains(widget.serviceType);
+  // ─── CURRENT ACTIVE SERVICE ──────────────────────────────
+  late AepsServiceType _currentService;
 
-  String _getServiceTitle() {
-     switch (widget.serviceType) {
-      case 'CW':
-        return 'Cash Withdrawal';
-      case 'BE':
-        return 'Balance Enquiry';
-      case 'MS':
-        return 'Mini Statement';
-      case 'CD':
-        return 'Cash Deposit';
-      case 'AP':
-        return 'Aadhaar Pay';
-      default:
-        return 'AEPS Transaction';
-    }
-  }
+  // ─── AVAILABLE SERVICES LIST ─────────────────────────────
+  final List<AepsServiceType> _availableServices = [
+    AepsServiceType.cashWithdrawal,
+    AepsServiceType.balanceEnquiry,
+    AepsServiceType.miniStatement,
+    AepsServiceType.cashDeposit,
+    AepsServiceType.aadhaarPay,
+  ];
 
-  IconData _getServiceIcon() {
-    switch (widget.serviceType) {
-      case 'CW':
-        return Icons.money_rounded;
-      case 'BE':
-        return Icons.account_balance_wallet_rounded;
-      case 'MS':
-        return Icons.receipt_long_rounded;
-      case 'CD':
-        return Icons.attach_money_rounded;
-      case 'AP':
-        return Icons.credit_card_rounded;
-      default:
-        return Icons.payment_rounded;
-    }
-  }
-
-  Color _getServiceColor() {
-    switch (widget.serviceType) {
-      case 'CW':
-        return const Color(0xFF2ECC71);
-      case 'BE':
-        return const Color(0xFF3498DB);
-      case 'MS':
-        return const Color(0xFFE67E22);
-      case 'CD':
-        return const Color(0xFF16A085);
-      case 'AP':
-        return const Color(0xFF9B59B6);
-      default:
-        return TxnColors.primary;
-    }
-  }
+  // ─── STORE VALUES PER TAB ────────────────────────────────
+  final Map<String, String> _tabAmounts = {};
+  final Map<String, String> _tabAadhaar = {};
+  final Map<String, String> _tabMobile = {};
 
   @override
   void initState() {
     super.initState();
+
+    // Parse initial service type
+    _currentService = _parseServiceType(widget.serviceType);
+
+    // Initialize tab controller
+    final initialIndex = _availableServices.indexOf(_currentService);
+    _tabController = TabController(
+      length: _availableServices.length,
+      vsync: this,
+      initialIndex: initialIndex >= 0 ? initialIndex : 0,
+    );
+
+    // Listen for tab changes
+    _tabController.addListener(_onTabChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AepsProvider>();
       if (provider.banks.isEmpty) provider.fetchBanks();
@@ -130,12 +132,78 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     _checkDevice();
   }
 
+  AepsServiceType _parseServiceType(String type) {
+    switch (type) {
+      case 'CW':
+        return AepsServiceType.cashWithdrawal;
+      case 'BE':
+        return AepsServiceType.balanceEnquiry;
+      case 'MS':
+        return AepsServiceType.miniStatement;
+      case 'CD':
+        return AepsServiceType.cashDeposit;
+      case 'AP':
+        return AepsServiceType.aadhaarPay;
+      default:
+        return AepsServiceType.cashWithdrawal;
+    }
+  }
+
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging) {
+      // Save current values before switching
+      _saveCurrentTabValues();
+
+      setState(() {
+        _currentService = _availableServices[_tabController.index];
+
+        // Restore saved values for the new tab
+        final tabKey = _currentService.code;
+        if (_tabAmounts.containsKey(tabKey)) {
+          _amountController.text = _tabAmounts[tabKey] ?? '';
+        } else {
+          _amountController.text = '';
+        }
+        if (_tabAadhaar.containsKey(tabKey)) {
+          _aadhaarController.text = _tabAadhaar[tabKey] ?? '';
+        }
+        if (_tabMobile.containsKey(tabKey)) {
+          _mobileController.text = _tabMobile[tabKey] ?? '';
+        }
+      });
+    }
+  }
+
+  void _saveCurrentTabValues() {
+    final tabKey = _currentService.code;
+    _tabAmounts[tabKey] = _amountController.text;
+    _tabAadhaar[tabKey] = _aadhaarController.text;
+    _tabMobile[tabKey] = _mobileController.text;
+  }
+
   @override
   void dispose() {
+    _saveCurrentTabValues();
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
     _aadhaarController.dispose();
     _amountController.dispose();
     _mobileController.dispose();
     super.dispose();
+  }
+
+  bool get _isAmountRequired => _currentService.isAmountRequired;
+
+  String _getServiceTitle() {
+    return _currentService.displayName;
+  }
+
+  IconData _getServiceIcon() {
+    return _currentService.icon;
+  }
+
+  Color _getServiceColor() {
+    return _currentService.color;
   }
 
   Future<void> _checkDevice() async {
@@ -236,15 +304,14 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     if (!confirmed) return;
 
     try {
-      // ✅ Using selected device type
       final response = await provider.performAepsTransaction(
         merchantId: merchantId,
-        transactionType: widget.serviceType,
+        transactionType: _currentService.code,
         aadhaarNumber: _aadhaarController.text,
         bankIIN: _selectedBankIIN!,
         amount: _isAmountRequired ? _amountController.text : '0',
         pidData: _pidData!,
-        deviceType: _selectedDevice.apiValue, // ✅ Dynamic device type
+        deviceType: _selectedDevice.apiValue,
         merchantRefId: merchantRefId ?? 'TXN_${DateTime.now().millisecondsSinceEpoch}',
         mobileNo: _mobileController.text.isNotEmpty
             ? _mobileController.text
@@ -355,14 +422,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     );
   }
 
-  // ─── RESULT DIALOG WITH RECEIPT INTEGRATION ─────────────────
-// ─── RESULT DIALOG WITH RECEIPT INTEGRATION ─────────────────
   void _showResultDialog(dynamic response) {
-    // Check success from responseCode (your API returns this)
     final isSuccess = response.responseCode == '000' ||
         response.status == '000';
 
-    // Get values directly from response object (no .data needed)
     final String? txnRefId = response.txnRefId;
     final String? rrn = response.rrn;
     final String? availableBalance = response.availableBalance;
@@ -428,7 +491,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
           ),
         ),
         actions: [
-          // View Receipt Button
           SizedBox(
             width: double.infinity,
             child: Container(
@@ -457,8 +519,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               ),
             ),
           ),
-
-          // Done Button
           SizedBox(
             width: double.infinity,
             child: Container(
@@ -492,14 +552,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     );
   }
 
-// ─── OPEN RECEIPT SCREEN ────────────────────────────────────
-// In aeps_transaction_screen.dart - _openReceiptScreen method
-
   void _openReceiptScreen(dynamic response) {
     try {
       final provider = context.read<AepsProvider>();
 
-      // Build API response map
       final Map<String, dynamic> apiResponse = {
         'data': {
           'status': _safeGet(response, 'responseCode', '001'),
@@ -520,15 +576,13 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               _safeGet(response, 'npciMessage', '')),
           'rrn': _safeGet(response, 'rrn', ''),
           'pipe': provider.pipe ?? '1',
-
-          // ✅ Add transaction list for Mini Statement
           'transactionList': _safeGet(response, 'transactionList', ''),
         }
       };
 
       final receipt = ReceiptModel.fromApiResponse(
         apiResponse,
-        transactionType: widget.serviceType,
+        transactionType: _currentService.code,
         merchantId: provider.merchantId ?? 'N/A',
         mobileNumber: _mobileController.text.isNotEmpty
             ? _mobileController.text
@@ -547,15 +601,11 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     }
   }
 
-// Helper method to safely get fields from response
   String _safeGet(dynamic obj, String fieldName, [String defaultValue = '']) {
     try {
-      // Try to get the field using reflection or direct access
       if (obj is Map) {
         return obj[fieldName]?.toString() ?? defaultValue;
       }
-
-      // Try common getter patterns
       final value = _tryGetField(obj, fieldName);
       return value?.toString() ?? defaultValue;
     } catch (e) {
@@ -565,7 +615,6 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
 
   dynamic _tryGetField(dynamic obj, String fieldName) {
     try {
-      // Try direct property access
       switch (fieldName) {
         case 'responseCode':
           return (obj as dynamic).responseCode;
@@ -652,16 +701,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AepsProvider>();
-    final bankIINs = provider.bankIINs;
     final serviceColor = _getServiceColor();
-
-    final canProceed = _selectedBankIIN != null &&
-        _aadhaarController.text.length == 12 &&
-        _isBiometricCaptured &&
-        _location != null &&
-        (!_isAmountRequired || _amountController.text.isNotEmpty);
-    final amountValid = !_isAmountRequired ||
-        (double.tryParse(_amountController.text) ?? 0) >= 100;
 
     return Scaffold(
       body: Container(
@@ -681,9 +721,9 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
         child: SafeArea(
           child: Column(
             children: [
+              // ─── HEADER ──────────────────────────────────────
               Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 child: Row(
                   children: [
                     IconButton(
@@ -697,96 +737,247 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
                         color: serviceColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(_getServiceIcon(),
-                          color: serviceColor, size: 22),
+                      child: Icon(_getServiceIcon(), color: serviceColor, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(_getServiceTitle(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 18)),
+                      child: Text(
+                        _getServiceTitle(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
+
+              // ─── SLIDING TABS ──────────────────────────────────
+              Container(
+                height: 52,
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: TxnColors.cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  indicator: BoxDecoration(
+                    color: TxnColors.primary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: TxnColors.primary.withOpacity(0.5),
+                      width: 1.5,
+                    ),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorPadding: const EdgeInsets.all(4),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white54,
+                  labelStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  tabs: _availableServices.map((service) {
+                    final isSelected = _currentService == service;
+                    return Tab(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              service.icon,
+                              size: 18,
+                              color: isSelected ? Colors.white : Colors.white54,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                service.displayName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              // ─── MAIN CONTENT ────────────────────────────────
               Expanded(
                 child: provider.isLoading || provider.isLoadingBankIINs
                     ? const Center(
-                    child: CircularProgressIndicator(
-                        color: TxnColors.primary))
-                    : SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ─── DEVICE SELECTOR (NEW) ────────────────────
-                      _buildSectionLabel('Select Device'),
-                      const SizedBox(height: 8),
-                      _buildDeviceSelector(),
-                      const SizedBox(height: 16),
-
-                      _buildDeviceStatusCard(),
-                      const SizedBox(height: 16),
-                      _buildLocationCard(),
-                      const SizedBox(height: 16),
-                      _buildSectionLabel('Select Bank'),
-                      const SizedBox(height: 8),
-                      _buildBankDropdown(bankIINs),
-                      const SizedBox(height: 16),
-                      _buildSectionLabel('Customer Mobile'),
-                      const SizedBox(height: 8),
-                      _buildInputField(
-                        controller: _mobileController,
-                        hint: 'Enter customer mobile number',
-                        icon: Icons.phone_android_rounded,
-                        keyboardType: TextInputType.phone,
-                        maxLength: 10,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildSectionLabel('Aadhaar Number'),
-                      const SizedBox(height: 8),
-                      _buildInputField(
-                        controller: _aadhaarController,
-                        hint: 'Enter 12-digit Aadhaar',
-                        icon: Icons.credit_card_rounded,
-                        keyboardType: TextInputType.number,
-                        maxLength: 12,
-                      ),
-                      if (_isAmountRequired) ...[
-                        const SizedBox(height: 16),
-                        _buildSectionLabel('Amount (₹)'),
-                        const SizedBox(height: 8),
-                        _buildInputField(
-                          controller: _amountController,
-                          hint: '₹100 - ₹10000',
-                          icon: Icons.currency_rupee_rounded,
-                          keyboardType: TextInputType.number,
-                        ),
-                        const SizedBox(height: 4),
-                        const Text('Min: ₹100 | Max: ₹10,000',
-                            style: TextStyle(
-                                color: Colors.white38, fontSize: 11)),
-                      ],
-                      const SizedBox(height: 16),
-                      _buildBiometricCard(),
-                      const SizedBox(height: 24),
-                      if (!amountValid && _isAmountRequired)
-                        _buildAmountError(),
-                      _buildProcessButton(
-                          canProceed && amountValid, serviceColor),
-                      const SizedBox(height: 16),
-                      _buildInfoNote(),
-                      const SizedBox(height: 30),
-                    ],
+                  child: CircularProgressIndicator(
+                    color: TxnColors.primary,
                   ),
+                )
+                    : TabBarView(
+                  controller: _tabController,
+                  physics: const BouncingScrollPhysics(),
+                  children: _availableServices.map((service) {
+                    return _buildServiceContent(
+                      service: service,
+                      serviceColor: service.color,
+                      bankIINs: provider.bankIINs,
+                    );
+                  }).toList(),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ─── BUILD CONTENT FOR EACH SERVICE TAB ──────────────────
+  Widget _buildServiceContent({
+    required AepsServiceType service,
+    required Color serviceColor,
+    required List<aeps.BankIIN> bankIINs,
+  }) {
+    final canProceed = _selectedBankIIN != null &&
+        _aadhaarController.text.length == 12 &&
+        _isBiometricCaptured &&
+        _location != null &&
+        (!service.isAmountRequired || _amountController.text.isNotEmpty);
+    final amountValid = !service.isAmountRequired ||
+        (double.tryParse(_amountController.text) ?? 0) >= 100;
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ─── SERVICE SPECIFIC HEADER ──────────────────────────
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  serviceColor.withOpacity(0.2),
+                  serviceColor.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: serviceColor.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: serviceColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(service.icon, color: serviceColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        service.displayName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        service.isAmountRequired
+                            ? 'Amount required: ₹100 - ₹10,000'
+                            : 'No amount required',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ─── SHARED COMPONENTS ──────────────────────────────
+          _buildSectionLabel('Select Device'),
+          const SizedBox(height: 8),
+          _buildDeviceSelector(),
+          const SizedBox(height: 16),
+          _buildDeviceStatusCard(),
+          const SizedBox(height: 16),
+          _buildLocationCard(),
+          const SizedBox(height: 16),
+          _buildSectionLabel('Select Bank'),
+          const SizedBox(height: 8),
+          _buildBankDropdown(bankIINs),
+          const SizedBox(height: 16),
+          _buildSectionLabel('Customer Mobile'),
+          const SizedBox(height: 8),
+          _buildInputField(
+            controller: _mobileController,
+            hint: 'Enter customer mobile number',
+            icon: Icons.phone_android_rounded,
+            keyboardType: TextInputType.phone,
+            maxLength: 10,
+          ),
+          const SizedBox(height: 16),
+          _buildSectionLabel('Aadhaar Number'),
+          const SizedBox(height: 8),
+          _buildInputField(
+            controller: _aadhaarController,
+            hint: 'Enter 12-digit Aadhaar',
+            icon: Icons.credit_card_rounded,
+            keyboardType: TextInputType.number,
+            maxLength: 12,
+          ),
+
+          // ─── AMOUNT FIELD (CONDITIONAL) ──────────────────────
+          if (service.isAmountRequired) ...[
+            const SizedBox(height: 16),
+            _buildSectionLabel('Amount (₹)'),
+            const SizedBox(height: 8),
+            _buildInputField(
+              controller: _amountController,
+              hint: '₹100 - ₹10000',
+              icon: Icons.currency_rupee_rounded,
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Min: ₹100 | Max: ₹10,000',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          _buildBiometricCard(),
+          const SizedBox(height: 24),
+
+          if (!amountValid && service.isAmountRequired) _buildAmountError(),
+
+          _buildProcessButton(canProceed && amountValid, serviceColor),
+          const SizedBox(height: 16),
+          _buildInfoNoteForService(service),
+          const SizedBox(height: 30),
+        ],
       ),
     );
   }
@@ -808,11 +999,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
               onTap: () {
                 setState(() {
                   _selectedDevice = device;
-                  // Reset biometric when device changes
                   _isBiometricCaptured = false;
                   _pidData = null;
                 });
-                _checkDevice(); // Re-check device connection
+                _checkDevice();
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -870,7 +1060,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
             color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500));
   }
 
-  // ─── UPDATED: DEVICE STATUS CARD ───────────────────────────
+  // ─── DEVICE STATUS CARD ───────────────────────────
   Widget _buildDeviceStatusCard() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1471,24 +1661,34 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> {
     );
   }
 
-  Widget _buildInfoNote() {
+  Widget _buildInfoNoteForService(AepsServiceType service) {
     String noteText;
-    switch (widget.serviceType) {
-      case 'CW':
-        noteText =
-        '• Customer must be present physically\n• Biometric authentication required\n• Cash will be dispensed after success';
+    switch (service) {
+      case AepsServiceType.cashWithdrawal:
+        noteText = '• Customer must be present physically\n'
+            '• Biometric authentication required\n'
+            '• Cash will be dispensed after success';
         break;
-      case 'CD':
-        noteText =
-        '• Customer deposits cash into bank account\n• Biometric authentication required\n• Amount will be credited after success';
+      case AepsServiceType.cashDeposit:
+        noteText = '• Customer deposits cash into bank account\n'
+            '• Biometric authentication required\n'
+            '• Amount will be credited after success';
         break;
-      case 'AP':
-        noteText =
-        '• Customer pays merchant via Aadhaar\n• Biometric authentication required\n• Merchant receives credited amount';
+      case AepsServiceType.aadhaarPay:
+        noteText = '• Customer pays merchant via Aadhaar\n'
+            '• Biometric authentication required\n'
+            '• Merchant receives credited amount';
         break;
-      default:
-        noteText =
-        '• Ensure biometric is captured\n• Location must be enabled';
+      case AepsServiceType.balanceEnquiry:
+        noteText = '• Check account balance\n'
+            '• No amount deduction\n'
+            '• Requires biometric authentication';
+        break;
+      case AepsServiceType.miniStatement:
+        noteText = '• View last 5 transactions\n'
+            '• No amount deduction\n'
+            '• Requires biometric authentication';
+        break;
     }
     return Container(
       padding: const EdgeInsets.all(14),

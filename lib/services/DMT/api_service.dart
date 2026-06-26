@@ -6,17 +6,22 @@ import '../../models/dmt_models.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
+
   factory ApiService() => _instance;
+
   ApiService._internal();
 
   static const String baseUrl = 'https://api.myneofyn.com';
-  
+
   // Get auth token from SharedPreferences (same as AEPS)
   Future<String> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     // Try both possible token keys
-    final token = prefs.getString('accessToken') ?? prefs.getString('token') ?? '';
-    print('🔑 DMT Token: ${token.isNotEmpty ? '${token.substring(0, 20)}...' : 'EMPTY'}');
+    final token =
+        prefs.getString('accessToken') ?? prefs.getString('token') ?? '';
+    print(
+      '🔑 DMT Token: ${token.isNotEmpty ? '${token.substring(0, 20)}...' : 'EMPTY'}',
+    );
     return token;
   }
 
@@ -36,17 +41,21 @@ class ApiService {
         Uri.parse('$baseUrl/api/dmt/states'),
         headers: await _getAuthHeaders(),
       );
-      
+
       print('📡 States API Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success'] == true) {
           final List states = data['states'] ?? [];
-          return states.map((state) => {
-            'code': state['code']?.toString() ?? '',
-            'name': state['name']?.toString() ?? '',
-          }).toList();
+          return states
+              .map(
+                (state) => {
+                  'code': state['code']?.toString() ?? '',
+                  'name': state['name']?.toString() ?? '',
+                },
+              )
+              .toList();
         }
       }
       return [];
@@ -56,25 +65,64 @@ class ApiService {
     }
   }
 
-
   // In api_service.dart
-Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
-  try {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/dmt/remitter/$remitterId'),
-      headers: await _getAuthHeaders(),
-    );
-    
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw Exception('Failed to get remitter details');
+ /* Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/dmt/remitter/$remitterId'),
+        headers: await _getAuthHeaders(),
+      );
+      print('📡 Remitter Details Status: ${response.statusCode}');
+      print('📡 Remitter Details Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to get remitter details');
+      }
+    } catch (e) {
+      print('❌ Error getting remitter details: $e');
+      rethrow;
     }
-  } catch (e) {
-    print('❌ Error getting remitter details: $e');
-    rethrow;
+  }*/
+  Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/dmt/remitter/$remitterId'),
+        headers: await _getAuthHeaders(),
+      );
+
+      print('📡 Remitter Details Status: ${response.statusCode}');
+      print('📡 Remitter Details Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // ✅ ADD THESE LOGS
+        print('📡 Remitter Data Keys: ${data.keys}');
+        print('📡 Remitter Full Data: $data');
+
+        // Check for state-related fields
+        if (data.containsKey('state_code')) {
+          print('✅ Found state_code: ${data['state_code']}');
+        }
+        if (data.containsKey('state')) {
+          print('✅ Found state: ${data['state']}');
+        }
+        if (data.containsKey('state_name')) {
+          print('✅ Found state_name: ${data['state_name']}');
+        }
+
+        return data;
+      } else {
+        throw Exception('Failed to get remitter details');
+      }
+    } catch (e) {
+      print('❌ Error getting remitter details: $e');
+      rethrow;
+    }
   }
-}
+
   // Get bank list
   Future<List<Map<String, String>>> getBankList() async {
     try {
@@ -82,17 +130,21 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
         Uri.parse('$baseUrl/api/dmt/banks'),
         headers: await _getAuthHeaders(),
       );
-      
+
       print('📡 Banks API Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success'] == true) {
           final List banks = data['banks'] ?? [];
-          return banks.map((bank) => {
-            'code': bank['code']?.toString() ?? '',
-            'name': bank['name']?.toString() ?? '',
-          }).toList();
+          return banks
+              .map(
+                (bank) => {
+                  'code': bank['code']?.toString() ?? '',
+                  'name': bank['name']?.toString() ?? '',
+                },
+              )
+              .toList();
         }
       }
       return [];
@@ -109,17 +161,23 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
         Uri.parse('$baseUrl/api/dmt/cities?stateCode=$stateCode'),
         headers: await _getAuthHeaders(),
       );
-      
-      print('📡 Cities API Response: ${response.statusCode} for state $stateCode');
-      
+
+      print(
+        '📡 Cities API Response: ${response.statusCode} for state $stateCode',
+      );
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success'] == true) {
           final List cities = data['cities'] ?? [];
-          return cities.map((city) => {
-            'code': city['code']?.toString() ?? '',
-            'name': city['name']?.toString() ?? '',
-          }).toList();
+          return cities
+              .map(
+                (city) => {
+                  'code': city['code']?.toString() ?? '',
+                  'name': city['name']?.toString() ?? '',
+                },
+              )
+              .toList();
         }
       }
       return [];
@@ -130,15 +188,20 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
   }
 
   // Check if remitter exists
-  Future<Map<String, dynamic>> checkRemitter(String phone, String productType) async {
+  Future<Map<String, dynamic>> checkRemitter(
+    String phone,
+    String productType,
+  ) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/dmt/check-phone?phone=$phone&productType=$productType'),
+        Uri.parse(
+          '$baseUrl/api/dmt/check-phone?phone=$phone&productType=$productType',
+        ),
         headers: await _getAuthHeaders(),
       );
-      
+
       print('📡 Check Remitter Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
@@ -178,9 +241,9 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
           'long': long,
         }),
       );
-      
+
       print('📡 Register Remitter Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 201 || response.statusCode == 200) {
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
@@ -202,9 +265,9 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
         Uri.parse('$baseUrl/api/dmt/remitter/$remitterId'),
         headers: await _getAuthHeaders(),
       );
-      
+
       print('📡 Remitter Details Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         return Remitter.fromJson(json.decode(response.body));
       } else if (response.statusCode == 401) {
@@ -246,9 +309,9 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
           'beneficiaryMobile': beneficiaryMobile,
         }),
       );
-      
+
       print('📡 Add Beneficiary Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 201 || response.statusCode == 200) {
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
@@ -270,11 +333,16 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
         Uri.parse('$baseUrl/api/dmt/beneficiaries/$remitterId'),
         headers: await _getAuthHeaders(),
       );
-      
+
       print('📡 Get Beneficiaries Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final List data = json.decode(response.body);
+        print('📡 Beneficiaries Raw Data: $data');
+        if (data is List && data.isNotEmpty) {
+          print('📡 First Beneficiary Keys: ${data[0].keys}');
+          print('📡 First Beneficiary Full Data: ${data[0]}');
+        }
         return data.map((json) => Beneficiary.fromJson(json)).toList();
       } else if (response.statusCode == 401) {
         throw Exception('Session expired. Please login again.');
@@ -288,35 +356,40 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
   }
 
   // Create DMT transfer
-  Future<Map<String, dynamic>> createTransfer(DMTTransferRequest request) async {
-  try {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/dmt/transfer'),
-      headers: await _getAuthHeaders(),
-      body: json.encode(request.toJson()),
-    );
-    
-    print('📡 Create Transfer Response: ${response.statusCode}');
-    print('📡 Response Body: ${response.body}');
-    
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return {
-        'success': true,
-        'transactionId': data['transactionId'],
-        'utrNumber': data['utrNumber'],
-        'providerStatus': data['providerStatus'],
-        'message': data['message'] ?? 'Transfer successful',
-      };
-    } else {
-      final error = json.decode(response.body);
-      throw Exception(error['error'] ?? 'Failed to create transfer');
+  Future<Map<String, dynamic>> createTransfer(
+      DMTTransferRequest request,
+      ) async {
+    try {
+      final body = request.toJson();
+      print('📡 Create Transfer Body: $body');  // ✅ ADD THIS
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/dmt/transfer'),
+        headers: await _getAuthHeaders(),
+        body: json.encode(body),
+      );
+
+      print('📡 Create Transfer Response: ${response.statusCode}');
+      print('📡 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'transactionId': data['transactionId'],
+          'utrNumber': data['utrNumber'],
+          'providerStatus': data['providerStatus'],
+          'message': data['message'] ?? 'Transfer successful',
+        };
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Failed to create transfer');
+      }
+    } catch (e) {
+      print('❌ Error creating transfer: $e');
+      rethrow;
     }
-  } catch (e) {
-    print('❌ Error creating transfer: $e');
-    rethrow;
   }
-}
 
   // Get transactions
   Future<List<DMTTransaction>> getTransactions({
@@ -331,22 +404,22 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
       if (startDate != null) queryParams['startDate'] = startDate;
       if (endDate != null) queryParams['endDate'] = endDate;
       queryParams['limit'] = limit.toString();
-      
-      final uri = Uri.parse('$baseUrl/api/dmt/transactions')
-          .replace(queryParameters: queryParams);
-      
-      final response = await http.get(
-        uri,
-        headers: await _getAuthHeaders(),
-      );
-      
+
+      final uri = Uri.parse(
+        '$baseUrl/api/dmt/transactions',
+      ).replace(queryParameters: queryParams);
+
+      final response = await http.get(uri, headers: await _getAuthHeaders());
+
       print('📡 Get Transactions Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success'] == true) {
           final List transactions = data['transactions'] ?? [];
-          return transactions.map((json) => DMTTransaction.fromJson(json)).toList();
+          return transactions
+              .map((json) => DMTTransaction.fromJson(json))
+              .toList();
         }
         return [];
       } else if (response.statusCode == 401) {
@@ -367,9 +440,9 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
         Uri.parse('$baseUrl/api/dmt/beneficiary/$beneficiaryId'),
         headers: await _getAuthHeaders(),
       );
-      
+
       print('📡 Delete Beneficiary Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 401) {
         throw Exception('Session expired. Please login again.');
       } else if (response.statusCode != 200) {
@@ -382,7 +455,10 @@ Future<Map<String, dynamic>> getRemitterDetailsRaw(int remitterId) async {
   }
 
   // Get remitter by phone (alias for checkRemitter)
-  Future<Map<String, dynamic>> getRemitterByPhone(String phone, String productType) async {
+  Future<Map<String, dynamic>> getRemitterByPhone(
+    String phone,
+    String productType,
+  ) async {
     return await checkRemitter(phone, productType);
   }
 }
