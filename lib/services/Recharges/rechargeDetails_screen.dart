@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../screens/account/login_screen.dart';
-import 'package:my_app/screens/BBPS/recharge_receipt_screen.dart';
+import 'package:my_app/screens/recharge/recharge_receipt_screen.dart';
 
 import '../api_logger.dart';
 

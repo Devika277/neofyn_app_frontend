@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:my_app/services/Recharges/mobileNumberScreen.dart';
-import 'package:my_app/screens/BBPS/bbps_payment_screen.dart';
+// import 'package:my_app/screens/BBPS/bbps_payment_screen.dart';
 
 class RechargeCategoryScreen extends StatelessWidget {
   final bool isRechargeOnly;  // 👈 new flag
@@ -121,16 +121,16 @@ class RechargeCategoryScreen extends StatelessWidget {
       );
     } else {
       // Bill types → go to BBPSPaymentScreen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => BBPSPaymentScreen(
-            preselectedCategory: categoryId,
-            categoryName: categoryName,
-            categoryEmoji: category['emoji'],
-          ),
-        ),
-      );
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (_) => BBPSPaymentScreen(
+      //       preselectedCategory: categoryId,
+      //       categoryName: categoryName,
+      //       categoryEmoji: category['emoji'],
+      //     ),
+      //   ),
+      // );
     }
   }
 }

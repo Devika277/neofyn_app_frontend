@@ -23,12 +23,14 @@ import '../screens/payout/payout_home_screen.dart';
 import '../providers/wallet_provider.dart';
 import '../screens//aeps/aeps_wallet_dialog.dart';
 import 'package:my_app/widgets/add_fund_sheet.dart';
-import '../screens/BBPS/RechargeCategoryScreen.dart';
-import '../screens/BBPS/recharge_history_screen.dart';
+import '../screens/recharge/RechargeCategoryScreen.dart';
+import '../screens/recharge/recharge_history_screen.dart';
 import '../services/AEPS/matm_service.dart';
 import '../screens/ppi_dmt/dmt_phone_entry.dart';
 import '../../services/session_service.dart';
 import '../screens/dmt/dmt_selector_screen.dart';
+import '../screens/bbps/onboarding_page.dart';
+import '../screens/bbps/bill_payment_page.dart';
 
 
 
@@ -245,6 +247,14 @@ Navigator.push(
       case 'PPI DMT':
         Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtPhoneEntryPage()));
         break;
+         case 'Onboard': // ← ADD THIS CASE
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const OnboardingPage(),
+        ),
+      );
+      break;
       default:
         _toast('Coming soon!', error: false);
         break;
@@ -560,6 +570,8 @@ class HomeDashboard extends StatelessWidget {
     {'name': 'Recharge', 'icon': Icons.phone_android, 'color': Color(0xFF70CBCB)},
     {'name': 'Bills', 'icon': Icons.description, 'color': Color(0xFFE07070)},
     {'name': 'PPI DMT', 'icon': Icons.account_balance, 'color': Color(0xFF70C070)},
+    {'name': 'Onboard', 'icon': Icons.app_registration, 'color': Color(0xFFFF9800)}, // ← ADD THIS
+
     {'name': 'More', 'icon': Icons.more_horiz, 'color': Color(0xFFA0A0A0)},
   ];
 
@@ -788,12 +800,12 @@ class HistoryPage extends StatelessWidget {
   Widget build(BuildContext context) => const Center(child: Text('History', style: TextStyle(color: Colors.white54)));
 }
 
-class BillPaymentScreen extends StatelessWidget {
-  const BillPaymentScreen({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.bg,
-    appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Pay Bills', style: TextStyle(color: Colors.white))),
-    body: const Center(child: Text('Bills', style: TextStyle(color: Colors.white54))),
-  );
-}
+// class BillPaymentScreen extends StatelessWidget {
+//   const BillPaymentScreen({super.key});
+//   @override
+//   Widget build(BuildContext context) => Scaffold(
+//     backgroundColor: AppColors.bg,
+//     appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Pay Bills', style: TextStyle(color: Colors.white))),
+//     body: const Center(child: Text('Bills', style: TextStyle(color: Colors.white54))),
+//   );
+// }

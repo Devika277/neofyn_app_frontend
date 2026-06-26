@@ -19,6 +19,7 @@ import 'services/storage_service.dart';
 import 'providers/remitter_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/aeps_provider.dart';
+import 'providers/bbps_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +43,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PayoutProvider()),
         ChangeNotifierProvider(create: (_) => BeneficiaryProvider()),
         ChangeNotifierProvider(create: (_) => WalletProvider()),
-        ChangeNotifierProvider(create: (_) => RemitterProvider()),        ChangeNotifierProvider(create: (_) => AuthProvider()), 
+        ChangeNotifierProvider(create: (_) => RemitterProvider()),        
+        ChangeNotifierProvider(create: (_) => AuthProvider()), 
+        ChangeNotifierProvider(create: (_) => BBPSProvider()), 
 
       ],
       child: MaterialApp(
