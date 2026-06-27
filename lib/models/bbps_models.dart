@@ -204,12 +204,21 @@ class MerchantStatus {
 class BBPSState {
   final String stateCode;
   final String stateName;
+
   BBPSState({required this.stateCode, required this.stateName});
+
   factory BBPSState.fromJson(Map<String, dynamic> json) {
     return BBPSState(
-      stateCode: json['stateCode'] ?? json['code'] ?? '',
-      stateName: json['stateName'] ?? json['name'] ?? '',
+      // Your API uses 'code' and 'description'
+      stateCode: json['code'] ?? '',
+      stateName: json['description'] ?? '',
     );
+  }
+
+  // Add this to fix the "Instance of" printing issue
+  @override
+  String toString() {
+    return 'BBPSState(code: $stateCode, name: $stateName)';
   }
 }
 
