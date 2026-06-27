@@ -225,12 +225,19 @@ class BBPSState {
 class BBPScity {
   final String cityCode;
   final String cityName;
+
   BBPScity({required this.cityCode, required this.cityName});
+
   factory BBPScity.fromJson(Map<String, dynamic> json) {
     return BBPScity(
-      cityCode: json['cityCode'] ?? json['code'] ?? '',
-      cityName: json['cityName'] ?? json['name'] ?? '',
+      cityCode: json['code'] ?? '',           // API uses 'code'
+      cityName: json['description'] ?? '',     // API uses 'description'
     );
+  }
+
+  @override
+  String toString() {
+    return 'BBPScity(code: $cityCode, name: $cityName)';
   }
 }
 
