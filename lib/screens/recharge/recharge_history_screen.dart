@@ -129,12 +129,12 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
           child: InkWell(
             onTap: () {
               // Navigate to receipt screen
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => RechargeReceiptScreen(transactionId: transactionId),
-                ),
-              );
+              // Navigator.push(
+              //   context,
+              //   MaterialPageRoute(
+              //     builder: (_) => RechargeReceiptScreen(transactionId: transactionId),
+              //   ),
+              // );
             },
             borderRadius: BorderRadius.circular(12),
             child: Padding(

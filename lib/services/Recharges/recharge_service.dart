@@ -1,36 +1,49 @@
-// lib/services/recharge_service.dart
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../api_logger.dart';
+import 'package:uuid/uuid.dart';
+import '../../models/recharge_models.dart';
+import '../BBPS/api_service.dart';
 
 class RechargeService {
-  final String baseUrl;
+  static const _uuid = Uuid();
 
-  RechargeService({required this.baseUrl});
+  static Future<RechargeResponse> processRecharge(RechargeRequest request) async {
+    // Generate idempotency key if not provided
+    final finalRequest = request.idempotencyKey == null
+        ? RechargeRequest(
+            mobile: request.mobile,
+            operator: request.operator,
+            serviceType: request.serviceType,
+            amount: request.amount,
+            idempotencyKey: _uuid.v4(),
+          )
+        : request;
 
-  Future<Map<String, dynamic>> getReceipt(int transactionId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('accessToken');
-    if (token == null) throw Exception('No auth token');
+    // Ensure all values are properly typed
+    final jsonBody = finalRequest.toJson();
+    
+    // Make sure amount is a number, not string
+    jsonBody['amount'] = finalRequest.amount.toDouble();
+    
+    print('📤 Sending recharge request: $jsonBody');
+    
+    final json = await ApiService.post('/api/recharge', jsonBody);
+    return RechargeResponse.fromJson(json);
+  }
 
-    final response = await LoggedHttpClient.get(
-      Uri.parse('$baseUrl/api/recharge/receipt/$transactionId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+  static Future<PlansResponse> getPlans(String operator, {String circle = 'ALL'}) async {
+    print('📡 Fetching plans: operator=$operator, circle=$circle');
+    final json = await ApiService.get(
+      '/api/recharge/plans',
+      queryParams: {'operator': operator, 'circle': circle},
     );
+    print('📡 Response received');
+    return PlansResponse.fromJson(json);
+  }
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load receipt');
-    }
-
-    final body = jsonDecode(response.body);
-    if (body['success'] != true) {
-      throw Exception(body['message'] ?? 'Receipt fetch failed');
-    }
-    return body;
+  static Future<HistoryResponse> getUserHistory({int limit = 50, int offset = 0}) async {
+    final json = await ApiService.get(
+      '/api/recharge/history',
+      queryParams: {'limit': limit.toString(), 'offset': offset.toString()},
+    );
+    return HistoryResponse.fromJson(json);
   }
 }

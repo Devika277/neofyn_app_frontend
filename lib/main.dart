@@ -9,7 +9,7 @@ import 'screens/account/login_screen.dart';
 import 'screens/account/set_mpin_screen.dart';
 import 'screens/account/mpin_verify_screen.dart';
 
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;   // 👈 add prefix
 
 import 'providers/aeps_provider.dart';
 import 'providers/payout_provider.dart';
@@ -20,15 +20,17 @@ import 'providers/remitter_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/aeps_provider.dart';
 import 'providers/bbps_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';  // 👈 Add this import
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await StorageService.init(); // Initialize StorageService
-  // Create and load AepsProvider
+  await StorageService.init();
   final aepsProvider = AepsProvider();
-  await aepsProvider.loadFromStorage(); // loads token & userId from SharedPreferences
+  await aepsProvider.loadFromStorage();
 
-  runApp(MyApp(aepsProvider: aepsProvider));
+  runApp(MyApp(aepsProvider: aepsProvider));  // No ProviderScope here
 }
 
 class MyApp extends StatelessWidget {
@@ -37,35 +39,33 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
+    return provider.MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: aepsProvider),
-        ChangeNotifierProvider(create: (_) => PayoutProvider()),
-        ChangeNotifierProvider(create: (_) => BeneficiaryProvider()),
-        ChangeNotifierProvider(create: (_) => WalletProvider()),
-        ChangeNotifierProvider(create: (_) => RemitterProvider()),        
-        ChangeNotifierProvider(create: (_) => AuthProvider()), 
-        ChangeNotifierProvider(create: (_) => BBPSProvider()), 
-
-      ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'NeoFyn',
-        theme: ThemeData(
-          fontFamily: 'Poppins',
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF000000),
-          primaryColor: const Color(0xFF2ECC71),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF2ECC71),
+    provider.ChangeNotifierProvider.value(value: aepsProvider),    // 👈 prefix
+    provider.ChangeNotifierProvider(create: (_) => PayoutProvider()),
+    provider.ChangeNotifierProvider(create: (_) => BeneficiaryProvider()),
+    provider.ChangeNotifierProvider(create: (_) => WalletProvider()),
+    provider.ChangeNotifierProvider(create: (_) => RemitterProvider()),
+    provider.ChangeNotifierProvider(create: (_) => AuthProvider()),
+    provider.ChangeNotifierProvider(create: (_) => BBPSProvider()),
+  ],
+      child: ProviderScope(   // 👈 Riverpod scope now wraps MaterialApp
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'NeoFyn',
+          theme: ThemeData(
+            fontFamily: 'Poppins',
             brightness: Brightness.dark,
+            scaffoldBackgroundColor: const Color(0xFF000000),
+            primaryColor: const Color(0xFF2ECC71),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF2ECC71),
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
           ),
-          useMaterial3: true,
+          home: const AppRouter(),
         ),
-        home: const AppRouter(), // ✅ Changed from IntroScreen to AppRouter
-        /*builder: (context, child) {
-          return DebugOverlay(child: child ?? const SizedBox.shrink());
-        },*/
       ),
     );
   }

@@ -22,11 +22,16 @@ class _BillPaymentScreenState extends State<BillPaymentScreen> {
   String? _fetchedCustomerId;
 
   @override
-  void initState() {
-    super.initState();
-    final provider = context.read<BBPSProvider>();
-    provider.loadBillCategories();
-  }
+void initState() {
+  super.initState();
+  print('🟢 BillPaymentScreen initState called');
+  
+  final provider = context.read<BBPSProvider>();
+  print('🟢 Provider obtained: ${provider != null}');
+  
+  provider.loadBillCategories();
+  print('🟢 loadBillCategories called');
+}
 
 @override
 void dispose() {
@@ -210,9 +215,23 @@ void dispose() {
   // ---------- STEP WIDGETS ----------
 
   Widget _buildCategoryStep(BBPSProvider provider) {
-    if (provider.categories.isEmpty) {
-      return const Center(child: Text('No categories available'));
-    }
+  if (provider.categories.isEmpty) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.category_outlined, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text('No categories available'),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => provider.loadBillCategories(),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

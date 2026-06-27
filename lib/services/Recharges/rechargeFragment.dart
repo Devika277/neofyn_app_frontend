@@ -113,12 +113,12 @@ class RechargeCategoryScreen extends StatelessWidget {
 
     // Recharge types (mobile, dth, fastag) → go to MobileNumberScreen
     if (type == 'mobile' || type == 'dth' || type == 'fastag') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MobileNumberScreen(),
-        ),
-      );
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (_) => MobileNumberScreen(),
+      //   ),
+      // );
     } else {
       // Bill types → go to BBPSPaymentScreen
       // Navigator.push(

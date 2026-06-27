@@ -57,7 +57,12 @@ Future<void> loadBillCategories() async {
   notifyListeners();
   try {
     _categories = await BBPSOnboardingService.getBillerCategories();
+    print('📦 Categories loaded: ${_categories.length} items');
+    if (_categories.isNotEmpty) {
+      print('📋 First category: code="${_categories[0].code}" name="${_categories[0].name}"');
+    }
   } catch (e) {
+    print('❌ Error loading categories: $e');
     _categories = [];
   }
   categoriesLoading = false;

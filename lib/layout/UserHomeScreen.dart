@@ -32,7 +32,7 @@ import '../../services/session_service.dart';
 import '../screens/dmt/dmt_selector_screen.dart';
 import '../screens/bbps/onboarding_page.dart';
 import '../screens/bbps/bill_payment_page.dart';
-
+import '../screens/recharge/recharge_screen.dart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ Navigator.push(
         _onMicroATMTap();
         break;
       case 'Recharge':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => RechargeCategoryScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => RechargePage()));
         break;
       case 'Bills':
         Navigator.push(context, MaterialPageRoute(builder: (_) => const BillPaymentScreen()));

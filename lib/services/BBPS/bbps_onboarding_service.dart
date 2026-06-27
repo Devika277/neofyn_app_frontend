@@ -28,13 +28,23 @@ class BBPSOnboardingService {
   }
 
   static Future<List<BillerCategory>> getBillerCategories() async {
-  final json = await ApiService.get('/api/bbps/billerCategories');
-  print('📦 Categories raw response: $json');        // ← ADD
-  final List<dynamic> list = json['data'] ?? [];
-  if (list.isNotEmpty) {
-    print('📋 First category object: ${list[0]}');    // ← ADD
+  try {
+    final json = await ApiService.get('/api/bbps/billerCategories');
+    print('📦 Categories API response: $json');
+    
+    // Handle both success and failure cases
+    if (json['success'] == true) {
+      final List<dynamic> list = json['data'] ?? [];
+      print('📊 Categories loaded: ${list.length}');
+      return list.map((e) => BillerCategory.fromJson(e as Map<String, dynamic>)).toList();
+    } else {
+      print('⚠️ Categories API returned success=false: ${json['message']}');
+      return [];
+    }
+  } catch (e) {
+    print('❌ Categories API exception: $e');
+    return [];
   }
-  return list.map((e) => BillerCategory.fromJson(e as Map<String, dynamic>)).toList();
 }
 
   static Future<List<BillerProvider>> getBillerCode(String categoryCode) async {
