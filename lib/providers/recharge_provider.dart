@@ -57,20 +57,21 @@ class RechargeFormNotifier extends StateNotifier<RechargeFormState> {
   void updateAmount(double amount) => state = state.copyWith(amount: amount);
   void clearError() => state = state.copyWith(error: null);
 
-  // ✅ ADD THIS SUBMIT METHOD
-  Future<void> submit() async {
+  // ✅ MODIFIED: Now returns the response for navigation
+  Future<RechargeResponse?> submit() async {
     if (state.mobile.isEmpty || state.operator.isEmpty || state.amount <= 0) {
       state = state.copyWith(error: 'Please fill all fields correctly');
-      return;
+      return null;
     }
 
     // Validate mobile number
     if (state.mobile.length != 10) {
       state = state.copyWith(error: 'Please enter a valid 10-digit mobile number');
-      return;
+      return null;
     }
 
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, lastResponse: null);
+
     try {
       final request = RechargeRequest(
         mobile: state.mobile.trim(),
@@ -85,17 +86,22 @@ class RechargeFormNotifier extends StateNotifier<RechargeFormState> {
 
       print('📥 Recharge response: ${response.toJson()}');
 
+      // ✅ Don't show error for pending - let status screen handle it
       state = state.copyWith(
         isLoading: false,
         lastResponse: response,
-        error: response.success ? null : response.message,
+        error: response.isFailed ? response.message : null, // Only set error for actual failures
       );
+
+      return response; // ✅ Return response so page can navigate
+
     } catch (e) {
       print('❌ Recharge error: $e');
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
       );
+      return null;
     }
   }
 }

@@ -76,7 +76,7 @@ class _AepsOptionsSheet extends StatelessWidget {
             _primary,
             'Move to Main Wallet',
             'Transfer balance to main wallet',
-            () {
+                () {
               Navigator.pop(context);
               Navigator.push(context, _slide(const MoveToMainWalletPage()));
             },
@@ -87,7 +87,7 @@ class _AepsOptionsSheet extends StatelessWidget {
             _primary,
             'Move Fund',
             'Transfer to beneficiary account',
-            () {
+                () {
               Navigator.pop(context);
               Navigator.push(context, _slide(const MoveFundPage()));
             },
@@ -98,7 +98,7 @@ class _AepsOptionsSheet extends StatelessWidget {
             const Color(0xFF8B5CF6),
             'Move to CC Fund',
             'Coming soon',
-            () {},
+                () {},
             enabled: false,
           ),
         ],
@@ -107,13 +107,13 @@ class _AepsOptionsSheet extends StatelessWidget {
   }
 
   Widget _option(
-    IconData icon,
-    Color color,
-    String title,
-    String subtitle,
-    VoidCallback onTap, {
-    bool enabled = true,
-  }) {
+      IconData icon,
+      Color color,
+      String title,
+      String subtitle,
+      VoidCallback onTap, {
+        bool enabled = true,
+      }) {
     return Opacity(
       opacity: enabled ? 1.0 : 0.4,
       child: GestureDetector(
@@ -656,21 +656,21 @@ class _MoveFundPageState extends State<MoveFundPage> {
                   const Spacer(),
                   _loadingBalance
                       ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _primary,
-                          ),
-                        )
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _primary,
+                    ),
+                  )
                       : Text(
-                          '₹${_aepsBalance.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            color: _primary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                    '₹${_aepsBalance.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: _primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -706,7 +706,7 @@ class _BeneficiaryDashboard extends StatefulWidget {
 
 class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
   static const int _max = 3;
-  int? _selectedPrimaryId; // ✅ ADD THIS: Track loading state
+  int? _selectedPrimaryId;
 
   @override
   void initState() {
@@ -775,7 +775,6 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
     );
   }
 
-  // ✅ ADD THIS METHOD: Set as primary account
   Future<void> _setAsPrimary(Beneficiary beneficiary) async {
     if (beneficiary.isPrimary) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -790,7 +789,6 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
       return;
     }
 
-    // Show confirmation dialog
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -854,7 +852,6 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
         );
 
         if (success && mounted) {
-          // Reload beneficiaries to show updated primary status
           await context.read<BeneficiaryProvider>().loadBeneficiaries();
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -889,41 +886,6 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
       }
     }
   }
-
-
-  // ✅ NEW: View last transaction
-  /*void _viewLastTransaction() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastRefId = prefs.getString('last_payout_ref_id');
-
-    if (lastRefId != null && lastRefId.isNotEmpty) {
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PayoutStatusScreen(merchantRefId: lastRefId),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'No recent transactions found',
-              style: TextStyle(fontSize: 12),
-            ),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            margin: EdgeInsets.all(16),
-          ),
-        );
-      }
-    }
-  }*/
 
   @override
   Widget build(BuildContext context) {
@@ -981,87 +943,27 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
                   ],
                 ),
               ),
-
-              /*// ✅ LAST TRANSACTION BUTTON
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GestureDetector(
-                  onTap: _viewLastTransaction,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _card,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.05)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: _primary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.history_rounded,
-                            color: _primary,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Last Transaction',
-                                style: TextStyle(
-                                  color: _textPrim,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                'View your most recent payout',
-                                style: TextStyle(color: _textSec, fontSize: 10),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          color: _textPrim.withOpacity(0.3),
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),*/
-
               const SizedBox(height: 8),
-
               Expanded(
                 child: provider.isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: _primary),
-                      )
+                  child: CircularProgressIndicator(color: _primary),
+                )
                     : list.isEmpty
                     ? _empty()
                     : ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: list.length,
-                        itemBuilder: (_, i) => _benCard(
-                          list[i],
-                          onTap: () => _transfer(list[i]),
-                          onEdit: () => _edit(list[i]),
-                          onDelete: () => _delete(list[i]),
-                          onSetPrimary: () => _setAsPrimary(list[i]), // ✅ Pass the callback
-                          isLoading: _selectedPrimaryId == list[i].id,
-                        ),
-                      ),
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => _benCard(
+                    list[i],
+                    onTap: () => _transfer(list[i]),
+                    onEdit: () => _edit(list[i]),
+                    onDelete: () => _delete(list[i]),
+                    onSetPrimary: () => _setAsPrimary(list[i]),
+                    isLoading: _selectedPrimaryId == list[i].id,
+                  ),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
@@ -1104,17 +1006,15 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
     ),
   );
 
-  // In aeps_wallet_dialog.dart - Replace _benCard method in _BeneficiaryDashboardState
-
   Widget _benCard(
       Beneficiary b, {
         required VoidCallback onTap,
         required VoidCallback onEdit,
         required VoidCallback onDelete,
-        required VoidCallback onSetPrimary, // ✅ Add this parameter
+        required VoidCallback onSetPrimary,
         bool isLoading = false,
       }) {
-    final isPrimary = b.isPrimary; // ✅ Use the model field
+    final isPrimary = b.isPrimary;
 
     return GestureDetector(
       onTap: onTap,
@@ -1130,7 +1030,6 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
           ),
         ),
         child: Row(children: [
-          // Avatar
           Container(
             width: 36, height: 36,
             decoration: BoxDecoration(
@@ -1148,13 +1047,10 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
             ),
           ),
           const SizedBox(width: 10),
-
-          // Info
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(child: Text(b.name, style: const TextStyle(color: _textPrim, fontSize: 13, fontWeight: FontWeight.w500))),
-                // ✅ Primary badge
                 if (isPrimary)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1175,8 +1071,6 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
               Text('${b.bankName} • ${b.accountNumber}', style: TextStyle(color: _textPrim.withOpacity(0.35), fontSize: 10)),
             ]),
           ),
-
-          // ✅ Radio button
           isLoading
               ? const Padding(
             padding: EdgeInsets.all(8.0),
@@ -1193,11 +1087,7 @@ class _BeneficiaryDashboardState extends State<_BeneficiaryDashboard> {
             onPressed: onSetPrimary,
             tooltip: 'Set as primary account',
           ),
-
-          // Edit
           IconButton(padding: EdgeInsets.zero, constraints: const BoxConstraints(), icon: const Icon(Icons.edit_rounded, color: _textSec, size: 16), onPressed: onEdit),
-
-          // Delete
           IconButton(padding: EdgeInsets.zero, constraints: const BoxConstraints(), icon: const Icon(Icons.delete_rounded, color: _error, size: 16), onPressed: onDelete),
         ]),
       ),
@@ -1228,7 +1118,6 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
       _ifsc = TextEditingController(),
       _mobile = TextEditingController();
   String? _bank, _state;
-  String _mode = 'NEFT';
   bool _loading = false;
 
   bool get _isEdit => widget.existing != null;
@@ -1244,7 +1133,6 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
       _mobile.text = e.mobile;
       _bank = e.bankCode;
       _state = e.stateCode;
-      _mode = e.paymentMode;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<PayoutProvider>();
@@ -1283,7 +1171,7 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
         bankName: context.read<PayoutProvider>().getBankName(_bank!) ?? '',
         stateCode: _state!,
         stateName: context.read<PayoutProvider>().getStateName(_state!) ?? '',
-        paymentMode: _mode,
+        paymentMode: 'NEFT', // Default payment mode
       );
       await context.read<BeneficiaryProvider>().addBeneficiary(b);
       widget.onSave();
@@ -1377,15 +1265,15 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
                     provider.banks
                         .map(
                           (b) => DropdownMenuItem(
-                            value: b['code']?.toString(),
-                            child: Text(
-                              b['description']?.toString() ?? '',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
+                        value: b['code']?.toString(),
+                        child: Text(
+                          b['description']?.toString() ?? '',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                         .toList(),
-                    (v) => setState(() => _bank = v),
+                        (v) => setState(() => _bank = v),
                   ),
                   const SizedBox(height: 14),
                   _dropdown(
@@ -1395,18 +1283,16 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
                     provider.states
                         .map(
                           (s) => DropdownMenuItem(
-                            value: s['code']?.toString(),
-                            child: Text(
-                              s['description']?.toString() ?? '',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
+                        value: s['code']?.toString(),
+                        child: Text(
+                          s['description']?.toString() ?? '',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                         .toList(),
-                    (v) => setState(() => _state = v),
+                        (v) => setState(() => _state = v),
                   ),
-                  const SizedBox(height: 14),
-                  _modeSelector(),
                   const SizedBox(height: 24),
                   _btn(
                     _isEdit ? 'Update' : 'Add Beneficiary',
@@ -1419,59 +1305,6 @@ class _AddBeneficiaryPageState extends State<_AddBeneficiaryPage> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _modeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Payment Mode',
-          style: TextStyle(
-            color: _textSec,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(children: [_modeChip('NEFT', Icons.account_balance_rounded)]),
-      ],
-    );
-  }
-
-  Widget _modeChip(String label, IconData icon) {
-    final sel = _mode == label;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _mode = label),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: sel ? _primary.withOpacity(0.12) : _card,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: sel ? _primary : Colors.white.withOpacity(0.06),
-              width: sel ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: sel ? _primary : _textSec, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: sel ? _primary : _textSec,
-                  fontSize: 13,
-                  fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1492,7 +1325,7 @@ class _TransferPageState extends State<_TransferPage> {
   final _amountCtrl = TextEditingController(),
       _tpinCtrl = TextEditingController();
   bool _obscureTpin = true, _loading = false;
-  String _mode = 'NEFT';
+  String _mode = 'NEFT'; // Default to NEFT
 
   @override
   void dispose() {
@@ -1545,21 +1378,14 @@ class _TransferPageState extends State<_TransferPage> {
       });
 
       if (response['success'] == true) {
-        // ✅ Refresh wallet balances immediately
         if (mounted) {
           context.read<WalletProvider>().fetchAllWalletData();
         }
-        // ✅ GET AND SAVE LAST TRANSACTION REFERENCE
-        // final refId =
-        //     response['merchantRefId'] ??
-        //     response['data']?['merchantRefId'] ??
-        //     response['data']?['merchant_ref_id'] ??
-        //     response['transactionId']?.toString();
-    // ✅ Use merchantRefId directly from response
-    final refId = response['merchantRefId']?.toString() ?? '';
 
-    print('✅ Payout success! merchantRefId: $refId');
-        // ✅ SAVE TO SHARED PREFERENCES
+        final refId = response['merchantRefId']?.toString() ?? '';
+
+        print('✅ Payout success! merchantRefId: $refId');
+
         if (refId.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('last_payout_ref_id', refId);
@@ -1570,10 +1396,7 @@ class _TransferPageState extends State<_TransferPage> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-                  // PayoutStatusScreen(merchantRefId: refId?.toString() ?? ''),
-
-              PayoutStatusScreen(merchantRefId: refId)
+                builder: (_) => PayoutStatusScreen(merchantRefId: refId)
             ),
           );
         }
@@ -1692,7 +1515,7 @@ class _TransferPageState extends State<_TransferPage> {
               ),
             ),
             const SizedBox(height: 8),
-            // ✅ Main Wallet Balance (for commission)
+            // Main Wallet Balance (for commission)
             Consumer<WalletProvider>(
               builder: (context, wp, _) {
                 return Container(
@@ -1718,38 +1541,24 @@ class _TransferPageState extends State<_TransferPage> {
               },
             ),
             const SizedBox(height: 16),
-            // Row(children: [_modeChip('NEFT', Icons.account_balance_rounded)]),
-            // const SizedBox(height: 12),
-            // Container(
-            //   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            //   decoration: BoxDecoration(
-            //     color: _primary.withOpacity(0.06),
-            //     borderRadius: BorderRadius.circular(10),
-            //     border: Border.all(color: _primary.withOpacity(0.15)),
-            //   ),
-            //   child: Row(
-            //     children: [
-            //       const Icon(Icons.wallet_rounded, color: _primary, size: 16),
-            //       const SizedBox(width: 6),
-            //       const Text(
-            //         'Balance',
-            //         style: TextStyle(color: _textSec, fontSize: 12),
-            //       ),
-            //       const Spacer(),
-            //       Text(
-            //         '₹${widget.aepsBalance.toStringAsFixed(2)}',
-            //         style: const TextStyle(
-            //           color: _primary,
-            //           fontSize: 14,
-            //           fontWeight: FontWeight.w600,
-            //         ),
-            //       ),
-            //     ],
-            //   ),
-            // ),
-            // const SizedBox(height: 16),
-            // Row(children: [_modeChip('NEFT', Icons.account_balance_rounded)]),
-            // const SizedBox(height: 16),
+            // Payment Mode Selection
+            const Text(
+              'Payment Mode',
+              style: TextStyle(
+                color: _textSec,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _modeChip('NEFT', Icons.account_balance_rounded),
+                const SizedBox(width: 10),
+                _modeChip('IMPS', Icons.speed_rounded),
+              ],
+            ),
+            const SizedBox(height: 16),
             _input(
               'Amount',
               _amountCtrl,
@@ -1804,7 +1613,7 @@ class _TransferPageState extends State<_TransferPage> {
       child: GestureDetector(
         onTap: () => setState(() => _mode = label),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 9),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: sel ? _primary.withOpacity(0.12) : _card,
             borderRadius: BorderRadius.circular(10),
@@ -1817,12 +1626,12 @@ class _TransferPageState extends State<_TransferPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: sel ? _primary : _textSec, size: 16),
-              const SizedBox(width: 5),
+              const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   color: sel ? _primary : _textSec,
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
@@ -1855,19 +1664,19 @@ AppBar _appBar(String title) => AppBar(
 );
 
 Widget _input(
-  String label,
-  TextEditingController ctrl, {
-  String? hint,
-  String? prefix,
-  Widget? suf,
-  bool ob = false,
-  int? max,
-  TextInputType? kb,
-  List<TextInputFormatter>? formatters,
-  String? Function(String?)? v,
+    String label,
+    TextEditingController ctrl, {
+      String? hint,
+      String? prefix,
+      Widget? suf,
+      bool ob = false,
+      int? max,
+      TextInputType? kb,
+      List<TextInputFormatter>? formatters,
+      String? Function(String?)? v,
   String? error, // ✅ Add this parameter
 
-}) {
+    }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1939,12 +1748,12 @@ Widget _input(
 
 // ─── Searchable Dropdown ─────────────────────────────────
 Widget _dropdown(
-  BuildContext context,
-  String label,
-  String? val,
-  List<DropdownMenuItem<String>> items,
-  void Function(String?) onCh,
-) {
+    BuildContext context,
+    String label,
+    String? val,
+    List<DropdownMenuItem<String>> items,
+    void Function(String?) onCh,
+    ) {
   String displayText = 'Select';
   if (val != null) {
     final selectedItem = items.where((i) => i.value == val).firstOrNull;
@@ -2003,12 +1812,12 @@ Widget _dropdown(
 }
 
 void _showSearchablePicker(
-  BuildContext context,
-  List<DropdownMenuItem<String>> items,
-  String? currentValue,
-  void Function(String?) onCh,
-  String searchHint,
-) {
+    BuildContext context,
+    List<DropdownMenuItem<String>> items,
+    String? currentValue,
+    void Function(String?) onCh,
+    String searchHint,
+    ) {
   final searchController = TextEditingController();
   List<DropdownMenuItem<String>> filteredItems = List.from(items);
   showModalBottomSheet(
@@ -2056,18 +1865,18 @@ void _showSearchablePicker(
                   ),
                   suffixIcon: searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(
-                            Icons.clear_rounded,
-                            color: _textSec,
-                            size: 18,
-                          ),
-                          onPressed: () {
-                            searchController.clear();
-                            setSheetState(
-                              () => filteredItems = List.from(items),
-                            );
-                          },
-                        )
+                    icon: const Icon(
+                      Icons.clear_rounded,
+                      color: _textSec,
+                      size: 18,
+                    ),
+                    onPressed: () {
+                      searchController.clear();
+                      setSheetState(
+                            () => filteredItems = List.from(items),
+                      );
+                    },
+                  )
                       : null,
                   filled: true,
                   fillColor: _card,
@@ -2078,7 +1887,7 @@ void _showSearchablePicker(
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
                 onChanged: (q) => setSheetState(
-                  () => filteredItems = items.where((i) {
+                      () => filteredItems = items.where((i) {
                     final t = i.child is Text
                         ? (i.child as Text).data ?? ''
                         : '';
@@ -2091,52 +1900,52 @@ void _showSearchablePicker(
             Expanded(
               child: filteredItems.isEmpty
                   ? const Center(
-                      child: Text(
-                        'No results found',
-                        style: TextStyle(color: _textSec, fontSize: 13),
-                      ),
-                    )
+                child: Text(
+                  'No results found',
+                  style: TextStyle(color: _textSec, fontSize: 13),
+                ),
+              )
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: filteredItems.length,
-                      itemBuilder: (_, i) {
-                        final item = filteredItems[i];
-                        final text = item.child is Text
-                            ? (item.child as Text).data ?? ''
-                            : '';
-                        final isSelected = item.value == currentValue;
-                        return ListTile(
-                          dense: true,
-                          title: Text(
-                            text,
-                            style: TextStyle(
-                              color: isSelected ? _primaryLight : _textPrim,
-                              fontSize: 14,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                          trailing: isSelected
-                              ? const Icon(
-                                  Icons.check_rounded,
-                                  color: _primaryLight,
-                                  size: 20,
-                                )
-                              : null,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          tileColor: isSelected
-                              ? _primary.withOpacity(0.1)
-                              : null,
-                          onTap: () {
-                            onCh(item.value);
-                            Navigator.pop(ctx);
-                          },
-                        );
-                      },
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: filteredItems.length,
+                itemBuilder: (_, i) {
+                  final item = filteredItems[i];
+                  final text = item.child is Text
+                      ? (item.child as Text).data ?? ''
+                      : '';
+                  final isSelected = item.value == currentValue;
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      text,
+                      style: TextStyle(
+                        color: isSelected ? _primaryLight : _textPrim,
+                        fontSize: 14,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
                     ),
+                    trailing: isSelected
+                        ? const Icon(
+                      Icons.check_rounded,
+                      color: _primaryLight,
+                      size: 20,
+                    )
+                        : null,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    tileColor: isSelected
+                        ? _primary.withOpacity(0.1)
+                        : null,
+                    onTap: () {
+                      onCh(item.value);
+                      Navigator.pop(ctx);
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -2187,12 +1996,12 @@ Widget _infoCard(IconData icon, Color color, String title, String subtitle) {
 }
 
 Widget _btn(
-  String label,
-  Color color,
-  VoidCallback? onTap, {
-  bool loading = false,
-  IconData? icon,
-}) {
+    String label,
+    Color color,
+    VoidCallback? onTap, {
+      bool loading = false,
+      IconData? icon,
+    }) {
   return SizedBox(
     width: double.infinity,
     child: GestureDetector(
@@ -2213,34 +2022,34 @@ Widget _btn(
         child: Center(
           child: loading
               ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: color,
-                  ),
-                )
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: color,
+            ),
+          )
               : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (icon != null) ...[
-                      Icon(
-                        icon,
-                        color: onTap == null ? _textSec : color,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: onTap == null ? _textSec : color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  color: onTap == null ? _textSec : color,
+                  size: 16,
                 ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: onTap == null ? _textSec : color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),

@@ -148,7 +148,7 @@ Future<void> loadBillerDetails(String billerCategoryCode, String billerCode) asy
     }
   }
 
-  Future<void> loadStates() async {
+  /*Future<void> loadStates() async {
     loadingStates = true;
     notifyListeners();
     try {
@@ -156,8 +156,23 @@ Future<void> loadBillerDetails(String billerCategoryCode, String billerCode) asy
     } catch (_) {}
     loadingStates = false;
     notifyListeners();
+  }*/
+// In BBPSProvider, temporarily change loadStates():
+  Future<void> loadStates() async {
+    loadingStates = true;
+    notifyListeners();
+    try {
+      debugPrint('🔄 Attempting to load states...');
+      states = await BBPSOnboardingService.getStates();
+      debugPrint('✅ States loaded successfully: ${states.length} states');
+      debugPrint('📋 States data: $states');
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error loading states: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
+    }
+    loadingStates = false;
+    notifyListeners();
   }
-
   Future<void> loadCities(String stateCode) async {
     loadingCities = true;
     notifyListeners();

@@ -39,26 +39,33 @@ class RechargeRequest {
 
 class RechargeResponse {
   final bool success;
+  final String status; // ✅ ADD THIS
   final String message;
   final RechargeData? data;
 
-  RechargeResponse({required this.success, required this.message, this.data});
+  RechargeResponse({
+    required this.success,
+    this.status = 'failed', // ✅ ADD THIS
+    required this.message,
+    this.data,
+  });
 
   factory RechargeResponse.fromJson(Map<String, dynamic> json) {
     return RechargeResponse(
       success: json['success'] ?? false,
+      status: json['status'] ?? (json['success'] == true ? 'success' : 'failed'), // ✅ ADD THIS
       message: json['message'] ?? '',
       data: json['data'] != null ? RechargeData.fromJson(json['data']) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'success': success,
-      'message': message,
-      'data': data?.toJson(),
-    };
+    return {'success': success, 'status': status,'message': message, 'data': data?.toJson()};
   }
+  // ✅ ADD THESE HELPER GETTERS
+  bool get isSuccess => status == 'success';
+  bool get isPending => status == 'pending';
+  bool get isFailed => status == 'failed';
 }
 
 class RechargeData {
@@ -74,8 +81,12 @@ class RechargeData {
 
   factory RechargeData.fromJson(Map<String, dynamic> json) {
     return RechargeData(
-      transactionId: json['transactionId'] ?? '',
-      provider: json['provider'],
+      transactionId: (json['transactionId'] ?? '').toString(),
+      // ✅ FIXED - converts int to String
+      provider: json['provider']?.toString(),
+      // ✅ Added safety for provider too
+      // transactionId: json['transactionId'] ?? '',
+      // provider: json['provider'],
       refunded: json['refunded'] ?? false,
     );
   }
@@ -118,14 +129,32 @@ class RechargePlan {
     return RechargePlan(
       id: json['id'] ?? 0,
       operator: json['operator'] ?? '',
-      amount: (json['amount'] ?? 0).toDouble(),
-      validityDays: json['validity_days'],
+      // 🔧 FIXED: Handle amount as String, int, or double
+      amount: _parseAmount(json['amount']),
+      validityDays: json['validity_days'] is int
+          ? json['validity_days']
+          : int.tryParse(json['validity_days']?.toString() ?? ''),
       dataBenefit: json['data_benefit'],
       category: json['category'],
       circle: json['circle'],
-      displayOrder: json['display_order'],
+      displayOrder: json['display_order'] is int
+          ? json['display_order']
+          : int.tryParse(json['display_order']?.toString() ?? ''),
       isActive: json['is_active'] ?? true,
     );
+  }
+
+  // 🔧 ADD THIS HELPER METHOD
+  static double _parseAmount(dynamic amount) {
+    if (amount == null) return 0.0;
+    if (amount is double) return amount;
+    if (amount is int) return amount.toDouble();
+    if (amount is String) {
+      // Remove any non-numeric characters except decimal point
+      String cleaned = amount.replaceAll(RegExp(r'[^\d.]'), '');
+      return double.tryParse(cleaned) ?? 0.0;
+    }
+    return 0.0;
   }
 
   Map<String, dynamic> toJson() {
@@ -151,17 +180,36 @@ class PlansResponse {
 
   factory PlansResponse.fromJson(Map<String, dynamic> json) {
     final plansMap = <String, List<RechargePlan>>{};
+
+    // 🔧 FIXED: Handle both response structures
     if (json['plans'] is Map) {
-      (json['plans'] as Map).forEach((key, value) {
-        if (value is List) {
-          plansMap[key] = value.map((e) => RechargePlan.fromJson(e)).toList();
-        }
-      });
+      final plansData = json['plans'] as Map;
+
+      // Case 1: API returns {"plans": {"data": [...]}}
+      if (plansData.containsKey('data') && plansData['data'] is List) {
+        final List<dynamic> dataList = plansData['data'];
+        plansMap['all'] = dataList
+            .map(
+              (e) => RechargePlan.fromJson(e is Map<String, dynamic> ? e : {}),
+            )
+            .toList();
+      }
+      // Case 2: API returns {"plans": {"category1": [...], "category2": [...]}}
+      else {
+        plansData.forEach((key, value) {
+          if (value is List) {
+            plansMap[key.toString()] = value
+                .map(
+                  (e) =>
+                      RechargePlan.fromJson(e is Map<String, dynamic> ? e : {}),
+                )
+                .toList();
+          }
+        });
+      }
     }
-    return PlansResponse(
-      success: json['success'] ?? false,
-      plans: plansMap,
-    );
+
+    return PlansResponse(success: json['success'] ?? false, plans: plansMap);
   }
 }
 
@@ -191,10 +239,13 @@ class TransactionItem {
       id: json['id'] ?? 0,
       mobile: json['mobile'] ?? '',
       operator: json['operator'] ?? '',
-      amount: (json['amount'] ?? 0).toDouble(),
+      // 🔧 FIXED: Handle amount as String
+      amount: RechargePlan._parseAmount(json['amount']),
       status: json['status'] ?? 'pending',
       providerTxnId: json['provider_txn_id'],
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(
+        json['created_at'] ?? DateTime.now().toIso8601String(),
+      ),
     );
   }
 
@@ -241,7 +292,11 @@ class HistoryResponse {
   factory HistoryResponse.fromJson(Map<String, dynamic> json) {
     return HistoryResponse(
       success: json['success'] ?? false,
-      data: (json['data'] as List?)?.map((e) => TransactionItem.fromJson(e)).toList() ?? [],
+      data:
+          (json['data'] as List?)
+              ?.map((e) => TransactionItem.fromJson(e))
+              .toList() ??
+          [],
       pagination: json['pagination'] != null
           ? Pagination.fromJson(json['pagination'])
           : Pagination(limit: 0, offset: 0, count: 0),
@@ -250,7 +305,6 @@ class HistoryResponse {
 }
 
 // ─── EXTENSIONS ─────────────────────────────────────────────
-// 👇 ADD THIS AT THE VERY BOTTOM
 
 extension PlanCategoryExtension on String {
   String get displayName {
