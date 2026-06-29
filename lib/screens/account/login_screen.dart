@@ -119,10 +119,10 @@ class CountryCode {
 
 const List<CountryCode> countryCodes = [
   CountryCode('🇮🇳', '+91', 'India'),
-  CountryCode('🇺🇸', '+1', 'USA'),
-  CountryCode('🇬🇧', '+44', 'UK'),
-  CountryCode('🇦🇪', '+971', 'UAE'),
-  CountryCode('🇸🇬', '+65', 'Singapore'),
+  // CountryCode('🇺🇸', '+1', 'USA'),
+  // CountryCode('🇬🇧', '+44', 'UK'),
+  // CountryCode('🇦🇪', '+971', 'UAE'),
+  // CountryCode('🇸🇬', '+65', 'Singapore'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
