@@ -9,6 +9,8 @@ import 'package:my_app/providers/payout_provider.dart';
 import 'package:my_app/models/beneficiary_model.dart';
 import 'package:my_app/providers/wallet_provider.dart';
 import 'package:my_app/screens/payout/payout_status_screen.dart';
+import 'package:my_app/services/bbps/api_service.dart'; // ✅ Add this import
+
 
 // ─── Neofyn Theme Colors ──────────────────────────────────
 const Color _bg = Color(0xFF0A0E0A);
@@ -183,6 +185,15 @@ class _MoveToMainWalletPageState extends State<MoveToMainWalletPage> {
   final _tpinCtrl = TextEditingController();
   bool _obscureTpin = true;
   bool _loading = false;
+  double _aepsBalance = 0;
+  bool _loadingBalance = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBalance();
+  }
 
   @override
   void dispose() {
@@ -191,28 +202,162 @@ class _MoveToMainWalletPageState extends State<MoveToMainWalletPage> {
     super.dispose();
   }
 
+  Future<void> _loadBalance() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+      if (userId != null) {
+        final wp = context.read<WalletProvider>();
+        if (wp.aepsWallet == null) {
+          wp.setUserId(userId);
+          await Future.doWhile(() async {
+            await Future.delayed(const Duration(milliseconds: 200));
+            return wp.isLoading;
+          });
+        }
+        if (mounted) {
+          setState(() {
+            _aepsBalance = wp.aepsWallet?.balance ?? 0;
+            _loadingBalance = false;
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingBalance = false);
+    }
+  }
+
   Future<void> _submit() async {
-    if (_amountCtrl.text.isEmpty || _tpinCtrl.text.length != 6) {
-      _showSnack('Enter amount and 6-digit TPIN');
+    final amountText = _amountCtrl.text.trim();
+    
+    // Validate amount
+    if (amountText.isEmpty) {
+      setState(() => _error = 'Please enter an amount');
       return;
     }
-    setState(() => _loading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      setState(() => _loading = false);
-      _showSnack('Transfer successful!', success: true);
-      Navigator.pop(context);
+
+    final amount = double.tryParse(amountText);
+    if (amount == null || amount <= 0) {
+      setState(() => _error = 'Please enter a valid amount');
+      return;
+    }
+
+    if (amount > _aepsBalance) {
+      setState(() => _error = 'Insufficient AEPS balance. Available: ₹${_aepsBalance.toStringAsFixed(2)}');
+      return;
+    }
+
+    if (amount < 1) {
+      setState(() => _error = 'Minimum transfer amount is ₹1');
+      return;
+    }
+
+    // Validate TPIN
+    final tpin = _tpinCtrl.text.trim();
+    if (tpin.length != 6) {
+      setState(() => _error = 'Please enter a valid 6-digit TPIN');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+      
+      if (userId == null) {
+        setState(() {
+          _error = 'User not found. Please login again.';
+          _loading = false;
+        });
+        return;
+      }
+
+      // ✅ Step 1: Verify TPIN
+      print('🔑 Verifying TPIN...');
+      final tpinResponse = await ApiService.post(
+        '/api/auth/verify-tpin',
+        {'tpin': tpin},
+      );
+
+      if (tpinResponse['success'] != true) {
+        setState(() {
+          _error = 'Invalid TPIN. Please try again.';
+          _loading = false;
+        });
+        return;
+      }
+
+      print('✅ TPIN verified successfully');
+
+      // ✅ Step 2: Transfer AEPS to Main wallet
+      print('📤 Transferring ₹$amount from AEPS to Main wallet...');
+      final response = await ApiService.post(
+        '/api/wallet/transfer-aeps-to-main',
+        {
+          'user_id': int.parse(userId),
+          'amount': amount,
+          'description': 'AEPS to Main wallet transfer',
+        },
+      );
+
+      print('📥 Transfer response: $response');
+
+      if (response['success'] == true) {
+        final data = response['data'];
+        
+        // Show success message
+        _showSnack(
+          '✅ Transfer successful! ₹${amount.toStringAsFixed(2)} moved to main wallet.',
+          success: true,
+        );
+
+        // Refresh wallet data
+        final wp = context.read<WalletProvider>();
+        await wp.fetchAllWalletData();
+        await wp.fetchCommissionBalance();
+
+        // Update local balance
+        setState(() {
+          _aepsBalance = data['aeps_balance'] ?? (_aepsBalance - amount);
+        });
+
+        // Close the page after a delay
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) Navigator.pop(context);
+        });
+      } else {
+        setState(() {
+          _error = response['message'] ?? 'Transfer failed. Please try again.';
+        });
+      }
+    } catch (e) {
+      print('❌ Transfer error: $e');
+      setState(() {
+        if (e is ApiException && e.statusCode == 401) {
+          _error = 'Invalid TPIN. Please try again.';
+        } else {
+          _error = 'Error: ${e.toString()}';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   void _showSnack(String msg, {bool success = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: const TextStyle(fontSize: 12)),
-        backgroundColor: success ? _success : _error,
+        backgroundColor: (success ? _success : _error) as Color?,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -234,16 +379,113 @@ class _MoveToMainWalletPageState extends State<MoveToMainWalletPage> {
               'Transfer to Main Wallet',
               'Funds move instantly to your main wallet.',
             ),
+            const SizedBox(height: 14),
+            
+            // AEPS Balance Display
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: _primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _primary.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: _primary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'AEPS Balance',
+                    style: TextStyle(color: _textSec, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  _loadingBalance
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _primary,
+                          ),
+                        )
+                      : Text(
+                          '₹${_aepsBalance.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: _primary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            
+            // Main Wallet Balance (for reference)
+            Consumer<WalletProvider>(
+              builder: (context, wp, _) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.15)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wallet_rounded, color: Color(0xFFF59E0B), size: 16),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Main Wallet Balance',
+                        style: TextStyle(color: _textSec, fontSize: 12),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '₹${(wp.mainWallet?.balance ?? 0).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Color(0xFFF59E0B),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 20),
+            
+            // Amount Input
             _input(
               'Amount',
               _amountCtrl,
-              hint: 'Enter amount',
+              hint: 'Enter amount to transfer',
               prefix: '₹',
               kb: TextInputType.number,
               formatters: [FilteringTextInputFormatter.digitsOnly],
+              error: _error != null && !_error!.contains('TPIN') ? _error : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            
+            // Quick amount buttons
+            if (_aepsBalance > 0)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _quickAmountButton(100),
+                  _quickAmountButton(500),
+                  _quickAmountButton(1000),
+                  _quickAmountButton(5000),
+                  _quickAmountButton(_aepsBalance.toInt()),
+                ],
+              ),
+            const SizedBox(height: 16),
+            
+            // TPIN Input
             _input(
               'Transaction PIN (TPIN)',
               _tpinCtrl,
@@ -252,6 +494,7 @@ class _MoveToMainWalletPageState extends State<MoveToMainWalletPage> {
               max: 6,
               kb: TextInputType.number,
               formatters: [FilteringTextInputFormatter.digitsOnly],
+              error: _error != null && _error!.contains('TPIN') ? _error : null,
               suf: IconButton(
                 padding: EdgeInsets.zero,
                 icon: Icon(
@@ -265,8 +508,38 @@ class _MoveToMainWalletPageState extends State<MoveToMainWalletPage> {
               ),
             ),
             const SizedBox(height: 24),
+            
             _btn('Transfer Now', _primary, _submit, loading: _loading),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _quickAmountButton(int amount) {
+    if (amount <= 0) return const SizedBox.shrink();
+    final label = amount >= 1000 ? '₹${(amount / 1000).toStringAsFixed(0)}K' : '₹$amount';
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _amountCtrl.text = amount.toString();
+          _error = null;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: _primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _primary.withOpacity(0.2)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: _primary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
@@ -1401,6 +1674,8 @@ Widget _input(
       TextInputType? kb,
       List<TextInputFormatter>? formatters,
       String? Function(String?)? v,
+  String? error, // ✅ Add this parameter
+
     }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1439,6 +1714,8 @@ Widget _input(
             vertical: 11,
           ),
           counterText: '',
+          errorText: error, // ✅ Use the error parameter
+
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: Colors.white.withOpacity(0.06)),

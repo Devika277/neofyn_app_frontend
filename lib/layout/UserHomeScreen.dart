@@ -33,6 +33,8 @@ import '../screens/dmt/dmt_selector_screen.dart';
 import '../screens/bbps/onboarding_page.dart';
 import '../screens/bbps/bill_payment_page.dart';
 import '../screens/recharge/recharge_screen.dart';
+import '../screens/commission/commission_history_screen.dart';
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -527,7 +529,8 @@ class HomeDashboard extends StatelessWidget {
     final aepsBalance = wp.aepsWallet?.balance ?? 0;
     final totalBalance = mainBalance + aepsBalance;
     final rewards = wp.stats?.rewards ?? 0;
-    final commission = wp.stats?.commission ?? 0;
+     // ✅ Use the actual commission balance from provider
+    final commission = wp.commissionBalance; // This is now fetched from API
     final ccBalance = wp.stats?.ccBalance ?? 0;
 
     return Column(
@@ -600,37 +603,94 @@ class HomeDashboard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _StatCircle('🎁', 'Rewards', rewards, AppColors.primaryLight),
-            _StatCircle('💰', 'Commission', commission, const Color(0xFF7B9FE0)),
-            _StatCircle('💳', 'CC Balance', ccBalance, const Color(0xFFB58FDB)),
-          ],
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _StatCircle('🎁', 'Rewards', rewards, AppColors.primaryLight),
+          _StatCircle(
+            '💰', 
+            'Commission', 
+            commission, 
+            const Color(0xFF7B9FE0),
+            onTap: () => _navigateToCommissionHistory(context),
+          ),            
+          _StatCircle('💳', 'CC Balance', ccBalance,  Color(0xFFB58FDB)),
+        ],
         ),
       ],
     );
   }
 
-  Widget _StatCircle(String emoji, String label, double value, Color color) {
-    return Column(
+
+// Add this navigation method inside HomeDashboard
+  // ✅ Commission Navigation Method
+  void _navigateToCommissionHistory(BuildContext context) {
+    print('🔵 Navigating to Commission History Screen');
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const CommissionHistoryScreen(),
+        ),
+      );
+      print('✅ Navigation successful');
+    } catch (e) {
+      print('❌ Navigation error: $e');
+    }
+  }
+
+
+  Widget _StatCircle(
+  String emoji, 
+  String label, 
+  double value, 
+  Color color, {
+  VoidCallback? onTap, // ← ADD THIS
+}) {
+  return InkWell(
+    onTap: onTap, // ← ADD THIS
+    borderRadius: BorderRadius.circular(40),
+    child: Column(
       children: [
         Container(
-          width: 64, height: 64,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: color.withOpacity(0.12), border: Border.all(color: color.withOpacity(0.3), width: 1.5)),
+          width: 64, 
+          height: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle, 
+            color: color.withOpacity(0.12), 
+            border: Border.all(color: color.withOpacity(0.3), width: 1.5)
+          ),
           child: Center(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(emoji, style: const TextStyle(fontSize: 16)),
-              const SizedBox(height: 2),
-              Text('₹ ${value.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-            ]),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center, 
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 16)),
+                const SizedBox(height: 2),
+                Text(
+                  '₹ ${value.toStringAsFixed(0)}', 
+                  style: TextStyle(
+                    fontSize: 11, 
+                    fontWeight: FontWeight.w700, 
+                    color: color
+                  )
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 6),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500)),
+        Text(
+          label, 
+          style: const TextStyle(
+            fontSize: 10, 
+            color: Colors.white54, 
+            fontWeight: FontWeight.w500
+          )
+        ),
       ],
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildServicesGrid(BuildContext context) {
     return Column(
