@@ -243,6 +243,7 @@ Navigator.push(
         Navigator.push(context, MaterialPageRoute(builder: (_) => RechargePage()));
         break;
       case 'Bills':
+        // _handleBillsNavigation();
         Navigator.push(context, MaterialPageRoute(builder: (_) => const BillPaymentScreen()));
         break;
       case 'PPI DMT':
@@ -261,7 +262,101 @@ Navigator.push(
         break;
     }
   }
+  Future<void> _handleBillsNavigation() async {
+    try {
+      // Check onboarding status from API or local storage
+      final prefs = await SharedPreferences.getInstance();
+      final isOnboarded = prefs.getBool('isOnboarded') ?? false;
 
+      if (!mounted) return;
+
+      if (!isOnboarded) {
+        // Show dialog if not onboarded
+        _showOnboardingRequiredDialog();
+      } else {
+        // Navigate directly to bills screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BillPaymentScreen()),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error checking onboarding status: $e');
+      if (mounted) {
+        _toast('Error checking status', error: true);
+      }
+    }
+  }
+
+  void _showOnboardingRequiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.info_outline, color: AppColors.primaryLight, size: 24),
+            const SizedBox(width: 10),
+            const Text(
+              'Onboarding Required',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'You need to complete the onboarding process before accessing bill payments.',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              // Navigate to onboarding screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OnboardingPage(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Text(
+              'Start Onboarding',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   // ----------------------------------------------------------------------
   //  BUILD
   // ----------------------------------------------------------------------
