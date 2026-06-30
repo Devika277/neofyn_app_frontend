@@ -455,6 +455,75 @@ class ApiService {
       rethrow;
     }
   }
+  // ───────────────────────────────────────────────────────────────
+//  DMT - Get Transaction History
+// ───────────────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getDmtHistory({
+    String? userId,
+    int limit = 50,
+    int offset = 0,
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
+
+      if (userId != null) queryParams['userId'] = userId;
+      if (status != null) queryParams['status'] = status;
+      if (fromDate != null) queryParams['from'] = fromDate;
+      if (toDate != null) queryParams['to'] = toDate;
+
+      // ✅ FIXED: Use baseUrl instead of ApiConfig.baseUrl
+      final uri = Uri.parse('$baseUrl/api/dmt/history')
+          .replace(queryParameters: queryParams);
+
+      print('┌──────────────────────────────────────────');
+      print('│ 🔍 [DMT] Fetching History');
+      print('│ 📍 URL: $uri');
+      print('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.get(
+        uri,
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      print('┌──────────────────────────────────────────');
+      print('│ 📥 [DMT] Response');
+      print('│ 📊 Status: ${response.statusCode}');
+      print('│ 📦 Body: ${response.body.length > 300 ? response.body.substring(0, 300) + '...' : response.body}');
+      print('└──────────────────────────────────────────');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        List<dynamic> list = [];
+
+        if (data is List) {
+          list = data;
+        } else if (data is Map) {
+          if (data['transactions'] is List) {
+            list = data['transactions'];
+          } else if (data['data'] is List) {
+            list = data['data'];
+          } else if (data['history'] is List) {
+            list = data['history'];
+          }
+        }
+
+        return list.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('❌ [DMT] History error: $e');
+      return [];
+    }
+  }
 
   // Get remitter by phone (alias for checkRemitter)
   Future<Map<String, dynamic>> getRemitterByPhone(
