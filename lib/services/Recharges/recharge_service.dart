@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter/cupertino.dart';
+import 'package:my_app/services/api_logger.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/recharge_models.dart';
 import '../BBPS/api_service.dart';
@@ -106,6 +110,41 @@ class RechargeService {
         'message': 'Unable to fetch status',
         'operator_ref_id': '',
       };
+    }
+  }
+  // ───────────────────────────────────────────────────────────────
+//  Get Recharge History
+// ───────────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getRechargeHistory({
+    required String userId,
+    required String token,
+  }) async {
+    try {
+      final url = 'https://api.myneofyn.com/api/recharge/history?userId=$userId';
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 🔍 [Recharge] Fetching History');
+      debugPrint('│ 📍 URL: $url');
+      debugPrint('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      debugPrint('📊 [Recharge] Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data as Map<String, dynamic>;
+      }
+      return {'success': false, 'message': 'HTTP ${response.statusCode}'};
+    } catch (e) {
+      debugPrint('❌ [Recharge] History error: $e');
+      return {'success': false, 'message': e.toString()};
     }
   }
 }

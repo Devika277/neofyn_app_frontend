@@ -45,20 +45,31 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
             Row(
               children: [
                 Container(
-                  width: 3, height: 22,
-                  decoration: BoxDecoration(color: _primary, borderRadius: BorderRadius.circular(2)),
+                  width: 3,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: _primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 const Text(
                   'Select Transaction Type',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
               'View your AEPS, DMT, BBPS and Payout transaction history',
-              style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5)),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.white.withOpacity(0.5),
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -67,11 +78,19 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
               icon: Icons.fingerprint_rounded,
               title: 'AEPS Transactions',
               subtitle: 'Aadhaar Enabled Payment System',
-              details: ['Cash Withdrawal', 'Balance Enquiry', 'Mini Statement', 'Aadhaar Pay'],
+              details: [
+                'Cash Withdrawal',
+                'Balance Enquiry',
+                'Mini Statement',
+                'Aadhaar Pay',
+              ],
               gradientColors: const [_primary, _primaryLight],
               onTap: () {
                 HapticFeedback.selectionClick();
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const AepsHistoryScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AepsHistoryScreen()),
+                );
               },
             ),
             const SizedBox(height: 14),
@@ -81,11 +100,18 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
               icon: Icons.swap_horiz_rounded,
               title: 'DMT Transactions',
               subtitle: 'Domestic Money Transfer',
-              details: ['Money Transfers', 'Beneficiary Payments', 'Transaction Status'],
+              details: [
+                'Money Transfers',
+                'Beneficiary Payments',
+                'Transaction Status',
+              ],
               gradientColors: const [Color(0xFF7B9FE0), Color(0xFF5B7FC0)],
               onTap: () {
                 HapticFeedback.selectionClick();
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtHistoryScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DmtHistoryScreen()),
+                );
               },
             ),
             const SizedBox(height: 14),
@@ -95,11 +121,40 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
               icon: Icons.receipt_long_rounded,
               title: 'BBPS Transactions',
               subtitle: 'Bharat Bill Payment System',
-              details: ['Electricity', 'Gas', 'Fastag', 'Water', 'DTH', 'Insurance'],
+              details: [
+                'Electricity',
+                'Gas',
+                'Fastag',
+                'Water',
+                'DTH',
+                'Insurance',
+              ],
               gradientColors: const [Color(0xFFE07070), Color(0xFFC05050)],
               onTap: () {
                 HapticFeedback.selectionClick();
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const BbpsHistoryScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BbpsHistoryScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+
+            // ✅ Recharge History Card
+            _buildHistoryCard(
+              icon: Icons.phone_android_rounded,
+              title: 'Recharge Transactions',
+              subtitle: 'Mobile & DTH Recharges',
+              details: ['Prepaid', 'Postpaid', 'DTH', 'Data Card'],
+              gradientColors: const [Color(0xFF70CBCB), Color(0xFF50A0A0)],
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const RechargeHistoryScreen(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 14),
@@ -109,11 +164,20 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
               icon: Icons.send_rounded,
               title: 'Payout Transactions',
               subtitle: 'Money Transfer via NEFT',
-              details: ['Fund Transfers', 'Beneficiary Payments', 'NEFT Transactions'],
+              details: [
+                'Fund Transfers',
+                'Beneficiary Payments',
+                'NEFT Transactions',
+              ],
               gradientColors: const [Color(0xFFE67E22), Color(0xFFF59E0B)],
               onTap: () {
                 HapticFeedback.selectionClick();
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoutHistoryScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PayoutHistoryScreen(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 20),
@@ -151,7 +215,8 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
             Row(
               children: [
                 Container(
-                  width: 48, height: 48,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: gradientColors.first.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
@@ -163,31 +228,65 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 3),
-                      Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11)),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(color: gradientColors.first.withOpacity(0.2), shape: BoxShape.circle),
-                  child: Icon(Icons.arrow_forward_rounded, color: gradientColors.first, size: 18),
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: gradientColors.first.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_forward_rounded,
+                    color: gradientColors.first,
+                    size: 18,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             Wrap(
-              spacing: 6, runSpacing: 4,
+              spacing: 6,
+              runSpacing: 4,
               children: details.map((detail) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: gradientColors.first.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: gradientColors.first.withOpacity(0.2)),
+                    border: Border.all(
+                      color: gradientColors.first.withOpacity(0.2),
+                    ),
                   ),
-                  child: Text(detail, style: TextStyle(color: gradientColors.first, fontSize: 10, fontWeight: FontWeight.w500)),
+                  child: Text(
+                    detail,
+                    style: TextStyle(
+                      color: gradientColors.first,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 );
               }).toList(),
             ),
