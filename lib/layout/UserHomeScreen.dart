@@ -1,16 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  user_home_screen.dart – PROFESSIONAL FINTECH UI
+//  user_home_screen.dart – PROFESSIONAL FINTECH UI WITH BANNER SLIDER
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'package:http/http.dart' as http;
 import 'package:my_app/models/wallet_models.dart';
 import 'package:my_app/providers/aeps_provider.dart';
 import 'package:my_app/screens/aeps/pipe_selection_screen.dart';
 import 'package:my_app/services/Recharges/rechargeFragment.dart';
-import 'package:my_app/services/api_logger.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app/screens/account/login_screen.dart';
@@ -30,8 +28,7 @@ import '../screens/bbps/onboarding_page.dart';
 import '../screens/bbps/bill_payment_page.dart';
 import '../screens/recharge/recharge_screen.dart';
 import '../screens/commission/commission_history_screen.dart';
-import '../services/bbps/bbps_service.dart'; // ✅ NEW: BBPS Service
-// import '../services/BBPS/api_service.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  BRAND COLORS - Cohesive Green & Dark Theme
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,8 +65,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   String _userId = '';
   bool _isBBPSOnboarded = false;
   bool _isCheckingBBPS = false;
-  bool _isAEPSOnboarded = false; // ✅ NEW: Track AEPS onboarding status
-  bool _isCheckingAEPS = false;  // ✅ NEW: Loading state
+  bool _isAEPSOnboarded = false;
+  bool _isCheckingAEPS = false;
   String get _userPhone => _phone.replaceAll(RegExp(r'\s+'), '').replaceAll('+91', '').trim();
   late final WalletProvider _walletProvider = WalletProvider();
 
@@ -97,14 +94,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       _checkAEPSStatus();
     }
   }
-  // ✅ NEW: Check AEPS onboarding status
+
   Future<void> _checkAEPSStatus() async {
     if (_isCheckingAEPS) return;
     setState(() => _isCheckingAEPS = true);
 
     try {
       final isOnboarded = await ApiService().checkBBPSOnboardingStatus(_userId);
-      // BBPS status also indicates AEPS merchant status since it's the same API
 
       if (mounted) {
         setState(() => _isAEPSOnboarded = isOnboarded);
@@ -116,18 +112,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     }
   }
 
-  // ✅ NEW: Handle profile tab click with AEPS check
   void _handleProfileNavigation() {
     if (_isAEPSOnboarded) {
-      // Already onboarded - allow access
-      setState(() => _selectedIndex = 3); // Navigate to Profile tab
+      setState(() => _selectedIndex = 3);
     } else {
-      // Not onboarded - show popup
       _showProfileBlockedDialog();
     }
   }
 
-  // ✅ NEW: Show profile blocked dialog
   void _showProfileBlockedDialog() {
     showDialog(
       context: context,
@@ -169,15 +161,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
-  // ───────────────────────────────────────────────────────────────
-  //  BBPS STATUS CHECK - Using BBPS Service
-  // ───────────────────────────────────────────────────────────────
   Future<void> _checkBBPSStatus() async {
     if (_isCheckingBBPS) return;
     setState(() => _isCheckingBBPS = true);
 
     try {
-      // ✅ Use the same ApiService instance
       final isOnboarded = await ApiService().checkBBPSOnboardingStatus(_userId);
 
       if (mounted) {
@@ -209,9 +197,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     }
   }
 
-  // ───────────────────────────────────────────────────────────────
-  //  MICRO ATM - Kept for future use
-  // ───────────────────────────────────────────────────────────────
   void _onMicroATMTap() {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
@@ -312,11 +297,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       case 'DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => const DMTSelectorScreen())); break;
       case 'Recharge': Navigator.push(context, MaterialPageRoute(builder: (_) => RechargePage())); break;
       case 'Bills': _handleBillsNavigation(); break;
-      case 'PPI DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtPhoneEntryPage())); break;
-    // 🔒 HIDDEN FOR FUTURE:
-    // case 'Payout': Navigator.push(context, MaterialPageRoute(builder: (_) => ChangeNotifierProvider(create: (_) => PayoutProvider(), child: const PayoutHomeScreen()))); break;
-    // case 'mATM': _onMicroATMTap(); break;
-    // case 'Onboard': _navigateToOnboarding(); break;
+      // case 'PPI DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtPhoneEntryPage())); break;
       default: _showToast('Coming soon!');
     }
   }
@@ -414,7 +395,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           currentIndex: _selectedIndex,
           onTap: (i) {
             HapticFeedback.selectionClick();
-            // ✅ If Profile tab (index 3) is tapped, check AEPS status first
             if (i == 3) {
               _handleProfileNavigation();
             } else {
@@ -437,7 +417,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  HOME DASHBOARD
+//  HOME DASHBOARD WITH BANNER SLIDER
 // ─────────────────────────────────────────────────────────────────────────────
 class HomeDashboard extends StatelessWidget {
   final VoidCallback onLogout;
@@ -464,6 +444,8 @@ class HomeDashboard extends StatelessWidget {
               _buildHeader(wp),
               const SizedBox(height: 24),
               _buildBalanceCard(wp, context),
+              const SizedBox(height: 20),
+              const BannerSlider(), // ✅ BANNER SLIDER ADDED HERE
               const SizedBox(height: 24),
               _buildServicesGrid(),
               const SizedBox(height: 24),
@@ -571,15 +553,12 @@ class HomeDashboard extends StatelessWidget {
   }
 
   Widget _buildServicesGrid() {
-    // 🔒 mATM & Onboard hidden - available for future
     final services = [
       {'name': 'AEPS', 'icon': Icons.fingerprint},
       {'name': 'DMT', 'icon': Icons.swap_horiz},
       {'name': 'Recharge', 'icon': Icons.phone_android},
       {'name': 'Bills', 'icon': Icons.description},
-      {'name': 'PPI DMT', 'icon': Icons.account_balance_wallet},
-      // 🔒 FUTURE: {'name': 'Payout', 'icon': Icons.payments},
-      // 🔒 FUTURE: {'name': 'mATM', 'icon': Icons.atm},
+      // {'name': 'PPI DMT', 'icon': Icons.account_balance_wallet},
     ];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -630,20 +609,253 @@ class HomeDashboard extends StatelessWidget {
       ]),
     ]);
   }
+}
 
-  static void _showLogoutDialog(BuildContext context, VoidCallback onLogout) {
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Logout', style: TextStyle(color: Colors.white)),
-        content: const Text('Are you sure you want to logout?', style: TextStyle(color: Colors.white60)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel', style: TextStyle(color: AppColors.textHint))),
-          TextButton(onPressed: () { Navigator.pop(c); onLogout(); }, child: const Text('Logout', style: TextStyle(color: AppColors.error))),
-        ],
-      ),
+// ─────────────────────────────────────────────────────────────────────────────
+//  BANNER SLIDER WIDGET
+// ─────────────────────────────────────────────────────────────────────────────
+class BannerSlider extends StatefulWidget {
+  const BannerSlider({super.key});
+
+  @override
+  State<BannerSlider> createState() => _BannerSliderState();
+}
+
+class _BannerSliderState extends State<BannerSlider> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+  Timer? _timer;
+
+  final List<Map<String, dynamic>> _banners = [
+    {
+      'title': 'Get 5% Cashback',
+      'subtitle': 'On all AEPS transactions',
+      'color': AppColors.primaryLight,
+      'icon': Icons.percent_rounded,
+      'gradient': const [Color(0xFF008169), Color(0xFF00C897)],
+    },
+    {
+      'title': 'Refer & Earn ₹100',
+      'subtitle': 'Invite your friends today',
+      'color': const Color(0xFF7B9FE0),
+      'icon': Icons.share_rounded,
+      'gradient': const [Color(0xFF4A6FA5), Color(0xFF7B9FE0)],
+    },
+    {
+      'title': 'Zero Fee DMT',
+      'subtitle': 'Unlimited money transfers',
+      'color': const Color(0xFFB58FDB),
+      'icon': Icons.currency_rupee_rounded,
+      'gradient': const [Color(0xFF7B4FDB), Color(0xFFB58FDB)],
+    },
+    {
+      'title': 'Instant Recharge',
+      'subtitle': 'Mobile & DTH recharges',
+      'color': const Color(0xFF70CBCB),
+      'icon': Icons.flash_on_rounded,
+      'gradient': const [Color(0xFF00897B), Color(0xFF70CBCB)],
+    },
+    {
+      'title': '24/7 Support',
+      'subtitle': 'We are here to help you',
+      'color': const Color(0xFFFFB74D),
+      'icon': Icons.support_agent_rounded,
+      'gradient': const [Color(0xFFFF6F00), Color(0xFFFFB74D)],
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _startAutoScroll();
+  }
+
+  void _startAutoScroll() {
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (!mounted) return;
+      if (_currentPage < _banners.length - 1) {
+        _currentPage++;
+      } else {
+        _currentPage = 0;
+      }
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(
+          _currentPage,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 120,
+          child: PageView.builder(
+            controller: _pageController,
+            onPageChanged: (index) {
+              if (mounted) {
+                setState(() => _currentPage = index);
+              }
+            },
+            itemCount: _banners.length,
+            itemBuilder: (_, index) {
+              final banner = _banners[index];
+              final gradientColors = banner['gradient'] as List<Color>;
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      gradientColors[0].withOpacity(0.8),
+                      gradientColors[1].withOpacity(0.6),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: gradientColors[1].withOpacity(0.3),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: gradientColors[0].withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      // Handle banner tap if needed
+                      HapticFeedback.lightImpact();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Row(
+                        children: [
+                          // Icon Container
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Icon(
+                              banner['icon'] as IconData,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // Text Content
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  banner['title'] as String,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  banner['subtitle'] as String,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                // Progress indicator within banner
+                                Container(
+                                  width: 40,
+                                  height: 3,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.4),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Arrow indicator
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withOpacity(0.2),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Dot indicators
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_banners.length, (index) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: _currentPage == index ? 24 : 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: _currentPage == index
+                    ? AppColors.accent
+                    : AppColors.textHint.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: _currentPage == index
+                    ? [
+                  BoxShadow(
+                    color: AppColors.accent.withOpacity(0.5),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+                    : null,
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 }
@@ -657,16 +869,12 @@ class ServicesFullPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🔒 mATM & Onboard hidden - available for future
     final services = const [
       {'name': 'AEPS', 'icon': Icons.fingerprint, 'desc': 'Aadhaar Enabled Payment System'},
       {'name': 'DMT', 'icon': Icons.swap_horiz, 'desc': 'Domestic Money Transfer'},
       {'name': 'Recharge', 'icon': Icons.phone_android, 'desc': 'Mobile & DTH Recharge'},
       {'name': 'Bills', 'icon': Icons.description, 'desc': 'Bill Payments (BBPS)'},
-      {'name': 'PPI DMT', 'icon': Icons.account_balance_wallet, 'desc': 'PPI Money Transfer'},
-      // 🔒 FUTURE: {'name': 'Payout', 'icon': Icons.payments, 'desc': 'Bulk Payout Solutions'},
-      // 🔒 FUTURE: {'name': 'mATM', 'icon': Icons.atm, 'desc': 'Micro ATM Services'},
-      // 🔒 FUTURE: {'name': 'Onboard', 'icon': Icons.verified_user, 'desc': 'BBPS Onboarding'},
+      // {'name': 'PPI DMT', 'icon': Icons.account_balance_wallet, 'desc': 'PPI Money Transfer'},
     ];
 
     return Container(
