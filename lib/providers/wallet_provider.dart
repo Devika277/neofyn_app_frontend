@@ -1,23 +1,23 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../services/wallet_service.dart';
-import '../services/commission/commission_service.dart'; // ✅ ADD THIS
+import '../services/commission/commission_service.dart';
 import '../models/wallet_models.dart';
 
 class WalletProvider extends ChangeNotifier {
   final WalletService _service = WalletService();
-  
+
   MainWallet? mainWallet;
   AepsWallet? aepsWallet;
   WalletStats? stats;
   bool isLoading = false;
-  String? _userId;   // private, set via setUserId
-  String? _userName;  // ✅ ADD THIS
+  String? _userId;
+  String? _userName;
 
   List<dynamic> ledger       = [];
   List<dynamic> fundRequests = [];
 
-  bool isSubmitting    = false; // for fund request form submit button
+  bool isSubmitting    = false;
   String? error;
   String? submitSuccess;
   String? submitError;
@@ -26,7 +26,7 @@ class WalletProvider extends ChangeNotifier {
   double _commissionBalance = 0.0;
   double _commissionFrozen = 0.0;
   bool _isLoadingCommission = false;
-  
+
   double get commissionBalance => _commissionBalance;
   double get commissionFrozen => _commissionFrozen;
   double get availableCommission => _commissionBalance - _commissionFrozen;
@@ -45,54 +45,58 @@ class WalletProvider extends ChangeNotifier {
     print("setUserId called with id: $id");
     _userId = id;
     fetchAllWalletData();
-    fetchCommissionBalance(); // ✅ Also fetch commission balance
+    fetchCommissionBalance();
   }
 
   String get userId => _userId ?? '';
   String? get userName => _userName;
 
-  // ─── Fetch Commission Balance ────────────────────────────────────────────
-  // providers/wallet_provider.dart
-
-Future<void> fetchCommissionBalance() async {
-  if (_userId == null || _userId!.isEmpty) {
-    print('⚠️ UserId is null, cannot fetch commission balance.');
-    return;
+  // ✅ ADD THIS METHOD - For RefreshIndicator in HomeDashboard
+  Future<void> fetchWalletData() async {
+    if (_userId != null && _userId!.isNotEmpty) {
+      await fetchAllWalletData();
+    }
   }
-  
-  print('💰 Fetching commission balance for userId: $_userId');
-  _isLoadingCommission = true;
-  notifyListeners();
 
-  try {
-    print('📤 Calling CommissionService.getBalance()...');
-    final response = await CommissionService.getBalance();
-    print('📥 Commission balance response: $response');
-    
-    if (response['success'] == true) {
-      final data = response['data'] ?? {};
-      
-      // ✅ The data is already parsed as double from the service
-      _commissionBalance = data['balance'] ?? 0.0;
-      _commissionFrozen = data['frozen'] ?? 0.0;
-      
-      print('✅ Commission balance updated:');
-      print('   Balance: $_commissionBalance');
-      print('   Frozen: $_commissionFrozen');
-    } else {
-      print('❌ Failed to fetch commission balance: ${response['message']}');
+  // ─── Fetch Commission Balance ────────────────────────────────────────────
+  Future<void> fetchCommissionBalance() async {
+    if (_userId == null || _userId!.isEmpty) {
+      print('⚠️ UserId is null, cannot fetch commission balance.');
+      return;
+    }
+
+    print('💰 Fetching commission balance for userId: $_userId');
+    _isLoadingCommission = true;
+    notifyListeners();
+
+    try {
+      print('📤 Calling CommissionService.getBalance()...');
+      final response = await CommissionService.getBalance();
+      print('📥 Commission balance response: $response');
+
+      if (response['success'] == true) {
+        final data = response['data'] ?? {};
+
+        _commissionBalance = data['balance'] ?? 0.0;
+        _commissionFrozen = data['frozen'] ?? 0.0;
+
+        print('✅ Commission balance updated:');
+        print('   Balance: $_commissionBalance');
+        print('   Frozen: $_commissionFrozen');
+      } else {
+        print('❌ Failed to fetch commission balance: ${response['message']}');
+        _commissionBalance = 0.0;
+        _commissionFrozen = 0.0;
+      }
+    } catch (e) {
+      print('❌ Error fetching commission balance: $e');
       _commissionBalance = 0.0;
       _commissionFrozen = 0.0;
+    } finally {
+      _isLoadingCommission = false;
+      notifyListeners();
     }
-  } catch (e) {
-    print('❌ Error fetching commission balance: $e');
-    _commissionBalance = 0.0;
-    _commissionFrozen = 0.0;
-  } finally {
-    _isLoadingCommission = false;
-    notifyListeners();
   }
-}
 
   // ─── Fetch All Wallet Data ──────────────────────────────────────────────
   Future<void> fetchAllWalletData() async {
@@ -120,10 +124,10 @@ Future<void> fetchCommissionBalance() async {
       // Also refresh ledger and fund requests
       ledger = await _service.fetchLedger(_userId!);
       fundRequests = await _service.fetchFundRequests(_userId!);
-      
+
       // ✅ Fetch commission balance after wallet data
       await fetchCommissionBalance();
-      
+
     } catch (e) {
       print('❌ Error fetching wallet data: $e');
       error = e.toString();
@@ -145,7 +149,7 @@ Future<void> fetchCommissionBalance() async {
     File? receiptFile,
   }) async {
     print('📦 provider userId at submit: $userId');
-    
+
     if (userId.isEmpty) {
       print('❌ userId is EMPTY');
       return false;
@@ -168,13 +172,12 @@ Future<void> fetchCommissionBalance() async {
         remark: remark,
         receiptFile: receiptFile,
       );
-      
+
       print('📦 submitFundRequest raw response: $result');
 
       if (result['success'] == true) {
         submitSuccess = result['message'];
         fundRequests = await _service.fetchFundRequests(_userId ?? userId);
-        // ✅ Refresh commission balance after fund request
         await fetchCommissionBalance();
         return true;
       } else {

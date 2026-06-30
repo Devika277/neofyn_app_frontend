@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../api_logger.dart';
 
 class ApiService {
   static const String baseUrl = 'https://api.myneofyn.com';
@@ -106,10 +109,21 @@ class ApiService {
   // ────────────────────────────────────────────────────────────
   // Response Handling
   // ────────────────────────────────────────────────────────────
-
   static dynamic _handleResponse(http.Response response) {
     final decoded = jsonDecode(response.body);
-    print('📦 Response body: ${response.body.length > 200 ? response.body.substring(0, 200) + '...' : response.body}');
+
+    // ✅ Print full response for BBPS endpoints
+    if (response.request?.url.toString().contains('bbps') == true) {
+      print('┌──────────────────────────────────────────────────────');
+      print('│ 📦 [BBPS] FULL RESPONSE BODY:');
+      print('│');
+      final prettyJson = const JsonEncoder.withIndent('  ').convert(decoded);
+      print('│ $prettyJson');
+      print('│');
+      print('└──────────────────────────────────────────────────────');
+    } else {
+      print('📦 Response body: ${response.body.length > 200 ? response.body.substring(0, 200) + '...' : response.body}');
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decoded;
@@ -119,6 +133,62 @@ class ApiService {
         message: decoded['message'] ?? decoded['error'] ?? 'Unknown error',
         errors: decoded['errors'] is List ? List<String>.from(decoded['errors']) : null,
       );
+    }
+  }
+// ───────────────────────────────────────────────────────────────
+//  BBPS - Get Transaction History
+// ───────────────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getBbpsHistory({
+    String? userId,
+    int limit = 100,
+    int offset = 0,
+    String? category,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
+
+      if (userId != null) queryParams['userId'] = userId;
+      if (category != null) queryParams['category'] = category;
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 🔍 [BBPS] Fetching History');
+      debugPrint('│ 👤 UserID: $userId');
+      debugPrint('└──────────────────────────────────────────');
+
+      final data = await ApiService.get(
+        '/api/bbps/history',
+        queryParams: queryParams,
+      );
+
+      // ✅ Print full response
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 📦 [BBPS] FULL RESPONSE:');
+      debugPrint('│ ${jsonEncode(data)}');
+      debugPrint('└──────────────────────────────────────────');
+
+      List<dynamic> list = [];
+
+      if (data is List) {
+        list = data;
+      } else if (data is Map) {
+        list = data['transactions'] ?? data['data'] ?? data['history'] ?? [];
+      }
+
+      debugPrint('✅ [BBPS] Found ${list.length} transactions');
+
+      // ✅ Print first transaction keys for debugging
+      if (list.isNotEmpty) {
+        debugPrint('📋 [BBPS] First transaction keys: ${(list[0] as Map).keys.toList()}');
+        debugPrint('📋 [BBPS] First transaction: ${jsonEncode(list[0])}');
+      }
+
+      return list.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (e) {
+      debugPrint('❌ [BBPS] History error: $e');
+      return [];
     }
   }
 }
