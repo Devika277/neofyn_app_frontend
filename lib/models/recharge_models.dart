@@ -1,5 +1,10 @@
+// lib/models/recharge_models.dart
+
 import 'package:flutter/material.dart';
 
+// ============================================================
+// RECHARGE REQUEST
+// ============================================================
 class RechargeRequest {
   final String mobile;
   final String operator;
@@ -35,17 +40,18 @@ class RechargeRequest {
   }
 }
 
-// ─── Response ──────────────────────────────────────────────
-
+// ============================================================
+// RECHARGE RESPONSE
+// ============================================================
 class RechargeResponse {
   final bool success;
-  final String status; // ✅ ADD THIS
+  final String status;
   final String message;
   final RechargeData? data;
 
   RechargeResponse({
     required this.success,
-    this.status = 'failed', // ✅ ADD THIS
+    this.status = 'failed',
     required this.message,
     this.data,
   });
@@ -53,21 +59,29 @@ class RechargeResponse {
   factory RechargeResponse.fromJson(Map<String, dynamic> json) {
     return RechargeResponse(
       success: json['success'] ?? false,
-      status: json['status'] ?? (json['success'] == true ? 'success' : 'failed'), // ✅ ADD THIS
+      status: json['status'] ?? (json['success'] == true ? 'success' : 'failed'),
       message: json['message'] ?? '',
       data: json['data'] != null ? RechargeData.fromJson(json['data']) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'success': success, 'status': status,'message': message, 'data': data?.toJson()};
+    return {
+      'success': success,
+      'status': status,
+      'message': message,
+      'data': data?.toJson()
+    };
   }
-  // ✅ ADD THESE HELPER GETTERS
+
   bool get isSuccess => status == 'success';
   bool get isPending => status == 'pending';
   bool get isFailed => status == 'failed';
 }
 
+// ============================================================
+// RECHARGE DATA
+// ============================================================
 class RechargeData {
   final String transactionId;
   final String? provider;
@@ -82,11 +96,7 @@ class RechargeData {
   factory RechargeData.fromJson(Map<String, dynamic> json) {
     return RechargeData(
       transactionId: (json['transactionId'] ?? '').toString(),
-      // ✅ FIXED - converts int to String
       provider: json['provider']?.toString(),
-      // ✅ Added safety for provider too
-      // transactionId: json['transactionId'] ?? '',
-      // provider: json['provider'],
       refunded: json['refunded'] ?? false,
     );
   }
@@ -100,8 +110,9 @@ class RechargeData {
   }
 }
 
-// ─── Plans ──────────────────────────────────────────────────
-
+// ============================================================
+// RECHARGE PLANS
+// ============================================================
 class RechargePlan {
   final int id;
   final String operator;
@@ -129,7 +140,6 @@ class RechargePlan {
     return RechargePlan(
       id: json['id'] ?? 0,
       operator: json['operator'] ?? '',
-      // 🔧 FIXED: Handle amount as String, int, or double
       amount: _parseAmount(json['amount']),
       validityDays: json['validity_days'] is int
           ? json['validity_days']
@@ -144,13 +154,11 @@ class RechargePlan {
     );
   }
 
-  // 🔧 ADD THIS HELPER METHOD
   static double _parseAmount(dynamic amount) {
     if (amount == null) return 0.0;
     if (amount is double) return amount;
     if (amount is int) return amount.toDouble();
     if (amount is String) {
-      // Remove any non-numeric characters except decimal point
       String cleaned = amount.replaceAll(RegExp(r'[^\d.]'), '');
       return double.tryParse(cleaned) ?? 0.0;
     }
@@ -172,6 +180,9 @@ class RechargePlan {
   }
 }
 
+// ============================================================
+// PLANS RESPONSE
+// ============================================================
 class PlansResponse {
   final bool success;
   final Map<String, List<RechargePlan>> plans;
@@ -181,11 +192,9 @@ class PlansResponse {
   factory PlansResponse.fromJson(Map<String, dynamic> json) {
     final plansMap = <String, List<RechargePlan>>{};
 
-    // 🔧 FIXED: Handle both response structures
     if (json['plans'] is Map) {
       final plansData = json['plans'] as Map;
 
-      // Case 1: API returns {"plans": {"data": [...]}}
       if (plansData.containsKey('data') && plansData['data'] is List) {
         final List<dynamic> dataList = plansData['data'];
         plansMap['all'] = dataList
@@ -193,9 +202,7 @@ class PlansResponse {
               (e) => RechargePlan.fromJson(e is Map<String, dynamic> ? e : {}),
             )
             .toList();
-      }
-      // Case 2: API returns {"plans": {"category1": [...], "category2": [...]}}
-      else {
+      } else {
         plansData.forEach((key, value) {
           if (value is List) {
             plansMap[key.toString()] = value
@@ -213,8 +220,9 @@ class PlansResponse {
   }
 }
 
-// ─── History ────────────────────────────────────────────────
-
+// ============================================================
+// ✅ TRANSACTION ITEM (For History List)
+// ============================================================
 class TransactionItem {
   final int id;
   final String mobile;
@@ -239,14 +247,25 @@ class TransactionItem {
       id: json['id'] ?? 0,
       mobile: json['mobile'] ?? '',
       operator: json['operator'] ?? '',
-      // 🔧 FIXED: Handle amount as String
-      amount: RechargePlan._parseAmount(json['amount']),
+      amount: _parseAmount(json['amount']), // ✅ Use helper method
       status: json['status'] ?? 'pending',
       providerTxnId: json['provider_txn_id'],
       createdAt: DateTime.parse(
         json['created_at'] ?? DateTime.now().toIso8601String(),
       ),
     );
+  }
+
+  // ✅ Helper method to parse amount
+  static double _parseAmount(dynamic amount) {
+    if (amount == null) return 0.0;
+    if (amount is double) return amount;
+    if (amount is int) return amount.toDouble();
+    if (amount is String) {
+      final cleaned = amount.replaceAll(RegExp(r'[^\d.]'), '');
+      return double.tryParse(cleaned) ?? 0.0;
+    }
+    return 0.0;
   }
 
   Map<String, dynamic> toJson() {
@@ -262,50 +281,186 @@ class TransactionItem {
   }
 }
 
+// ============================================================
+// ✅ RECHARGE HISTORY ITEM (For Detailed History)
+// ============================================================
+class RechargeHistoryItem {
+  final int id;
+  final String? transactionId;
+  final String? mobileNumber;
+  final String? operator;
+  final String? serviceType;
+  final double amount;
+  final String? status;
+  final String? operatorRefId;
+  final String? createdAt;
+  final String? paymentMethod;
+  final double? commission;
+  final String? errorMessage;
+
+  RechargeHistoryItem({
+    required this.id,
+    this.transactionId,
+    this.mobileNumber,
+    this.operator,
+    this.serviceType,
+    required this.amount,
+    this.status,
+    this.operatorRefId,
+    this.createdAt,
+    this.paymentMethod,
+    this.commission,
+    this.errorMessage,
+  });
+
+  factory RechargeHistoryItem.fromJson(Map<String, dynamic> json) {
+    return RechargeHistoryItem(
+      id: json['id'] ?? 0,
+      transactionId: json['transaction_id'] ?? json['id']?.toString(),
+      mobileNumber: json['mobile_number'] ?? json['mobile'],
+      operator: json['operator'],
+      serviceType: json['service_type'],
+      amount: _parseAmount(json['amount']), // ✅ Use helper method
+      status: json['status'] ?? 'pending',
+      operatorRefId: json['operator_ref_id'],
+      createdAt: json['created_at'],
+      paymentMethod: json['payment_method'],
+      commission: _parseNullableAmount(json['commission']), // ✅ Use helper method
+      errorMessage: json['error_message'] ?? json['failure_reason'],
+    );
+  }
+
+  // ✅ Helper method to parse amount from String, int, or double
+  static double _parseAmount(dynamic amount) {
+    if (amount == null) return 0.0;
+    if (amount is double) return amount;
+    if (amount is int) return amount.toDouble();
+    if (amount is String) {
+      // Remove any non-numeric characters except decimal point
+      final cleaned = amount.replaceAll(RegExp(r'[^\d.]'), '');
+      return double.tryParse(cleaned) ?? 0.0;
+    }
+    return 0.0;
+  }
+
+  // ✅ Helper method for nullable amount
+  static double? _parseNullableAmount(dynamic amount) {
+    if (amount == null) return null;
+    if (amount is double) return amount;
+    if (amount is int) return amount.toDouble();
+    if (amount is String) {
+      final cleaned = amount.replaceAll(RegExp(r'[^\d.]'), '');
+      return double.tryParse(cleaned);
+    }
+    return null;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'transaction_id': transactionId,
+      'mobile_number': mobileNumber,
+      'operator': operator,
+      'service_type': serviceType,
+      'amount': amount,
+      'status': status,
+      'operator_ref_id': operatorRefId,
+      'created_at': createdAt,
+      'payment_method': paymentMethod,
+      'commission': commission,
+      'error_message': errorMessage,
+    };
+  }
+
+  // Helper getters for UI
+  bool get isSuccess => status == 'success';
+  bool get isFailed => status == 'failed';
+  bool get isPending => status == 'pending';
+  
+  Color get statusColor {
+    if (isSuccess) return Colors.green;
+    if (isFailed) return Colors.red;
+    return Colors.orange;
+  }
+  
+  IconData get statusIcon {
+    if (isSuccess) return Icons.check_circle_outline;
+    if (isFailed) return Icons.error_outline;
+    return Icons.pending_outlined;
+  }
+  
+  String get statusText {
+    if (isSuccess) return 'Success';
+    if (isFailed) return 'Failed';
+    return 'Pending';
+  }
+}
+// ============================================================
+// HISTORY RESPONSE
+// ============================================================
+class HistoryResponse {
+  final bool success;
+  final List<RechargeHistoryItem>? data;
+  final String? message;
+  final Pagination? pagination;
+
+  HistoryResponse({
+    required this.success,
+    this.data,
+    this.message,
+    this.pagination,
+  });
+
+  factory HistoryResponse.fromJson(Map<String, dynamic> json) {
+    return HistoryResponse(
+      success: json['success'] == true,
+      data: json['data'] != null
+          ? (json['data'] as List)
+              .map((e) => RechargeHistoryItem.fromJson(e))
+              .toList()
+          : null,
+      message: json['message'],
+      pagination: json['pagination'] != null
+          ? Pagination.fromJson(json['pagination'])
+          : null,
+    );
+  }
+}
+
+// ============================================================
+// PAGINATION
+// ============================================================
 class Pagination {
   final int limit;
   final int offset;
   final int count;
 
-  Pagination({required this.limit, required this.offset, required this.count});
+  Pagination({
+    required this.limit,
+    required this.offset,
+    required this.count,
+  });
 
   factory Pagination.fromJson(Map<String, dynamic> json) {
     return Pagination(
-      limit: json['limit'] ?? 0,
+      limit: json['limit'] ?? 50,
       offset: json['offset'] ?? 0,
       count: json['count'] ?? 0,
     );
   }
-}
 
-class HistoryResponse {
-  final bool success;
-  final List<TransactionItem> data;
-  final Pagination pagination;
-
-  HistoryResponse({
-    required this.success,
-    required this.data,
-    required this.pagination,
-  });
-
-  factory HistoryResponse.fromJson(Map<String, dynamic> json) {
-    return HistoryResponse(
-      success: json['success'] ?? false,
-      data:
-          (json['data'] as List?)
-              ?.map((e) => TransactionItem.fromJson(e))
-              .toList() ??
-          [],
-      pagination: json['pagination'] != null
-          ? Pagination.fromJson(json['pagination'])
-          : Pagination(limit: 0, offset: 0, count: 0),
-    );
+  Map<String, dynamic> toJson() {
+    return {
+      'limit': limit,
+      'offset': offset,
+      'count': count,
+    };
   }
 }
 
-// ─── EXTENSIONS ─────────────────────────────────────────────
-
+// ============================================================
+// EXTENSIONS
+// ============================================================
 extension PlanCategoryExtension on String {
   String get displayName {
     switch (this) {

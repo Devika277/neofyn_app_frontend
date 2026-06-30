@@ -157,22 +157,35 @@ class HistoryNotifier extends StateNotifier<AsyncValue<HistoryResponse>> {
   int _offset = 0;
   static const int _limit = 20;
   bool _hasMore = true;
-  List<TransactionItem> _items = [];
+  List<RechargeHistoryItem> _items = []; // ✅ Changed to RechargeHistoryItem
 
-  HistoryNotifier() : super(const AsyncValue.loading());
+  HistoryNotifier() : super(const AsyncValue.loading()) {
+    // Load initial data
+    loadMore();
+  }
 
   Future<void> loadMore() async {
     if (!_hasMore) return;
+    
     try {
-      final response = await RechargeService.getUserHistory(limit: _limit, offset: _offset);
-      if (response.success) {
-        _items.addAll(response.data);
+      state = const AsyncValue.loading();
+      
+      final response = await RechargeService.getUserHistory(
+        limit: _limit, 
+        offset: _offset,
+      );
+      
+      if (response.success && response.data != null) {
+        _items.addAll(response.data!);
         _offset += _limit;
-        _hasMore = response.data.length == _limit;
+        _hasMore = response.data!.length == _limit;
+        
+        // Create updated response with accumulated data
         state = AsyncValue.data(
           HistoryResponse(
             success: true,
-            data: _items,
+            data: List.from(_items), // Create a copy
+            message: response.message,
             pagination: Pagination(
               limit: _limit,
               offset: _offset,
@@ -181,18 +194,41 @@ class HistoryNotifier extends StateNotifier<AsyncValue<HistoryResponse>> {
           ),
         );
       } else {
-        state = AsyncValue.error('Failed to load history', StackTrace.current);
+        state = AsyncValue.error(
+          response.message ?? 'Failed to load history', 
+          StackTrace.current,
+        );
       }
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
   }
 
-  void refresh() {
+  Future<void> refresh() async {
     _offset = 0;
-    _items = [];
+    _items.clear();
     _hasMore = true;
-    state = const AsyncValue.loading();
-    loadMore();
+    await loadMore();
+  }
+
+  // Filter by status
+  void filterByStatus(String status) {
+    if (state is AsyncData) {
+      final currentData = (state as AsyncData<HistoryResponse>).value;
+      if (currentData.data != null) {
+        final filtered = status == 'all' 
+            ? currentData.data 
+            : currentData.data!.where((item) => item.status == status).toList();
+        
+        state = AsyncValue.data(
+          HistoryResponse(
+            success: true,
+            data: filtered,
+            message: currentData.message,
+            pagination: currentData.pagination,
+          ),
+        );
+      }
+    }
   }
 }
