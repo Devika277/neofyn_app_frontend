@@ -415,4 +415,95 @@ class ApiService {
     await prefs.remove('name');
     await prefs.remove('phone');
   }
+  // ───────────────────────────────────────────────────────────────
+//  BBPS - Check Onboarding Status
+// ───────────────────────────────────────────────────────────────
+  Future<bool> checkBBPSOnboardingStatus(String userId) async {
+    try {
+      final token = await _getToken();
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/bbps/merchant/status/$userId');
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 🔍 [BBPS] Checking Onboarding Status');
+      debugPrint('│ 📍 URL: $url');
+      debugPrint('│ 👤 UserID: $userId');
+      debugPrint('│ 🔑 Token: ${token.isNotEmpty ? token.substring(0, token.length > 20 ? 20 : token.length) + '...' : 'EMPTY'}');
+      debugPrint('└──────────────────────────────────────────');
+
+      final headers = await _getAuthHeaders();
+
+      final response = await LoggedHttpClient.get(
+        url,
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 📥 [BBPS] Response');
+      debugPrint('│ 📊 Status: ${response.statusCode}');
+      debugPrint('│ 📦 Body: ${response.body}');
+      debugPrint('└──────────────────────────────────────────');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        bool isOnboarded = false;
+
+        // ✅ FIXED: Check for "active" status and bbps_merchant_code
+        if (data is Map && data['success'] == true) {
+          final innerData = data['data'];
+          if (innerData is Map) {
+            // Merchant is onboarded if status is "active" OR bbps_merchant_code exists
+            isOnboarded = innerData['status'] == 'active' ||
+                (innerData['bbps_merchant_code'] != null &&
+                    innerData['bbps_merchant_code'].toString().isNotEmpty);
+          }
+        }
+
+        debugPrint('✅ [BBPS] Onboarded: $isOnboarded');
+        return isOnboarded;
+      } else {
+        debugPrint('⚠️ [BBPS] Status: ${response.statusCode}');
+        return false;
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ [BBPS] Error: $e');
+      return false;
+    }
+  }
+// ───────────────────────────────────────────────────────────────
+//  Profile - Get Merchant Profile
+// ───────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> getMerchantProfile(String userId) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/aeps/merchant/profile/$userId');
+      final headers = await _getAuthHeaders();
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 🔍 [Profile] Fetching Merchant Profile');
+      debugPrint('│ 📍 URL: $url');
+      debugPrint('│ 👤 UserID: $userId');
+      debugPrint('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.get(
+        url,
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 📥 [Profile] Response');
+      debugPrint('│ 📊 Status: ${response.statusCode}');
+      debugPrint('│ 📦 Body: ${response.body}');
+      debugPrint('└──────────────────────────────────────────');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map && data['success'] == true) {
+          return data['data'] as Map<String, dynamic>?;
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ [Profile] Error: $e');
+      return null;
+    }
+  }
 }

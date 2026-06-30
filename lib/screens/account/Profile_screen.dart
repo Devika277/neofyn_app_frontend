@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/AEPS/api_service.dart';
 import '../../services/session_service.dart';
 import 'change_mpin_screen.dart';
 import 'change_tpin_screen.dart' show ChangeTpinScreen;
@@ -31,8 +32,8 @@ class AppColors {
 
 class ProfilePage extends StatefulWidget {
   final VoidCallback onLogout;
-
-  const ProfilePage({super.key, required this.onLogout});
+  final Map<String, dynamic>? profileData; // ✅ NEW
+  const ProfilePage({super.key, required this.onLogout, this.profileData});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -77,7 +78,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _updateDimensions();
   }
 
-
   void _updateDimensions() {
     final size = MediaQuery.of(context).size;
     _screenWidth = size.width;
@@ -98,15 +98,68 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-void _navigateToFundRequests() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => FundRequestsScreen(),
-    ),
-  );
-}
+  void _navigateToFundRequests() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FundRequestsScreen()),
+    );
+  }
+
   Future<void> _loadProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imagePath = prefs.getString('profile_image');
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final user = auth.user;
+
+    if (!mounted) return;
+
+    setState(() {
+      _name = prefs.getString('name') ?? 'Merchant';
+      _phone = prefs.getString('phone') ?? '';
+      _email = prefs.getString('email') ?? 'merchant@neofyn.com';
+      _memberId = prefs.getString('member_id') ?? '';
+      _userId = prefs.getString('userId') ?? '';
+      tpin = prefs.getBool('tpin') ?? false;
+      _selectedLanguage = prefs.getString('language') ?? 'English';
+      if (imagePath != null && File(imagePath).existsSync()) {
+        _profileImage = File(imagePath);
+      }
+    });
+
+    // ✅ Fetch merchant profile from API
+    try {
+      final apiService = ApiService();
+      final profileData = await apiService.getMerchantProfile(_userId);
+
+      if (profileData != null && mounted) {
+        setState(() {
+          _name = profileData['first_name'] != null
+              ? '${profileData['first_name']} ${profileData['last_name'] ?? ''}'.trim()
+              : _name;
+          _email = profileData['email'] ?? _email;
+          _phone = profileData['mobile'] ?? _phone;
+          _memberId = profileData['member_id']?.toString() ?? _memberId;
+
+          // Save updated values to SharedPreferences
+          if (profileData['first_name'] != null) {
+            prefs.setString('name', '${profileData['first_name']} ${profileData['last_name'] ?? ''}'.trim());
+          }
+          if (profileData['email'] != null) {
+            prefs.setString('email', profileData['email']);
+          }
+          if (profileData['mobile'] != null) {
+            prefs.setString('phone', profileData['mobile']);
+          }
+        });
+
+        debugPrint('✅ Profile loaded from API successfully');
+      }
+    } catch (e) {
+      debugPrint('❌ Profile API error: $e');
+      // Keep using cached data from SharedPreferences
+    }
+  }
+  /* Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final imagePath = prefs.getString('profile_image');
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -121,13 +174,12 @@ void _navigateToFundRequests() {
       _userId = prefs.getString('userId') ?? '';
       tpin = prefs.getBool('tpin') ?? false;
       // _userId = prefs.getString('userId') ?? 'PN8472193';
-          _selectedLanguage =
-          prefs.getString('language') ?? 'English';
+      _selectedLanguage = prefs.getString('language') ?? 'English';
       if (imagePath != null && File(imagePath).existsSync()) {
         _profileImage = File(imagePath);
       }
     });
-  }
+  }*/
 
   Future<void> _pickFromGallery() async {
     Navigator.pop(context);
@@ -591,7 +643,7 @@ void _navigateToFundRequests() {
 
               return _buildMenuItem(
                 icon: Icons.security_rounded,
-                title: tpin  ? 'Change TPIN' : 'Set TPIN',
+                title: tpin ? 'Change TPIN' : 'Set TPIN',
                 subtitle: tpin
                     ? 'Transaction PIN is set'
                     : 'Transaction PIN not set',
@@ -630,7 +682,7 @@ void _navigateToFundRequests() {
                         color: Colors.white24,
                         size: _iconSize * 0.8,
                       ),
-                onTap:_navigateToTpin,
+                onTap: _navigateToTpin,
               );
             },
           ),

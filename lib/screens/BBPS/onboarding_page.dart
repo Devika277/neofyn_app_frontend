@@ -32,7 +32,12 @@ class AppColors {
 }
 
 class OnboardingPage extends StatefulWidget {
-  const OnboardingPage({Key? key}) : super(key: key);
+  final VoidCallback? onOnboardingComplete; // ✅ Callback parameter
+
+  const OnboardingPage({
+    super.key,
+    this.onOnboardingComplete, // ✅ Optional parameter
+  });
 
   @override
   State<OnboardingPage> createState() => _OnboardingPageState();
@@ -325,6 +330,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
         final response = context.read<BBPSProvider>().onboardingResponse;
         if (response != null && response.success) {
           HapticFeedback.heavyImpact();
+
+          // ✅ CALL THE CALLBACK BEFORE NAVIGATING BACK
+          widget.onOnboardingComplete?.call();
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
@@ -356,7 +365,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
               duration: const Duration(seconds: 2),
             ),
           );
-          Navigator.pop(context);
+
+          // Navigate back after showing success
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) Navigator.pop(context);
+          });
         } else {
           setState(() {
             _errorMessage = context.read<BBPSProvider>().onboardingError ??
