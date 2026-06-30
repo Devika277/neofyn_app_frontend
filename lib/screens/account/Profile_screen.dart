@@ -12,6 +12,7 @@ import 'change_tpin_screen.dart' show ChangeTpinScreen;
 import 'login_screen.dart';
 import 'set_mpin_screen.dart';
 import 'set_tpin_screen.dart';
+import '../../widgets/fund_requests_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BRAND COLORS
@@ -76,6 +77,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _updateDimensions();
   }
 
+
   void _updateDimensions() {
     final size = MediaQuery.of(context).size;
     _screenWidth = size.width;
@@ -96,6 +98,14 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+void _navigateToFundRequests() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => FundRequestsScreen(),
+    ),
+  );
+}
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final imagePath = prefs.getString('profile_image');
@@ -623,6 +633,19 @@ class _ProfilePageState extends State<ProfilePage> {
                 onTap:_navigateToTpin,
               );
             },
+          ),
+          SizedBox(height: _spacing * 0.5),
+
+          // ✅ NEW: Fund Requests Section
+          _buildSectionHeader('Transactions'),
+          SizedBox(height: _spacing),
+
+          _buildMenuItem(
+            icon: Icons.history_rounded,
+            title: 'Fund Requests',
+            subtitle: 'View all your fund requests',
+            onTap: _navigateToFundRequests,
+            isCompact: false,
           ),
           SizedBox(height: _spacing * 0.5),
 

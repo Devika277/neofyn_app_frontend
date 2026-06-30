@@ -21,7 +21,7 @@ import 'providers/auth_provider.dart';
 import 'providers/aeps_provider.dart';
 import 'providers/bbps_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';  // 👈 Add this import
-
+import 'providers/fund_provider.dart';
 
 
 void main() async {
@@ -48,6 +48,7 @@ class MyApp extends StatelessWidget {
     provider.ChangeNotifierProvider(create: (_) => RemitterProvider()),
     provider.ChangeNotifierProvider(create: (_) => AuthProvider()),
     provider.ChangeNotifierProvider(create: (_) => BBPSProvider()),
+    provider.ChangeNotifierProvider(create: (_) => FundProvider())
   ],
       child: ProviderScope(   // 👈 Riverpod scope now wraps MaterialApp
         child: MaterialApp(

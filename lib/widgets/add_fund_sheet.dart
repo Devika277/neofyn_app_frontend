@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/fund_provider.dart';
 
 // ─── Bank data ───────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ const List<_BankInfo> _banks = [
     accountType:   'Current Account',
   ),
   _BankInfo(
-    name:          'IDFC Bank',
+    name:          'IDFC First Bank',
     accountNumber: '10012345678901',
     ifsc:          'IDFB0040101',
     accountName:   'Neofyn Pvt Ltd',
@@ -309,39 +310,45 @@ class _ManualFundFormState extends State<_ManualFundForm> {
   if (_selectedPaymentMode == null) { _showError('Please select a payment mode'); return; }
   if (_selectedDate == null) { _showError('Please select payment date'); return; }
 
-  // ADD THIS — print everything before sending
   print('🚀 Submitting fund request...');
   print('   amount: ${_amountCtrl.text}');
   print('   bank: ${_selectedBank?.name}');
   print('   mode: $_selectedPaymentMode');
   print('   ref: ${_refCtrl.text}');
   print('   date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}');
-  print('   receipt: ${_receiptFile?.path}');
 
-  final provider = context.read<WalletProvider>();
+  final fundProvider = context.read<FundProvider>();
+
   try {
-    final success = await provider.submitFundRequest(
-        userId:          provider.userId,   // ← ADD THIS LINE
+    // Create a remark string with payment date included
+    String fullRemark = _remarkCtrl.text.trim();
+    if (fullRemark.isNotEmpty) {
+      fullRemark += ' | Payment Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}';
+    } else {
+      fullRemark = 'Payment Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}';
+    }
 
-      amount:          double.parse(_amountCtrl.text.trim()),
-      paymentMode:     _selectedPaymentMode!,
-      bankName:        _selectedBank!.name,
+    final success = await fundProvider.submitFundRequest(
+      amount: double.parse(_amountCtrl.text.trim()),
+      paymentMode: _selectedPaymentMode!,
+      bankName: _selectedBank!.name,
       referenceNumber: _refCtrl.text.trim(),
-      payDate:         DateFormat('yyyy-MM-dd').format(_selectedDate!),
-      remark:          _remarkCtrl.text.trim(),
-      receiptFile:     _receiptFile,
+      remark: fullRemark,
+      // receiptFile: _receiptFile, // For future use
     );
 
     print('✅ Submit result: $success');
-    print('   error: ${provider.submitError}');
-    
-    print('🔑 provider userId in sheet: ${provider.userId}'); // confirm it's set
-
-
+    if (!success) {
+      print('   error: ${fundProvider.submitError}');
+    }
 
     if (!mounted) return;
+
     if (success) {
+      // Pop the form
       Navigator.pop(context);
+
+      // Show success sheet
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
@@ -349,7 +356,7 @@ class _ManualFundFormState extends State<_ManualFundForm> {
         builder: (_) => const _SuccessSheet(),
       );
     } else {
-      _showError(provider.submitError ?? 'Submission failed. Please try again.');
+      _showError(fundProvider.submitError ?? 'Submission failed. Please try again.');
     }
   } catch (e, stack) {
     print('❌ _submit exception: $e');
@@ -623,30 +630,31 @@ class _ManualFundFormState extends State<_ManualFundForm> {
 
                       // ── Submit button ────────────────────────────────
                       SizedBox(
-                        width:  double.infinity,
-                        height: 52,
-                        child:  ElevatedButton(
-                          onPressed: provider.isSubmitting ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00FF9D),
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            disabledBackgroundColor: const Color(0xFF00FF9D).withOpacity(0.4),
-                          ),
-                          child: provider.isSubmitting
-                              ? const SizedBox(
-                                  width: 22, height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                  ),
-                                )
-                              : const Text(
-                                  'Submit Request',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                                ),
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: context.watch<FundProvider>().isSubmitting ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00FF9D),
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          disabledBackgroundColor: const Color(0xFF00FF9D).withOpacity(0.4),
                         ),
+                        child: context.watch<FundProvider>().isSubmitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                ),
+                              )
+                            : const Text(
+                                'Submit Request',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                              ),
                       ),
+                    ),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -866,3 +874,4 @@ Widget _styledDropdown<T>({
     icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white38),
   );
 }
+
