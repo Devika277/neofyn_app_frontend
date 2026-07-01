@@ -828,30 +828,156 @@ class _AepsHistoryScreenState extends State<AepsHistoryScreen> {
             ));
   }
 
-  void _receipt(Map<String, dynamic> tx) {
-    try {
-      final receipt = ReceiptModel.fromApiResponse({
-        'data': {
-          'status': tx['npci_code'] ?? '00',
-          'merchantRefId': tx['merchantRefId'] ?? '',
-          'txnRefId': tx['rrn'] ?? '',
-          'aadhaarNo': tx['aadhaar_last4'] ?? '',
-          'transactionAmount': tx['amount']?.toString() ?? '0',
-          'txnDateTime': tx['created_at'] ?? DateTime.now().toString(),
-          'bankIIN': tx['bank_iin'] ?? '',
-          'rrn': tx['rrn'] ?? '',
-          'transactionList': tx['transaction_list'] ?? '',
-        }
-      }, transactionType: tx['txn_type'] ?? 'CW',
-          merchantId: 'N/A',
-          mobileNumber: '');
-      Navigator.push(context,
-          MaterialPageRoute(builder: (_) => ReceiptScreen(receipt: receipt)));
-    } catch (e) {
-      debugPrint('Receipt error: $e');
-    }
-  }
+ void _receipt(Map<String, dynamic> tx) {
+  try {
+    debugPrint('📄 Creating receipt from transaction: $tx');
+    
+    // Extract all available data from the transaction
+    final Map<String, dynamic> receiptData = {
+      'data': {
+        // Status from npci_code (000 = success, 001 = failed)
+        'status': tx['npci_code']?.toString() ?? '001',
+        'successStatus': tx['npci_code'] == '000' || tx['npci_code'] == '00' ? 'true' : 'false',
+        
+        // ✅ Merchant details - use correct keys
+        'merchantRefId': tx['merchant_ref_id']?.toString() ?? 
+                        tx['merchantRefId']?.toString() ?? 
+                        tx['merchant_ref_id']?.toString() ?? 
+                        'N/A',
+        'merchantId': tx['merchant_id']?.toString() ?? 
+                     tx['merchantId']?.toString() ?? 
+                     tx['merchant_id']?.toString() ?? 
+                     'N/A',
+        'txnRefId': tx['txn_ref_id']?.toString() ?? 
+                   tx['txnRefId']?.toString() ?? 
+                   tx['rrn']?.toString() ?? 
+                   '',
+        'rrn': tx['rrn']?.toString() ?? '',
+        
+        // ✅ Amount
+        'transactionAmount': tx['amount']?.toString() ?? '0',
+        'availableBalance': tx['available_balance']?.toString() ?? 
+                           tx['availableBalance']?.toString() ?? 
+                           '',
+        
+        // ✅ Customer details
+        'aadhaarNo': tx['aadhaar_last4']?.toString() ?? 
+                    tx['aadhaarNo']?.toString() ?? 
+                    '',
+        'aadhaarNumber': tx['aadhaar_last4']?.toString() ?? 
+                        tx['aadhaarNumber']?.toString() ?? 
+                        '',
+        
+        // ✅ Bank details
+        'bankIIN': tx['bank_iin']?.toString() ?? 
+                  tx['bankIIN']?.toString() ?? 
+                  '',
+        'bankName': tx['bank_name']?.toString() ?? 
+                   tx['bankName']?.toString() ?? 
+                   '',
+        
+        // ✅ NPCI details
+        'npciCode': tx['npci_code']?.toString() ?? 
+                   tx['npciCode']?.toString() ?? 
+                   '',
+        'npciMessage': tx['npci_message']?.toString() ?? 
+                      tx['npciMessage']?.toString() ?? 
+                      '',
+        'statusDescription': tx['npci_message']?.toString() ?? 
+                            tx['statusDescription']?.toString() ?? 
+                            '',
+        
+        // ✅ Date & Time
+        'txnDateTime': tx['txn_date_time']?.toString() ?? 
+                      tx['txnDateTime']?.toString() ?? 
+                      tx['created_at']?.toString() ?? 
+                      tx['createdAt']?.toString() ?? 
+                      DateTime.now().toString(),
+        'created_at': tx['created_at']?.toString() ?? 
+                     tx['createdAt']?.toString() ?? 
+                     '',
+        
+        // ✅ Device & Pipe
+        'deviceUsed': tx['device_used']?.toString() ?? 
+                     tx['deviceUsed']?.toString() ?? 
+                     '',
+        'pipe': tx['pipe']?.toString() ?? '1',
+        
+        // ✅ Mini Statement transaction list - CRITICAL for mini statement
+        'transactionList': tx['transaction_list']?.toString() ?? 
+                          tx['transactionList']?.toString() ?? 
+                          '',
+        
+        // ✅ Additional fields
+        'udf1': tx['udf1']?.toString() ?? '',
+        'udf2': tx['udf2']?.toString() ?? '',
+        'udf3': tx['udf3']?.toString() ?? '',
+        
+        // ✅ Mobile number
+        'mobileNumber': tx['mobile_no']?.toString() ?? 
+                       tx['mobileNumber']?.toString() ?? 
+                       tx['mobile']?.toString() ?? 
+                       '',
+      }
+    };
 
+    // Determine transaction type
+    String transactionType = tx['txn_type']?.toString() ?? 'MS';
+    // Normalize transaction type
+    if (transactionType.contains('withdrawal') || transactionType.contains('CW')) {
+      transactionType = 'CW';
+    } else if (transactionType.contains('balance') || transactionType.contains('enquiry') || transactionType.contains('BE')) {
+      transactionType = 'BE';
+    } else if (transactionType.contains('mini') || transactionType.contains('statement') || transactionType.contains('MS')) {
+      transactionType = 'MS';
+    } else if (transactionType.contains('deposit') || transactionType.contains('CD')) {
+      transactionType = 'CD';
+    } else if (transactionType.contains('pay') || transactionType.contains('AP')) {
+      transactionType = 'AP';
+    }
+
+    // Get merchant ID
+    String merchantId = tx['merchant_id']?.toString() ?? 
+                        tx['merchantId']?.toString() ?? 
+                        'N/A';
+
+    // Get mobile number
+    String mobileNumber = tx['mobile_no']?.toString() ?? 
+                         tx['mobileNumber']?.toString() ?? 
+                         tx['mobile']?.toString() ?? 
+                         '';
+
+    debugPrint('📄 Receipt data: $receiptData');
+    debugPrint('📄 Transaction type: $transactionType');
+    debugPrint('📄 Merchant ID: $merchantId');
+    debugPrint('📄 Mobile: $mobileNumber');
+
+    final receipt = ReceiptModel.fromApiResponse(
+      receiptData,
+      transactionType: transactionType,
+      merchantId: merchantId,
+      mobileNumber: mobileNumber,
+    );
+
+    debugPrint('📄 Receipt model created: status=${receipt.status}, isSuccess=${receipt.isSuccess}');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReceiptScreen(receipt: receipt),
+      ),
+    );
+  } catch (e) {
+    debugPrint('❌ Receipt error: $e');
+    debugPrint('❌ Stack trace: ${StackTrace.current}');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error opening receipt: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
   Widget _row(String l, String v, {Color? vc}) =>
       Padding(padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start,

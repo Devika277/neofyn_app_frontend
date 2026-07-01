@@ -10,7 +10,7 @@ import 'aeps_wrapper_screen.dart';
 
 // ─── DEVICE TYPE ENUM ─────────────────────────────────────────
 enum DeviceType {
-  mantra('Mantra MFS-100', 'Mantra', Icons.fingerprint, 'mantra'),
+  mantra('Mantra MFS-110', 'Mantra', Icons.fingerprint, 'mantra'),
   morpho('Morpho MSO 1300', 'Morpho', Icons.scanner, 'morpho');
 
   final String displayName;

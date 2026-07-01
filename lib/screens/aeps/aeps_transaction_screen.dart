@@ -23,7 +23,7 @@ class TxnColors {
 
 // ─── DEVICE TYPE ENUM ─────────────────────────────────────────
 enum DeviceType {
-  mantra('Mantra MFS-100', 'Mantra', Icons.fingerprint, 'mantra'),
+  mantra('Mantra MFS-110', 'Mantra', Icons.fingerprint, 'mantra'),
   morpho('Morpho MSO 1300', 'Morpho', Icons.scanner, 'morpho');
 
   final String displayName;
@@ -552,95 +552,202 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen>
     );
   }
 
-  void _openReceiptScreen(dynamic response) {
-    try {
-      final provider = context.read<AepsProvider>();
+void _openReceiptScreen(dynamic response) {
+  try {
+    final provider = context.read<AepsProvider>();
 
-      final Map<String, dynamic> apiResponse = {
-        'data': {
-          'status': _safeGet(response, 'responseCode', '001'),
-          'merchantRefId': provider.merchantRefId ??
-              provider.getMerchantRefIdForPipe(provider.pipe ?? '1') ??
-              'TXN_${DateTime.now().millisecondsSinceEpoch}',
-          'txnRefId': _safeGet(response, 'txnRefId', ''),
-          'merchantId': provider.merchantId ??
-              provider.getMerchantIdForPipe(provider.pipe ?? '1') ?? '',
-          'aadhaarNo': _aadhaarController.text,
-          'transactionAmount': _isAmountRequired ? _amountController.text : '0',
-          'availableBalance': _safeGet(response, 'availableBalance', '0'),
-          'txnDateTime': _safeGet(response, 'txnDateTime', DateTime.now().toString()),
-          'bankIIN': _selectedBankIIN ?? '',
-          'npciCode': _safeGet(response, 'npciCode', ''),
-          'npciMessage': _safeGet(response, 'npciMessage', ''),
-          'statusDescription': _safeGet(response, 'statusDescription',
-              _safeGet(response, 'npciMessage', '')),
-          'rrn': _safeGet(response, 'rrn', ''),
-          'pipe': provider.pipe ?? '1',
-          'transactionList': _safeGet(response, 'transactionList', ''),
+    // ✅ FIX: Extract status from the correct location
+    // The transaction status is inside response.data.status
+    String statusCode = '001'; // default failed
+    
+    // Try to get status from nested data first
+    if (response != null) {
+      if (response is Map) {
+        // If response is a Map, check for nested data
+        if (response.containsKey('data') && response['data'] is Map) {
+          final dataMap = response['data'] as Map;
+          if (dataMap.containsKey('status')) {
+            statusCode = dataMap['status']?.toString() ?? '001';
+          }
+        } else if (response.containsKey('status')) {
+          // Fallback: check if response itself has status
+          statusCode = response['status']?.toString() ?? '001';
         }
-      };
-
-      final receipt = ReceiptModel.fromApiResponse(
-        apiResponse,
-        transactionType: _currentService.code,
-        merchantId: provider.merchantId ?? 'N/A',
-        mobileNumber: _mobileController.text.isNotEmpty
-            ? _mobileController.text
-            : (provider.mobileNo ?? ''),
-      );
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ReceiptScreen(receipt: receipt),
-        ),
-      );
-    } catch (e) {
-      debugPrint('❌ Error opening receipt: $e');
-      _showError('Error opening receipt: $e');
+      } else {
+        // If response is an object, try to get status from data
+        final statusFromData = _safeGet(response, 'status', '');
+        if (statusFromData.isNotEmpty) {
+          statusCode = statusFromData;
+        } else {
+          // Fallback to responseCode if status not found
+          statusCode = _safeGet(response, 'responseCode', '001');
+        }
+      }
     }
-  }
 
-  String _safeGet(dynamic obj, String fieldName, [String defaultValue = '']) {
-    try {
-      if (obj is Map) {
+    // Check if transaction was successful
+    final bool isSuccess = 
+        statusCode == '000' || 
+        statusCode == '00' || 
+        statusCode == 'SUCCESS' ||
+        _safeGet(response, 'successStatus', 'false').toLowerCase() == 'true';
+
+    // Use the correct status code
+    final String finalStatus = isSuccess ? '000' : '001';
+
+    final Map<String, dynamic> apiResponse = {
+      'data': {
+        'status': finalStatus,
+        'merchantRefId': provider.merchantRefId ??
+            provider.getMerchantRefIdForPipe(provider.pipe ?? '1') ??
+            'TXN_${DateTime.now().millisecondsSinceEpoch}',
+        'txnRefId': _safeGetFromData(response, 'txnRefId', ''),
+        'merchantId': provider.merchantId ??
+            provider.getMerchantIdForPipe(provider.pipe ?? '1') ?? '',
+        'aadhaarNo': _aadhaarController.text,
+        'transactionAmount': _isAmountRequired ? _amountController.text : '0',
+        'availableBalance': _safeGetFromData(response, 'availableBalance', '0'),
+        'txnDateTime': _safeGetFromData(response, 'txnDateTime', DateTime.now().toString()),
+        'bankIIN': _selectedBankIIN ?? '',
+        'npciCode': _safeGetFromData(response, 'npciCode', ''),
+        'npciMessage': _safeGetFromData(response, 'npciMessage', ''),
+        'statusDescription': _safeGetFromData(response, 'statusDescription', 
+            _safeGetFromData(response, 'npciMessage', 'Transaction Successful')),
+        'rrn': _safeGetFromData(response, 'rrn', ''),
+        'pipe': provider.pipe ?? '1',
+        'transactionList': _safeGetFromData(response, 'transactionList', ''),
+        'successStatus': isSuccess ? 'true' : 'false',
+      }
+    };
+
+    final receipt = ReceiptModel.fromApiResponse(
+      apiResponse,
+      transactionType: _currentService.code,
+      merchantId: provider.merchantId ?? 'N/A',
+      mobileNumber: _mobileController.text.isNotEmpty
+          ? _mobileController.text
+          : (provider.mobileNo ?? ''),
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReceiptScreen(receipt: receipt),
+      ),
+    );
+  } catch (e) {
+    debugPrint('❌ Error opening receipt: $e');
+    _showError('Error opening receipt: $e');
+  }
+}
+
+// ✅ NEW: Helper to get data from nested response
+String _safeGetFromData(dynamic obj, String fieldName, [String defaultValue = '']) {
+  try {
+    if (obj == null) return defaultValue;
+    
+    // If obj is a Map
+    if (obj is Map) {
+      // First check if field exists in data
+      if (obj.containsKey('data') && obj['data'] is Map) {
+        final dataMap = obj['data'] as Map;
+        if (dataMap.containsKey(fieldName)) {
+          return dataMap[fieldName]?.toString() ?? defaultValue;
+        }
+      }
+      // Check directly in obj
+      if (obj.containsKey(fieldName)) {
         return obj[fieldName]?.toString() ?? defaultValue;
       }
-      final value = _tryGetField(obj, fieldName);
-      return value?.toString() ?? defaultValue;
-    } catch (e) {
       return defaultValue;
     }
+    
+    // If obj is an object (like a class instance)
+    final value = _tryGetField(obj, fieldName);
+    return value?.toString() ?? defaultValue;
+  } catch (e) {
+    return defaultValue;
   }
+}
 
-  dynamic _tryGetField(dynamic obj, String fieldName) {
-    try {
-      switch (fieldName) {
-        case 'responseCode':
-          return (obj as dynamic).responseCode;
-        case 'txnRefId':
-          return (obj as dynamic).txnRefId;
-        case 'rrn':
-          return (obj as dynamic).rrn;
-        case 'availableBalance':
-          return (obj as dynamic).availableBalance;
-        case 'npciMessage':
-          return (obj as dynamic).npciMessage;
-        case 'npciCode':
-          return (obj as dynamic).npciCode;
-        case 'statusDescription':
-          return (obj as dynamic).statusDescription;
-        case 'txnDateTime':
-          return (obj as dynamic).txnDateTime;
-        case 'merchantRefId':
-          return (obj as dynamic).merchantRefId;
-        default:
-          return null;
+String _safeGet(dynamic obj, String fieldName, [String defaultValue = '']) {
+  try {
+    if (obj == null) return defaultValue;
+    
+    // If obj is a Map
+    if (obj is Map) {
+      // First check if field exists in data
+      if (obj.containsKey('data') && obj['data'] is Map) {
+        final dataMap = obj['data'] as Map;
+        if (dataMap.containsKey(fieldName)) {
+          return dataMap[fieldName]?.toString() ?? defaultValue;
+        }
       }
-    } catch (e) {
-      return null;
+      // Check directly in obj
+      if (obj.containsKey(fieldName)) {
+        return obj[fieldName]?.toString() ?? defaultValue;
+      }
+      return defaultValue;
     }
+    
+    // If obj is an object with properties
+    final value = _tryGetField(obj, fieldName);
+    return value?.toString() ?? defaultValue;
+  } catch (e) {
+    return defaultValue;
   }
+}
+
+dynamic _tryGetField(dynamic obj, String fieldName) {
+  try {
+    // Handle both response-level and data-level fields
+    switch (fieldName) {
+      // Response level fields
+      case 'responseCode':
+        return (obj as dynamic).responseCode;
+      case 'successStatus':
+        return (obj as dynamic).successStatus;
+      case 'message':
+        return (obj as dynamic).message;
+        
+      // Data level fields
+      case 'status':
+        return (obj as dynamic).status;
+      case 'txnRefId':
+        return (obj as dynamic).txnRefId;
+      case 'rrn':
+        return (obj as dynamic).rrn;
+      case 'availableBalance':
+        return (obj as dynamic).availableBalance;
+      case 'npciMessage':
+        return (obj as dynamic).npciMessage;
+      case 'npciCode':
+        return (obj as dynamic).npciCode;
+      case 'statusDescription':
+        return (obj as dynamic).statusDescription;
+      case 'txnDateTime':
+        return (obj as dynamic).txnDateTime;
+      case 'merchantRefId':
+        return (obj as dynamic).merchantRefId;
+      case 'transactionList':
+        return (obj as dynamic).transactionList;
+      case 'merchantStatus':
+        return (obj as dynamic).merchantStatus;
+      case 'transactionAmount':
+        return (obj as dynamic).transactionAmount;
+      case 'aadhaarNo':
+        return (obj as dynamic).aadhaarNo;
+      case 'bankIIN':
+        return (obj as dynamic).bankIIN;
+      case 'npciCode':
+        return (obj as dynamic).npciCode;
+      default:
+        return null;
+    }
+  } catch (e) {
+    return null;
+  }
+}
 
   Widget _resultRow(String label, String value) {
     return Padding(
