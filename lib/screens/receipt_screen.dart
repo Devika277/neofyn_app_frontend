@@ -1,12 +1,14 @@
 // lib/screens/receipt_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/receipt_model.dart';
 
 class ReceiptScreen extends StatefulWidget {
@@ -26,12 +28,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E0A),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Transaction Receipt',
-          style: TextStyle(
-            fontFamily: 'Poppins',
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
             fontSize: 18,
+            color: Colors.white,
           ),
         ),
         backgroundColor: const Color(0xFF0A0E0A),
@@ -41,6 +43,26 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           IconButton(
             icon: const Icon(Icons.share_rounded, color: Colors.white70),
             onPressed: () => _showReceiptOptions(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy_rounded, color: Colors.white70),
+            onPressed: () {
+              // Copy receipt details to clipboard
+              final details = _getReceiptText();
+              Clipboard.setData(ClipboardData(text: details));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Receipt details copied!',
+                      style: GoogleFonts.inter(fontSize: 13)),
+                  backgroundColor: const Color(0xFF1A1F1A),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  margin: const EdgeInsets.all(16),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -59,11 +81,34 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
   }
 
+  String _getReceiptText() {
+    final buffer = StringBuffer();
+    buffer.writeln('Neofyn Bharath - Transaction Receipt');
+    buffer.writeln('Type: ${widget.receipt.typeLabel}');
+    buffer.writeln('Status: ${widget.receipt.displayStatus}');
+    buffer.writeln('RRN: ${widget.receipt.rrn ?? "N/A"}');
+    buffer.writeln('Date: ${_formatDate(widget.receipt.transactionDateTime)}');
+
+    if (widget.receipt.isAmountRequired && widget.receipt.transactionAmount != '0') {
+      buffer.writeln('Amount: ₹${widget.receipt.transactionAmount}');
+    }
+
+    if (widget.receipt.availableBalance != null &&
+        widget.receipt.availableBalance != '0' &&
+        widget.receipt.availableBalance!.isNotEmpty) {
+      buffer.writeln('Balance: ₹${widget.receipt.availableBalance}');
+    }
+
+    buffer.writeln('Bank IIN: ${widget.receipt.bankIIN}');
+    buffer.writeln('Aadhaar: ${_maskAadhaar(widget.receipt.aadhaarNumber ?? '')}');
+
+    return buffer.toString();
+  }
+
   Widget _buildReceiptCard() {
     final isSuccess = widget.receipt.isSuccess;
-    final statusColor = isSuccess
-        ? const Color(0xFF2ECC71)
-        : const Color(0xFFEF4444);
+    final statusColor =
+    isSuccess ? const Color(0xFF2ECC71) : const Color(0xFFEF4444);
 
     return Container(
       width: double.infinity,
@@ -84,30 +129,42 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Status Icon
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: statusColor.withOpacity(0.1),
-              border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
-            ),
-            child: Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.cancel_rounded,
-              size: 48,
-              color: statusColor,
-            ),
+          TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 800),
+            tween: Tween(begin: 0.0, end: 1.0),
+            curve: Curves.elasticOut,
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: statusColor.withOpacity(0.1),
+                    border:
+                    Border.all(color: statusColor.withOpacity(0.3), width: 2),
+                  ),
+                  child: Icon(
+                    isSuccess
+                        ? Icons.check_circle_rounded
+                        : Icons.cancel_rounded,
+                    size: 48,
+                    color: statusColor,
+                  ),
+                ),
+              );
+            },
           ),
 
           const SizedBox(height: 20),
 
           // Title
-          const Text(
-            'Neofyn ',
-            style: TextStyle(
+          Text(
+            'Neofyn Bharath',
+            style: GoogleFonts.inter(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              fontFamily: 'Poppins',
               color: Colors.white,
             ),
           ),
@@ -121,9 +178,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             ),
             child: Text(
               widget.receipt.typeLabel,
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 14,
-                fontFamily: 'Poppins',
                 fontWeight: FontWeight.w600,
                 color: statusColor,
               ),
@@ -136,28 +192,45 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           _buildDashedLine(),
           const SizedBox(height: 20),
 
-          // Transaction Details
+          // Status
           _buildDetailRow(
             'Status',
             widget.receipt.displayStatus,
             valueColor: statusColor,
           ),
-          const SizedBox(height: 8),
 
+          // RRN (always show)
+          if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
+            _buildDetailRow('RRN', widget.receipt.rrn!),
+
+          // Transaction Ref ID (show only if available)
           if (widget.receipt.txnRefId != null &&
-              widget.receipt.txnRefId!.isNotEmpty)
-          _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
+              widget.receipt.txnRefId!.isNotEmpty &&
+              widget.receipt.txnRefId != 'N/A' &&
+              widget.receipt.txnRefId != widget.receipt.rrn)
+            _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
 
-          _buildDetailRow('Merchant Ref ID', widget.receipt.merchantRefId),
-          _buildDetailRow('Merchant ID', widget.receipt.merchantId),
+          // Merchant Ref ID (show only if available and not empty)
+          if (widget.receipt.merchantRefId.isNotEmpty &&
+              widget.receipt.merchantRefId != 'N/A' &&
+              widget.receipt.merchantRefId != widget.receipt.rrn)
+            _buildDetailRow('Merchant Ref ID', widget.receipt.merchantRefId),
+
+          // Merchant ID (show only if available and not empty)
+          if (widget.receipt.merchantId.isNotEmpty &&
+              widget.receipt.merchantId != 'N/A')
+            _buildDetailRow('Merchant ID', widget.receipt.merchantId),
+
+          // Date & Time
           _buildDetailRow(
             'Date & Time',
             _formatDate(widget.receipt.transactionDateTime),
           ),
 
-          // Amount Section
+          // Amount Section - Only for CW (Cash Withdrawal)
           if (widget.receipt.isAmountRequired &&
-              widget.receipt.transactionAmount != '0') ...[
+              widget.receipt.transactionAmount != '0' &&
+              widget.receipt.transactionAmount != '0.00') ...[
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -169,21 +242,19 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               ),
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'Transaction Amount',
-                    style: TextStyle(
+                    style: GoogleFonts.inter(
                       color: Colors.white60,
                       fontSize: 12,
-                      fontFamily: 'Poppins',
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '₹ ${widget.receipt.transactionAmount}',
-                    style: TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      fontFamily: 'Poppins',
                       color: statusColor,
                     ),
                   ),
@@ -192,11 +263,13 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             ),
           ],
 
-          // Balance (for BE and MS)
+          // Balance Section - Only for BE (Balance Enquiry) and MS (Mini Statement)
           if ((widget.receipt.transactionType == 'BE' ||
               widget.receipt.transactionType == 'MS') &&
               widget.receipt.availableBalance != null &&
-              widget.receipt.availableBalance != '0') ...[
+              widget.receipt.availableBalance != '0' &&
+              widget.receipt.availableBalance != '0.00' &&
+              widget.receipt.availableBalance!.isNotEmpty) ...[
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -210,22 +283,20 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               ),
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'Available Balance',
-                    style: TextStyle(
+                    style: GoogleFonts.inter(
                       color: Colors.white60,
                       fontSize: 12,
-                      fontFamily: 'Poppins',
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '₹ ${widget.receipt.availableBalance}',
-                    style: const TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      fontFamily: 'Poppins',
-                      color: Color(0xFF1AA88A),
+                      color: const Color(0xFF1AA88A),
                     ),
                   ),
                 ],
@@ -234,18 +305,48 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ],
 
           const SizedBox(height: 12),
+
+          // Bank Details
           _buildDetailRow('Bank IIN', widget.receipt.bankIIN),
-          if (widget.receipt.bankName != null && widget.receipt.bankName!.isNotEmpty)
+
+          if (widget.receipt.bankName != null &&
+              widget.receipt.bankName!.isNotEmpty &&
+              widget.receipt.bankName != 'N/A' &&
+              widget.receipt.bankName != 'Not Available')
             _buildDetailRow('Bank Name', widget.receipt.bankName!),
-          _buildDetailRow(
-            'Aadhaar',
-            _maskAadhaar(widget.receipt.aadhaarNumber ?? ''),
-          ),
-          _buildDetailRow('Mobile', widget.receipt.mobileNumber),
+
+          // Aadhaar (masked)
+          if (widget.receipt.aadhaarNumber != null &&
+              widget.receipt.aadhaarNumber!.isNotEmpty)
+            _buildDetailRow(
+              'Aadhaar',
+              _maskAadhaar(widget.receipt.aadhaarNumber!),
+            ),
+
+          // Mobile
+          if (widget.receipt.mobileNumber.isNotEmpty &&
+              widget.receipt.mobileNumber != 'N/A')
+            _buildDetailRow('Mobile', widget.receipt.mobileNumber),
+
+          // Device Info (show only if available)
+          if (widget.receipt.deviceUsed != null &&
+              widget.receipt.deviceUsed!.isNotEmpty &&
+              widget.receipt.deviceUsed != 'N/A' &&
+              widget.receipt.deviceUsed != 'Not Available')
+            _buildDetailRow('Device', widget.receipt.deviceUsed!),
+
+          // Provider
+          if (widget.receipt.udf1 != null && widget.receipt.udf1!.isNotEmpty)
+            _buildDetailRow('Provider', widget.receipt.udf1!),
+
+          // Pipe
+          if (widget.receipt.pipe.isNotEmpty && widget.receipt.pipe != '1')
+            _buildDetailRow('Pipe', widget.receipt.pipe),
 
           // NPCI Message
           if (widget.receipt.npciMessage != null &&
-              widget.receipt.npciMessage!.isNotEmpty) ...[
+              widget.receipt.npciMessage!.isNotEmpty &&
+              widget.receipt.npciMessage != 'N/A') ...[
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -257,216 +358,36 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               child: Text(
                 widget.receipt.npciMessage!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: GoogleFonts.inter(
                   color: statusColor,
                   fontSize: 12,
-                  fontFamily: 'Poppins',
                 ),
               ),
             ),
           ],
 
-          // RRN
-          if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
-            _buildDetailRow('RRN', widget.receipt.rrn!),
+          // Status Description
+          if (widget.receipt.statusDescription != null &&
+              widget.receipt.statusDescription!.isNotEmpty &&
+              widget.receipt.statusDescription != widget.receipt.npciMessage)
+            _buildDetailRow(
+              'Message',
+              widget.receipt.statusDescription!,
+              valueColor: statusColor,
+            ),
+
+          // UDF fields (show only if available)
+          if (widget.receipt.udf2 != null && widget.receipt.udf2!.isNotEmpty)
+            _buildDetailRow('UDF2', widget.receipt.udf2!),
+          if (widget.receipt.udf3 != null && widget.receipt.udf3!.isNotEmpty)
+            _buildDetailRow('UDF3', widget.receipt.udf3!),
 
           // ✅ MINI STATEMENT TABLE
-          // Mini Statement Table - Make sure this is rendered
-if (widget.receipt.isMiniStatement) ...[
-  const SizedBox(height: 20),
-  _buildDashedLine(),
-  const SizedBox(height: 16),
-
-  Row(
-    children: [
-      const Icon(
-        Icons.receipt_long_rounded,
-        color: Color(0xFFE67E22),
-        size: 18,
-      ),
-      const SizedBox(width: 8),
-      const Text(
-        'Transaction History',
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Poppins',
-          color: Color(0xFFE67E22),
-        ),
-      ),
-      const Spacer(),
-      Text(
-        '${widget.receipt.miniStatementEntries?.length ?? 0} entries',
-        style: const TextStyle(
-          fontSize: 11,
-          fontFamily: 'Poppins',
-          color: Colors.white38,
-        ),
-      ),
-    ],
-  ),
-  const SizedBox(height: 12),
-
-  if (widget.receipt.miniStatementEntries == null || 
-      widget.receipt.miniStatementEntries!.isEmpty) ...[
-    Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Text(
-        'No transaction history available',
-        style: TextStyle(
-          color: Colors.white38,
-          fontSize: 12,
-          fontFamily: 'Poppins',
-        ),
-        textAlign: TextAlign.center,
-      ),
-    ),
-  ] else ...[
-    // Table Header
-    Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF008169).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              'Date',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          SizedBox(width: 4),
-          Expanded(
-            flex: 1,
-            child: Text(
-              'Txn',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          SizedBox(width: 4),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Amount',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.right,
-            ),
-          ),
-          SizedBox(width: 4),
-          Expanded(
-            flex: 4,
-            child: Text(
-              'Narration',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    ),
-
-    // Table Rows
-    ...widget.receipt.miniStatementEntries!.map(
-      (entry) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: Colors.white.withOpacity(0.04)),
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: Text(
-                entry.date,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              flex: 1,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: entry.isCredit
-                      ? Colors.green.withOpacity(0.15)
-                      : Colors.red.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  entry.isCredit ? 'Cr' : 'Dr',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: entry.isCredit ? Colors.green : Colors.red,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              flex: 2,
-              child: Text(
-                '₹${entry.amount}',
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: entry.isCredit ? Colors.green : Colors.red,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              flex: 4,
-              child: Text(
-                entry.narration.trim(),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 10,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  ],
-
+          if (widget.receipt.isMiniStatement) ...[
+            const SizedBox(height: 20),
+            _buildDashedLine(),
+            const SizedBox(height: 16),
+            _buildMiniStatementSection(),
             const SizedBox(height: 12),
             _buildDashedLine(),
           ],
@@ -474,34 +395,257 @@ if (widget.receipt.isMiniStatement) ...[
           const SizedBox(height: 20),
 
           // Footer
-          const Text(
+          Text(
             'Thank you for using Neofyn Bharath',
-            style: TextStyle(
+            style: GoogleFonts.inter(
               fontSize: 13,
-              fontFamily: 'Poppins',
               color: Colors.white60,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Powered by Neofyn Bharath',
-            style: TextStyle(
+            style: GoogleFonts.inter(
               fontSize: 11,
-              fontFamily: 'Poppins',
               color: Colors.white38,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Generated on ${_formatDate(DateTime.now().toString())}',
-            style: const TextStyle(
+            style: GoogleFonts.inter(
               fontSize: 10,
-              fontFamily: 'Poppins',
               color: Colors.white24,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMiniStatementSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.receipt_long_rounded,
+              color: Color(0xFFE67E22),
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Transaction History',
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFE67E22),
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${widget.receipt.miniStatementEntries?.length ?? 0} entries',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.white38,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        if (widget.receipt.miniStatementEntries == null ||
+            widget.receipt.miniStatementEntries!.isEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'No transaction history available',
+              style: GoogleFonts.inter(
+                color: Colors.white38,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ] else ...[
+          // Table Container with rounded corners
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.06),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                // Table Header
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE67E22).withOpacity(0.1),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Date',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Expanded(
+                        flex: 1,
+                        child: Text(
+                          'Txn',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Expanded(
+                        flex: 2,
+                        child: Text(
+                          'Amount',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Expanded(
+                        flex: 4,
+                        child: Text(
+                          'Narration',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Table Rows
+                ...widget.receipt.miniStatementEntries!.asMap().entries.map(
+                      (entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    final isLast = index ==
+                        widget.receipt.miniStatementEntries!.length - 1;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: index.isEven
+                            ? Colors.white.withOpacity(0.02)
+                            : Colors.transparent,
+                        border: isLast
+                            ? null
+                            : Border(
+                          bottom: BorderSide(
+                              color: Colors.white.withOpacity(0.04)),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              item.date,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            flex: 1,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 3, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: item.isCredit
+                                    ? Colors.green.withOpacity(0.15)
+                                    : Colors.red.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                item.isCredit ? 'Cr' : 'Dr',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color:
+                                  item.isCredit ? Colors.green : Colors.red,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '₹${item.amount}',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: item.isCredit
+                                    ? Colors.green
+                                    : Colors.red,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              item.narration.trim(),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 9,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -511,6 +655,11 @@ if (widget.receipt.isMiniStatement) ...[
         Color? valueColor,
         TextStyle? valueStyle,
       }) {
+    // Skip rendering if value is empty or N/A
+    if (value.isEmpty || value == 'N/A' || value == 'Not Available') {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -520,27 +669,27 @@ if (widget.receipt.isMiniStatement) ...[
             flex: 2,
             child: Text(
               label,
-              style: const TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 13,
-                fontFamily: 'Poppins',
                 color: Colors.white60,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 3,
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style:
-              valueStyle ??
-                  TextStyle(
+              style: valueStyle ??
+                  GoogleFonts.inter(
                     fontSize: 13,
-                    fontFamily: 'Poppins',
                     fontWeight: FontWeight.w600,
                     color: valueColor ?? Colors.white,
                   ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -570,14 +719,13 @@ if (widget.receipt.isMiniStatement) ...[
               icon: const Icon(Icons.download_rounded, size: 20),
               label: const Text('Download / Share'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF008169),
+                backgroundColor: const Color(0xFF1A56DB),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                textStyle: const TextStyle(
-                  fontFamily: 'Poppins',
+                textStyle: GoogleFonts.inter(
                   fontWeight: FontWeight.w600,
                   fontSize: 15,
                 ),
@@ -597,8 +745,7 @@ if (widget.receipt.isMiniStatement) ...[
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                textStyle: const TextStyle(
-                  fontFamily: 'Poppins',
+                textStyle: GoogleFonts.inter(
                   fontWeight: FontWeight.w600,
                   fontSize: 15,
                 ),
@@ -637,21 +784,19 @@ if (widget.receipt.isMiniStatement) ...[
             ),
             const SizedBox(height: 20),
 
-            const Text(
+            Text(
               'Receipt Options',
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                fontFamily: 'Poppins',
                 color: Colors.white,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Download, print or share your receipt',
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 13,
-                fontFamily: 'Poppins',
                 color: Colors.white.withOpacity(0.5),
               ),
             ),
@@ -663,7 +808,7 @@ if (widget.receipt.isMiniStatement) ...[
                 _buildOptionButton(
                   icon: Icons.download_rounded,
                   label: 'Download\nPDF',
-                  color: const Color(0xFF008169),
+                  color: const Color(0xFF1A56DB),
                   onTap: () {
                     Navigator.pop(context);
                     _downloadPDF();
@@ -688,12 +833,25 @@ if (widget.receipt.isMiniStatement) ...[
                   },
                 ),
                 _buildOptionButton(
-                  icon: Icons.image_rounded,
-                  label: 'Share\nImage',
+                  icon: Icons.copy_rounded,
+                  label: 'Copy\nDetails',
                   color: const Color(0xFF9B59B6),
                   onTap: () {
                     Navigator.pop(context);
-                    _sharePDF();
+                    final details = _getReceiptText();
+                    Clipboard.setData(ClipboardData(text: details));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Receipt details copied!',
+                            style: GoogleFonts.inter(fontSize: 13)),
+                        backgroundColor: const Color(0xFF1A1F1A),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        margin: const EdgeInsets.all(16),
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
                   },
                 ),
               ],
@@ -706,9 +864,8 @@ if (widget.receipt.isMiniStatement) ...[
                 onPressed: () => Navigator.pop(context),
                 child: Text(
                   'Cancel',
-                  style: TextStyle(
+                  style: GoogleFonts.inter(
                     fontSize: 16,
-                    fontFamily: 'Poppins',
                     color: Colors.white.withOpacity(0.5),
                   ),
                 ),
@@ -748,9 +905,8 @@ if (widget.receipt.isMiniStatement) ...[
             Text(
               label,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 11,
-                fontFamily: 'Poppins',
                 fontWeight: FontWeight.w500,
                 color: Colors.white.withOpacity(0.7),
               ),
@@ -761,7 +917,7 @@ if (widget.receipt.isMiniStatement) ...[
     );
   }
 
-// Update _downloadPDF method:
+  // ─── PDF GENERATION AND DOWNLOAD ─────────────────────────────
   Future<void> _downloadPDF() async {
     setState(() => _isGeneratingPDF = true);
     try {
@@ -790,7 +946,6 @@ if (widget.receipt.isMiniStatement) ...[
       Directory? downloadsDir;
 
       if (Platform.isAndroid) {
-        // For Android 10+ (API 29+), use external storage
         if (await _requestStoragePermission()) {
           // Try common downloads paths
           final paths = [
@@ -808,12 +963,11 @@ if (widget.receipt.isMiniStatement) ...[
             }
           }
 
-          // If no common path found, use app-specific external storage
           if (downloadsDir == null) {
             final directory = await getExternalStorageDirectory();
             if (directory != null) {
-              // Navigate up to find Downloads
-              final parentDir = Directory(directory.path.replaceAll('/Android/data/${await _getPackageName()}/files', ''));
+              final parentDir = Directory(directory.path.replaceAll(
+                  '/Android/data/${await _getPackageName()}/files', ''));
               downloadsDir = Directory('${parentDir.path}/Download');
               if (!await downloadsDir!.exists()) {
                 downloadsDir = Directory('${parentDir.path}/Downloads');
@@ -823,7 +977,6 @@ if (widget.receipt.isMiniStatement) ...[
         }
       }
 
-      // Fallback to app documents directory if no Downloads found
       downloadsDir ??= await getApplicationDocumentsDirectory();
 
       // Create Neofyn receipts subfolder
@@ -833,13 +986,12 @@ if (widget.receipt.isMiniStatement) ...[
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'Neofyn_Receipt_${widget.receipt.merchantRefId}_$timestamp.pdf';
+      final fileName =
+          'Neofyn_Receipt_${widget.receipt.merchantRefId}_$timestamp.pdf';
       final file = File('${receiptDir.path}/$fileName');
 
-      // Save the PDF
       await file.writeAsBytes(await pdf.save());
 
-      // Verify file was saved
       final fileExists = await file.exists();
       final fileSize = fileExists ? await file.length() : 0;
 
@@ -857,12 +1009,14 @@ if (widget.receipt.isMiniStatement) ...[
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Color(0xFF2ECC71), size: 20),
+                    const Icon(Icons.check_circle,
+                        color: Color(0xFF2ECC71), size: 20),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
                         'PDF saved successfully!',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -876,14 +1030,14 @@ if (widget.receipt.isMiniStatement) ...[
             ),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'OPEN',
               textColor: const Color(0xFF2ECC71),
               onPressed: () {
-                // Open the file using intent
                 _openPdfFile(file.path);
               },
             ),
@@ -909,7 +1063,8 @@ if (widget.receipt.isMiniStatement) ...[
             ),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 4),
           ),
@@ -920,19 +1075,13 @@ if (widget.receipt.isMiniStatement) ...[
     }
   }
 
-// Add these helper methods:
   Future<bool> _requestStoragePermission() async {
     if (Platform.isAndroid) {
-      // For Android 13+ (API 33+)
       if (await _getAndroidVersion() >= 33) {
-        return true; // No storage permission needed for API 33+
-      }
-      // For Android 10-12
-      else if (await _getAndroidVersion() >= 29) {
-        return true; // Scoped storage, use MediaStore or app-specific
-      }
-      // For Android 9 and below
-      else {
+        return true;
+      } else if (await _getAndroidVersion() >= 29) {
+        return true;
+      } else {
         var status = await Permission.storage.status;
         if (!status.isGranted) {
           status = await Permission.storage.request();
@@ -940,29 +1089,27 @@ if (widget.receipt.isMiniStatement) ...[
         return status.isGranted;
       }
     }
-    return true; // iOS doesn't need this
+    return true;
   }
 
   Future<int> _getAndroidVersion() async {
     if (Platform.isAndroid) {
-      // Simple way to get API level without additional packages
       try {
-        final rawVersion = await Process.run('getprop', ['ro.build.version.sdk']);
+        final rawVersion =
+        await Process.run('getprop', ['ro.build.version.sdk']);
         return int.tryParse(rawVersion.stdout.toString().trim()) ?? 29;
       } catch (e) {
-        return 29; // Default to Android 10
+        return 29;
       }
     }
     return 29;
   }
 
   Future<String> _getPackageName() async {
-    // Return your actual package name from AndroidManifest.xml
-    return 'com.example.my_app'; // Replace with your actual package name
+    return 'com.neofyn.bharath'; // Replace with your actual package name
   }
 
   void _openPdfFile(String filePath) {
-    // This will try to open the PDF with a suitable app
     Share.shareXFiles([XFile(filePath)], text: 'Open PDF');
   }
 
@@ -989,7 +1136,6 @@ if (widget.receipt.isMiniStatement) ...[
     try {
       final pdf = await _generatePDF();
 
-      // Use same Neofyn directory for consistency
       final directory = await getApplicationDocumentsDirectory();
       final receiptDir = Directory('${directory.path}/Neofyn_Receipts');
 
@@ -997,7 +1143,8 @@ if (widget.receipt.isMiniStatement) ...[
         await receiptDir.create(recursive: true);
       }
 
-      final fileName = 'Neofyn_Receipt_${widget.receipt.merchantRefId}.pdf';
+      final fileName =
+          'Neofyn_Receipt_${widget.receipt.merchantRefId}.pdf';
       final file = File('${receiptDir.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
@@ -1025,217 +1172,212 @@ if (widget.receipt.isMiniStatement) ...[
         pageFormat: PdfPageFormat.roll80,
         margin: const pw.EdgeInsets.all(10),
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              // Header
-              pw.Text(
-                'Neofyn Bharath',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+          final widgets = <pw.Widget>[
+            // Header
+            pw.Text(
+              'Neofyn Bharath',
+              style: pw.TextStyle(
+                fontSize: 16,
+                fontWeight: pw.FontWeight.bold,
               ),
-              pw.SizedBox(height: 2),
-              pw.Text(
-                'AEPS Services',
-                style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'AEPS Services',
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              widget.receipt.typeLabel,
+              style: const pw.TextStyle(fontSize: 12),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              isSuccess ? 'SUCCESS' : 'FAILED',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: isSuccess ? PdfColors.green : PdfColors.red,
               ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                widget.receipt.typeLabel,
-                style: const pw.TextStyle(fontSize: 12),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            pw.SizedBox(height: 8),
+
+            // Details - only show if available
+            if (widget.receipt.rrn != null &&
+                widget.receipt.rrn!.isNotEmpty)
+              _pdfRow('RRN', widget.receipt.rrn!),
+
+            if (widget.receipt.txnRefId != null &&
+                widget.receipt.txnRefId!.isNotEmpty &&
+                widget.receipt.txnRefId != 'N/A')
+              _pdfRow('Txn Ref ID', widget.receipt.txnRefId!),
+
+            if (widget.receipt.merchantRefId.isNotEmpty &&
+                widget.receipt.merchantRefId != 'N/A')
+              _pdfRow('Merchant Ref ID', widget.receipt.merchantRefId),
+
+            if (widget.receipt.merchantId.isNotEmpty &&
+                widget.receipt.merchantId != 'N/A')
+              _pdfRow('Merchant ID', widget.receipt.merchantId),
+
+            _pdfRow(
+              'Date & Time',
+              _formatDate(widget.receipt.transactionDateTime),
+            ),
+
+            if (widget.receipt.isAmountRequired &&
+                widget.receipt.transactionAmount != '0')
+              _pdfRow('Amount', 'Rs.${widget.receipt.transactionAmount}'),
+
+            if (widget.receipt.availableBalance != null &&
+                widget.receipt.availableBalance != '0' &&
+                widget.receipt.availableBalance!.isNotEmpty)
+              _pdfRow('Balance', 'Rs.${widget.receipt.availableBalance}'),
+
+            _pdfRow('Bank IIN', widget.receipt.bankIIN),
+
+            if (widget.receipt.aadhaarNumber != null &&
+                widget.receipt.aadhaarNumber!.isNotEmpty)
+              _pdfRow(
+                'Aadhaar',
+                _maskAadhaar(widget.receipt.aadhaarNumber!),
               ),
-              pw.SizedBox(height: 8),
-              pw.Text(
-                isSuccess ? 'SUCCESS' : 'FAILED',
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                  color: isSuccess ? PdfColors.green : PdfColors.red,
-                ),
-              ),
+
+            if (widget.receipt.mobileNumber.isNotEmpty &&
+                widget.receipt.mobileNumber != 'N/A')
+              _pdfRow('Mobile', widget.receipt.mobileNumber),
+
+            if (widget.receipt.npciMessage != null &&
+                widget.receipt.npciMessage!.isNotEmpty)
+              _pdfRow('Message', widget.receipt.npciMessage!),
+          ];
+
+          // Mini Statement Table in PDF
+          if (widget.receipt.isMiniStatement &&
+              widget.receipt.miniStatementEntries != null &&
+              widget.receipt.miniStatementEntries!.isNotEmpty) {
+            widgets.addAll([
               pw.SizedBox(height: 8),
               pw.Divider(),
               pw.SizedBox(height: 8),
-
-              // Details
-              _pdfRow('Status', widget.receipt.status),
-              if (widget.receipt.txnRefId != null &&
-                  widget.receipt.txnRefId!.isNotEmpty)
-                _pdfRow('Txn Ref ID', widget.receipt.txnRefId!),
-              _pdfRow('Merchant Ref ID', widget.receipt.merchantRefId),
-              _pdfRow(
-                'Date & Time',
-                _formatDate(widget.receipt.transactionDateTime),
-              ),
-
-              if (widget.receipt.isAmountRequired &&
-                  widget.receipt.transactionAmount != '0')
-                _pdfRow('Amount', 'Rs.${widget.receipt.transactionAmount}'),
-
-              if (widget.receipt.availableBalance != null &&
-                  widget.receipt.availableBalance != '0')
-                _pdfRow('Balance', 'Rs.${widget.receipt.availableBalance}'),
-
-              _pdfRow('Bank IIN', widget.receipt.bankIIN),
-              _pdfRow(
-                'Aadhaar',
-                _maskAadhaar(widget.receipt.aadhaarNumber ?? ''),
-              ),
-              _pdfRow('Mobile', widget.receipt.mobileNumber),
-
-              if (widget.receipt.npciMessage != null &&
-                  widget.receipt.npciMessage!.isNotEmpty)
-                _pdfRow('Message', widget.receipt.npciMessage!),
-
-              if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
-                _pdfRow('RRN', widget.receipt.rrn!),
-
-              // ✅ Mini Statement Table in PDF
-              if (widget.receipt.isMiniStatement &&
-                  widget.receipt.miniStatementEntries != null &&
-                  widget.receipt.miniStatementEntries!.isNotEmpty) ...[
-                pw.SizedBox(height: 8),
-                pw.Divider(),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  'Transaction History',
-                  style: pw.TextStyle(
-                    fontSize: 12,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+              pw.Text(
+                'Transaction History',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
                 ),
-                pw.SizedBox(height: 4),
-
-                // Table Header
-                pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
+              ),
+              pw.SizedBox(height: 4),
+              // Table Header
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text('Date',
+                          style: pw.TextStyle(
+                              fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Expanded(
+                      flex: 1,
+                      child: pw.Text('Txn',
+                          style: pw.TextStyle(
+                              fontSize: 8, fontWeight: pw.FontWeight.bold),
+                          textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text('Amount',
+                          style: pw.TextStyle(
+                              fontSize: 8, fontWeight: pw.FontWeight.bold),
+                          textAlign: pw.TextAlign.right),
+                    ),
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Text('Narration',
+                          style: pw.TextStyle(
+                              fontSize: 8, fontWeight: pw.FontWeight.bold),
+                          textAlign: pw.TextAlign.right),
+                    ),
+                  ],
+                ),
+              ),
+              // Table Rows
+              ...widget.receipt.miniStatementEntries!.map(
+                    (entry) => pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                          color: PdfColors.grey300, width: 0.5),
+                    ),
+                  ),
                   child: pw.Row(
                     children: [
                       pw.Expanded(
                         flex: 2,
-                        child: pw.Text(
-                          'Date',
-                          style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
+                        child: pw.Text(entry.date,
+                            style: const pw.TextStyle(fontSize: 7)),
                       ),
                       pw.Expanded(
                         flex: 1,
                         child: pw.Text(
-                          'Txn',
+                          entry.txnType,
                           style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 7,
+                            color: entry.isCredit
+                                ? PdfColors.green
+                                : PdfColors.red,
                           ),
                           textAlign: pw.TextAlign.center,
                         ),
                       ),
                       pw.Expanded(
                         flex: 2,
-                        child: pw.Text(
-                          'Amount',
-                          style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                          textAlign: pw.TextAlign.right,
-                        ),
+                        child: pw.Text('Rs.${entry.amount}',
+                            style: const pw.TextStyle(fontSize: 7),
+                            textAlign: pw.TextAlign.right),
                       ),
                       pw.Expanded(
                         flex: 3,
-                        child: pw.Text(
-                          'Narration',
-                          style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                          textAlign: pw.TextAlign.right,
-                        ),
+                        child: pw.Text(entry.narration.trim(),
+                            style: const pw.TextStyle(fontSize: 7),
+                            textAlign: pw.TextAlign.right,
+                            maxLines: 1),
                       ),
                     ],
                   ),
                 ),
-
-                // Table Rows
-                ...widget.receipt.miniStatementEntries!.map(
-                      (entry) => pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                    decoration: const pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(
-                          color: PdfColors.grey300,
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: pw.Row(
-                      children: [
-                        pw.Expanded(
-                          flex: 2,
-                          child: pw.Text(
-                            entry.date,
-                            style: const pw.TextStyle(fontSize: 7),
-                          ),
-                        ),
-                        pw.Expanded(
-                          flex: 1,
-                          child: pw.Text(
-                            entry.txnType,
-                            style: pw.TextStyle(
-                              fontSize: 7,
-                              color: entry.isCredit
-                                  ? PdfColors.green
-                                  : PdfColors.red,
-                            ),
-                            textAlign: pw.TextAlign.center,
-                          ),
-                        ),
-                        pw.Expanded(
-                          flex: 2,
-                          child: pw.Text(
-                            'Rs.${entry.amount}',
-                            style: const pw.TextStyle(fontSize: 7),
-                            textAlign: pw.TextAlign.right,
-                          ),
-                        ),
-                        pw.Expanded(
-                          flex: 3,
-                          child: pw.Text(
-                            entry.narration.trim(),
-                            style: const pw.TextStyle(fontSize: 7),
-                            textAlign: pw.TextAlign.right,
-                            maxLines: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-
-              pw.SizedBox(height: 8),
-              pw.Divider(),
-              pw.SizedBox(height: 8),
-
-              // Footer
-              pw.Text(
-                'Thank you for using Neofyn Bharath',
-                style: const pw.TextStyle(fontSize: 10),
               ),
-              pw.SizedBox(height: 2),
-              pw.Text(
-                'Powered by Neofyn Bharath',
-                style: const pw.TextStyle(fontSize: 8),
-              ),
-              pw.Text(
-                'Generated: ${_formatDate(DateTime.now().toString())}',
-                style: const pw.TextStyle(fontSize: 8),
-              ),
-            ],
+            ]);
+          }
+
+          // Footer
+          widgets.addAll([
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'Thank you for using Neofyn Bharath',
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'Powered by Neofyn Bharath',
+              style: const pw.TextStyle(fontSize: 8),
+            ),
+            pw.Text(
+              'Generated: ${_formatDate(DateTime.now().toString())}',
+              style: const pw.TextStyle(fontSize: 8),
+            ),
+          ]);
+
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: widgets,
           );
         },
       ),
@@ -1259,7 +1401,8 @@ if (widget.receipt.isMiniStatement) ...[
             child: pw.Text(
               value,
               textAlign: pw.TextAlign.right,
-              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+              style:
+              pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
             ),
           ),
         ],
@@ -1279,11 +1422,8 @@ if (widget.receipt.isMiniStatement) ...[
 
   String _maskAadhaar(String aadhaar) {
     if (aadhaar.isEmpty) return 'XXXXXXXXXXXX';
-    if (aadhaar.length < 4) return aadhaar;
-    if (aadhaar.length >= 8) {
-      return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
-    }
-    return aadhaar;
+    if (aadhaar.length <= 4) return 'XXXX$aadhaar';
+    return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
   }
 }
 
@@ -1301,7 +1441,8 @@ class DashedLinePainter extends CustomPainter {
     double startX = 0;
 
     while (startX < size.width) {
-      canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
+      canvas.drawLine(
+          Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
       startX += dashWidth + dashSpace;
     }
   }
