@@ -30,6 +30,7 @@ void showAepsWalletOptions(BuildContext context) {
   showModalBottomSheet(
     context: context,
     backgroundColor: _card,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -71,35 +72,45 @@ class _AepsOptionsSheet extends StatelessWidget {
             style: TextStyle(color: _textPrim.withOpacity(0.5), fontSize: 13),
           ),
           const SizedBox(height: 24),
-          _option(
-            Icons.account_balance_wallet_rounded,
-            _primary,
-            'Move to Main Wallet',
-            'Transfer balance to main wallet',
-                () {
-              Navigator.pop(context);
-              Navigator.push(context, _slide(const MoveToMainWalletPage()));
-            },
-          ),
-          const SizedBox(height: 12),
-          _option(
-            Icons.send_rounded,
-            _primary,
-            'Move Fund',
-            'Transfer to beneficiary account',
-                () {
-              Navigator.pop(context);
-              Navigator.push(context, _slide(const MoveFundPage()));
-            },
-          ),
-          const SizedBox(height: 12),
-          _option(
-            Icons.credit_card_rounded,
-            const Color(0xFF8B5CF6),
-            'Move to CC Fund',
-            'Coming soon',
-                () {},
-            enabled: false,
+          Flexible(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _option(
+                    Icons.account_balance_wallet_rounded,
+                    _primary,
+                    'Move to Main Wallet',
+                    'Transfer balance to main wallet',
+                        () {
+                      Navigator.pop(context);
+                      Navigator.push(context, _slide(const MoveToMainWalletPage()));
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _option(
+                    Icons.send_rounded,
+                    _primary,
+                    'Move Fund',
+                    'Transfer to beneficiary account',
+                        () {
+                      Navigator.pop(context);
+                      Navigator.push(context, _slide(const MoveFundPage()));
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _option(
+                    Icons.credit_card_rounded,
+                    const Color(0xFF8B5CF6),
+                    'Move to CC Fund',
+                    'Coming soon',
+                        () {},
+                    enabled: false,
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

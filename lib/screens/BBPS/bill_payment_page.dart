@@ -627,11 +627,27 @@ class _BillPaymentScreenState extends State<BillPaymentScreen> {
 
     return Column(
       children: [
-        // Header
+        // Header with back button
         Container(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
           child: Row(
             children: [
+              // Back button
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  Navigator.pop(context); // Go back to previous screen
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.arrow_back, size: 18, color: Colors.white54),
+                ),
+              ),
+              const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
