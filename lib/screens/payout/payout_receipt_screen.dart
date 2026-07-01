@@ -137,7 +137,7 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
           _pdfRow('IFSC Code', g('beneficiaryifsc')),
 
           pw.SizedBox(height: 20),
-          pw.Center(child: pw.Text('NEOFYN FIN TECH', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green))),
+          pw.Center(child: pw.Text('NEOFYN BHARATH', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green))),
           pw.Center(child: pw.Text('Thank you for using our service', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500))),
         ]),
       );
@@ -337,7 +337,7 @@ class _PayoutReceiptScreenState extends State<PayoutReceiptScreen> {
           const SizedBox(height: 20),
           divider(),
           const SizedBox(height: 16),
-          const Text('NEOFYN FIN TECH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: accent)),
+          const Text('NEOFYN BHARATH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: accent)),
           const SizedBox(height: 4),
           const Text('Thank you for using our service', style: TextStyle(color: Colors.white38, fontSize: 10)),
         ]),

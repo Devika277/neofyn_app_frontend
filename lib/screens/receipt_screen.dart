@@ -103,7 +103,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
           // Title
           const Text(
-            'Neofyn Fin Tech',
+            'Neofyn ',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -139,14 +139,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           // Transaction Details
           _buildDetailRow(
             'Status',
-            widget.receipt.status,
+            widget.receipt.displayStatus,
             valueColor: statusColor,
           ),
           const SizedBox(height: 8),
 
           if (widget.receipt.txnRefId != null &&
               widget.receipt.txnRefId!.isNotEmpty)
-            _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
+          _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
 
           _buildDetailRow('Merchant Ref ID', widget.receipt.merchantRefId),
           _buildDetailRow('Merchant ID', widget.receipt.merchantId),
@@ -235,6 +235,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
           const SizedBox(height: 12),
           _buildDetailRow('Bank IIN', widget.receipt.bankIIN),
+          if (widget.receipt.bankName != null && widget.receipt.bankName!.isNotEmpty)
+            _buildDetailRow('Bank Name', widget.receipt.bankName!),
           _buildDetailRow(
             'Aadhaar',
             _maskAadhaar(widget.receipt.aadhaarNumber ?? ''),
@@ -269,187 +271,201 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             _buildDetailRow('RRN', widget.receipt.rrn!),
 
           // ✅ MINI STATEMENT TABLE
-          if (widget.receipt.isMiniStatement &&
-              widget.receipt.miniStatementEntries != null &&
-              widget.receipt.miniStatementEntries!.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _buildDashedLine(),
-            const SizedBox(height: 16),
+          // Mini Statement Table - Make sure this is rendered
+if (widget.receipt.isMiniStatement) ...[
+  const SizedBox(height: 20),
+  _buildDashedLine(),
+  const SizedBox(height: 16),
 
-            // Mini Statement Header
-            Row(
-              children: [
-                const Icon(
-                  Icons.receipt_long_rounded,
-                  color: Color(0xFFE67E22),
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Transaction History',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Poppins',
-                    color: Color(0xFFE67E22),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${widget.receipt.miniStatementEntries!.length} entries',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontFamily: 'Poppins',
-                    color: Colors.white38,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+  Row(
+    children: [
+      const Icon(
+        Icons.receipt_long_rounded,
+        color: Color(0xFFE67E22),
+        size: 18,
+      ),
+      const SizedBox(width: 8),
+      const Text(
+        'Transaction History',
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Poppins',
+          color: Color(0xFFE67E22),
+        ),
+      ),
+      const Spacer(),
+      Text(
+        '${widget.receipt.miniStatementEntries?.length ?? 0} entries',
+        style: const TextStyle(
+          fontSize: 11,
+          fontFamily: 'Poppins',
+          color: Colors.white38,
+        ),
+      ),
+    ],
+  ),
+  const SizedBox(height: 12),
 
-            // Table Header
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF008169).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      'Date',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 4),
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      'Txn',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  SizedBox(width: 4),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      'Amount',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  SizedBox(width: 4),
-                  Expanded(
-                    flex: 4,
-                    child: Text(
-                      'Narration',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ],
+  if (widget.receipt.miniStatementEntries == null || 
+      widget.receipt.miniStatementEntries!.isEmpty) ...[
+    Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        'No transaction history available',
+        style: TextStyle(
+          color: Colors.white38,
+          fontSize: 12,
+          fontFamily: 'Poppins',
+        ),
+        textAlign: TextAlign.center,
+      ),
+    ),
+  ] else ...[
+    // Table Header
+    Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF008169).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              'Date',
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+          SizedBox(width: 4),
+          Expanded(
+            flex: 1,
+            child: Text(
+              'Txn',
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          SizedBox(width: 4),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'Amount',
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          SizedBox(width: 4),
+          Expanded(
+            flex: 4,
+            child: Text(
+              'Narration',
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    ),
 
-            // Table Rows
-            ...widget.receipt.miniStatementEntries!.map(
-                  (entry) => Container(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 6,
+    // Table Rows
+    ...widget.receipt.miniStatementEntries!.map(
+      (entry) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Colors.white.withOpacity(0.04)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(
+                entry.date,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              flex: 1,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: Colors.white.withOpacity(0.04)),
-                  ),
+                  color: entry.isCredit
+                      ? Colors.green.withOpacity(0.15)
+                      : Colors.red.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        entry.date,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      flex: 1,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: entry.isCredit
-                              ? Colors.green.withOpacity(0.15)
-                              : Colors.red.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          entry.isCredit ? 'Cr' : 'Dr',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: entry.isCredit ? Colors.green : Colors.red,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '₹${entry.amount}',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          color: entry.isCredit ? Colors.green : Colors.red,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      flex: 4,
-                      child: Text(
-                        entry.narration.trim(),
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  entry.isCredit ? 'Cr' : 'Dr',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: entry.isCredit ? Colors.green : Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 4),
+            Expanded(
+              flex: 2,
+              child: Text(
+                '₹${entry.amount}',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: entry.isCredit ? Colors.green : Colors.red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              flex: 4,
+              child: Text(
+                entry.narration.trim(),
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 10,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ],
 
             const SizedBox(height: 12),
             _buildDashedLine(),
@@ -459,7 +475,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
           // Footer
           const Text(
-            'Thank you for using Neofyn Fin Tech',
+            'Thank you for using Neofyn Bharath',
             style: TextStyle(
               fontSize: 13,
               fontFamily: 'Poppins',
@@ -468,7 +484,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Powered by Neofyn Fin Tech',
+            'Powered by Neofyn Bharath',
             style: TextStyle(
               fontSize: 11,
               fontFamily: 'Poppins',
@@ -987,7 +1003,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       await Share.shareXFiles([
         XFile(file.path),
-      ], text: 'Neofyn Fin Tech Transaction Receipt - ${widget.receipt.typeLabel}');
+      ], text: 'Neofyn Bharath Transaction Receipt - ${widget.receipt.typeLabel}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1014,7 +1030,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             children: [
               // Header
               pw.Text(
-                'Neofyn Fin Tech',
+                'Neofyn Bharath',
                 style: pw.TextStyle(
                   fontSize: 16,
                   fontWeight: pw.FontWeight.bold,
@@ -1207,12 +1223,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
               // Footer
               pw.Text(
-                'Thank you for using Neofyn Fin Tech',
+                'Thank you for using Neofyn Bharath',
                 style: const pw.TextStyle(fontSize: 10),
               ),
               pw.SizedBox(height: 2),
               pw.Text(
-                'Powered by Neofyn Fin Tech',
+                'Powered by Neofyn Bharath',
                 style: const pw.TextStyle(fontSize: 8),
               ),
               pw.Text(
