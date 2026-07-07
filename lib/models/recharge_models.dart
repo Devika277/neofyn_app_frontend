@@ -137,22 +137,24 @@ class RechargePlan {
   });
 
   factory RechargePlan.fromJson(Map<String, dynamic> json) {
-    return RechargePlan(
-      id: json['id'] ?? 0,
-      operator: json['operator'] ?? '',
-      amount: _parseAmount(json['amount']),
-      validityDays: json['validity_days'] is int
-          ? json['validity_days']
-          : int.tryParse(json['validity_days']?.toString() ?? ''),
-      dataBenefit: json['data_benefit'],
-      category: json['category'],
-      circle: json['circle'],
-      displayOrder: json['display_order'] is int
-          ? json['display_order']
-          : int.tryParse(json['display_order']?.toString() ?? ''),
-      isActive: json['is_active'] ?? true,
-    );
-  }
+  print('📊 Creating RechargePlan from: $json');
+  
+  return RechargePlan(
+    id: json['id'] ?? 0,
+    operator: json['operator'] ?? '',
+    amount: _parseAmount(json['amount']),
+    validityDays: json['validity_days'] is int
+        ? json['validity_days']
+        : int.tryParse(json['validity_days']?.toString() ?? ''),
+    dataBenefit: json['data_benefit']?.toString(),
+    category: json['category']?.toString(),
+    circle: json['circle']?.toString(),
+    displayOrder: json['display_order'] is int
+        ? json['display_order']
+        : int.tryParse(json['display_order']?.toString() ?? ''),
+    isActive: json['is_active'] ?? true,
+  );
+}
 
   static double _parseAmount(dynamic amount) {
     if (amount == null) return 0.0;
@@ -181,7 +183,7 @@ class RechargePlan {
 }
 
 // ============================================================
-// PLANS RESPONSE
+// PLANS RESPONSE - FIXED
 // ============================================================
 class PlansResponse {
   final bool success;
@@ -190,36 +192,95 @@ class PlansResponse {
   PlansResponse({required this.success, required this.plans});
 
   factory PlansResponse.fromJson(Map<String, dynamic> json) {
+    print('📊 PlansResponse.fromJson called');
+    print('📊 JSON keys: ${json.keys}');
+    
     final plansMap = <String, List<RechargePlan>>{};
 
+    // Check if plans exists and is a Map
     if (json['plans'] is Map) {
-      final plansData = json['plans'] as Map;
-
-      if (plansData.containsKey('data') && plansData['data'] is List) {
-        final List<dynamic> dataList = plansData['data'];
-        plansMap['all'] = dataList
-            .map(
-              (e) => RechargePlan.fromJson(e is Map<String, dynamic> ? e : {}),
-            )
-            .toList();
-      } else {
-        plansData.forEach((key, value) {
-          if (value is List) {
-            plansMap[key.toString()] = value
-                .map(
-                  (e) =>
-                      RechargePlan.fromJson(e is Map<String, dynamic> ? e : {}),
-                )
-                .toList();
+      final plansData = json['plans'] as Map<String, dynamic>;
+      print('📊 Plans data keys: ${plansData.keys}');
+      
+      // Iterate through each category (combo, data, talktime, unlimited)
+      plansData.forEach((category, plansList) {
+        print('📊 Processing category: $category');
+        
+        if (plansList is List) {
+          // Parse each plan in the list
+          final parsedPlans = <RechargePlan>[];
+          
+          for (var planJson in plansList) {
+            try {
+              if (planJson is Map<String, dynamic>) {
+                parsedPlans.add(RechargePlan.fromJson(planJson));
+              } else {
+                print('⚠️ Invalid plan data in category $category: $planJson');
+              }
+            } catch (e) {
+              print('❌ Error parsing plan in category $category: $e');
+            }
           }
-        });
-      }
+          
+          plansMap[category] = parsedPlans;
+          print('📊 Category $category has ${parsedPlans.length} plans');
+        } else {
+          print('⚠️ Category $category is not a List, it is: ${plansList.runtimeType}');
+          plansMap[category] = [];
+        }
+      });
+    } else {
+      print('⚠️ No plans data found in response');
+      print('📊 Response structure: ${json.keys}');
     }
 
-    return PlansResponse(success: json['success'] ?? false, plans: plansMap);
+    print('📊 Total categories: ${plansMap.keys.length}');
+    print('📊 Categories: ${plansMap.keys}');
+    
+    return PlansResponse(
+      success: json['success'] ?? false,
+      plans: plansMap,
+    );
   }
 }
 
+
+
+// Add this extension after the PlansResponse class
+extension PlansResponseExtension on PlansResponse {
+  // Get all plans from all categories as a single list
+  List<RechargePlan> get allPlans {
+    final all = <RechargePlan>[];
+    plans.forEach((category, planList) {
+      all.addAll(planList);
+    });
+    return all;
+  }
+  
+  // Get plans by specific category
+  List<RechargePlan> getPlansByCategory(String category) {
+    return plans[category] ?? [];
+  }
+  
+  // Check if any plans exist
+  bool get hasPlans {
+    return plans.values.any((list) => list.isNotEmpty);
+  }
+  
+  // Get count of plans in each category
+  Map<String, int> get categoryCounts {
+    final counts = <String, int>{};
+    plans.forEach((category, list) {
+      counts[category] = list.length;
+    });
+    return counts;
+  }
+  
+  // Get total number of plans
+  int get totalPlans {
+    return plans.values.fold(0, (sum, list) => sum + list.length);
+  }
+}
 // ============================================================
 // ✅ TRANSACTION ITEM (For History List)
 // ============================================================

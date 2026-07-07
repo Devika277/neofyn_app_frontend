@@ -36,17 +36,38 @@ class RechargeService {
   }
 
   static Future<PlansResponse> getPlans(
-    String operator, {
-    String circle = 'ALL',
-  }) async {
-    print('📡 Fetching plans: operator=$operator, circle=$circle');
-    final json = await ApiService.get(
-      '/api/recharge/plans',
-      queryParams: {'operator': operator, 'circle': circle},
-    );
-    print('📡 Response received');
-    return PlansResponse.fromJson(json);
+  String operator, {
+  String circle = 'ALL',
+}) async {
+  print('📡 Fetching plans: operator=$operator, circle=$circle');
+  
+  final json = await ApiService.get(
+    '/api/recharge/plans',
+    queryParams: {'operator': operator, 'circle': circle},
+  );
+  
+  print('📡 Response received');
+  print('📊 Response keys: ${json.keys}');
+  print('📊 Success: ${json['success']}');
+  
+  if (json['plans'] is Map) {
+    final plansMap = json['plans'] as Map;
+    print('📊 Plans keys: ${plansMap.keys}');
+    plansMap.forEach((key, value) {
+      if (value is List) {
+        print('📊 $key: ${value.length} plans');
+        if (value.isNotEmpty) {
+          print('📊 First $key plan: ${value[0]}');
+        }
+      }
+    });
   }
+  
+  final response = PlansResponse.fromJson(json);
+  print('📊 Parsed: ${response.plans.keys.length} categories, ${response.totalPlans} total plans');
+  
+  return response;
+}
 
   static Future<HistoryResponse> getUserHistory({
     int limit = 50,

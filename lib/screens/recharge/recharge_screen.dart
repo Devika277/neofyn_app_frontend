@@ -129,67 +129,96 @@ class _RechargePageState extends ConsumerState<RechargePage> {
   }
 
   // ─── FETCH PLANS ─────────────────────────────────────────
-  Future<void> _fetchPlans() async {
-    if (selectedOperator == null || isLoadingPlans) return;
-    setState(() => isLoadingPlans = true);
-    try {
-      final response = await RechargeService.getPlans(selectedOperator!, circle: selectedCircle ?? 'ALL');
-      if (!mounted) return;
-      setState(() {
-        if (response != null && response.success) {
-          allPlans = _parsePlans(response);
-          _categorizePlans();
-        } else {
-          allPlans = [];
-        }
-        isLoadingPlans = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        isLoadingPlans = false;
+ Future<void> _fetchPlans() async {
+  if (selectedOperator == null || isLoadingPlans) return;
+  
+  setState(() => isLoadingPlans = true);
+  
+  try {
+    final response = await RechargeService.getPlans(
+      selectedOperator!, 
+      circle: selectedCircle ?? 'ALL'
+    );
+    
+    print('📡 Fetch plans response: ${response.success}');
+    print('📡 Plans categories: ${response.plans.keys}');
+    
+    if (!mounted) return;
+    
+    setState(() {
+      if (response.success) {
+        allPlans = _parsePlans(response);
+        _categorizePlans();
+        print('✅ Plans loaded: ${allPlans?.length ?? 0} total');
+      } else {
         allPlans = [];
-      });
-      _showSnackBar('Failed to load plans');
-    }
-  }
-
-  List<RechargePlan> _parsePlans(dynamic response) {
-    List<RechargePlan> plans = [];
-    try {
-      if (response.plans != null) {
-        if (response.plans is Map && response.plans['data'] != null) {
-          for (var planData in (response.plans['data'] as List)) {
-            plans.add(RechargePlan.fromJson(planData is Map<String, dynamic> ? planData : jsonDecode(jsonEncode(planData))));
-          }
-        } else if (response.plans is Map) {
-          response.plans.forEach((key, value) {
-            if (value is List) {
-              for (var planData in value) {
-                plans.add(RechargePlan.fromJson(planData is Map<String, dynamic> ? planData : jsonDecode(jsonEncode(planData))));
-              }
-            }
-          });
-        }
+        print('⚠️ Response success is false');
       }
-    } catch (e) {
-      debugPrint('Parse error: $e');
-    }
-    plans.sort((a, b) => a.amount.compareTo(b.amount));
-    return plans;
+      isLoadingPlans = false;
+    });
+  } catch (e) {
+    print('❌ Error fetching plans: $e');
+    if (!mounted) return;
+    setState(() {
+      isLoadingPlans = false;
+      allPlans = [];
+    });
+    _showSnackBar('Failed to load plans: ${e.toString()}');
   }
+}
+
+ List<RechargePlan> _parsePlans(PlansResponse response) {
+  List<RechargePlan> plans = [];
+  
+  try {
+    print('📊 Parsing plans from response');
+    print('📊 Response success: ${response.success}');
+    print('📊 Plans keys: ${response.plans.keys}');
+    
+    // Iterate through all categories in the plans map
+    response.plans.forEach((category, planList) {
+      print('📊 Processing category: $category, count: ${planList.length}');
+      
+      // planList is already List<RechargePlan> from the model
+      plans.addAll(planList);
+    });
+    
+    // Sort plans by amount
+    plans.sort((a, b) => a.amount.compareTo(b.amount));
+    print('📊 Total plans parsed: ${plans.length}');
+    
+  } catch (e) {
+    print('❌ Parse error: $e');
+    debugPrint('Parse error: $e');
+  }
+  
+  return plans;
+}
 
   void _categorizePlans() {
-    if (allPlans == null || allPlans!.isEmpty) return;
-    Map<String, List<RechargePlan>> temp = {};
-    for (var plan in allPlans!) {
-      String category = plan.category ?? 'all';
-      temp.putIfAbsent(category, () => []);
-      temp[category]!.add(plan);
-    }
-    categorizedPlans = temp;
-    _categories = temp.keys.toList();
+  if (allPlans == null || allPlans!.isEmpty) {
+    print('⚠️ No plans to categorize');
+    return;
   }
+  
+  print('📊 Categorizing ${allPlans!.length} plans');
+  
+  Map<String, List<RechargePlan>> temp = {};
+  
+  for (var plan in allPlans!) {
+    String category = plan.category ?? 'all';
+    temp.putIfAbsent(category, () => []);
+    temp[category]!.add(plan);
+  }
+  
+  categorizedPlans = temp;
+  _categories = temp.keys.toList();
+  
+  print('📊 Categories found: ${_categories.join(', ')}');
+  _categories.forEach((cat) {
+    print('📊 $cat: ${categorizedPlans[cat]?.length ?? 0} plans');
+  });
+}
 
   // ─── FILTER LOGIC ────────────────────────────────────────
   List<RechargePlan> _getFilteredPlans() {
