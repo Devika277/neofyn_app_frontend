@@ -543,11 +543,11 @@ class HomeDashboard extends StatelessWidget {
       ),
       const SizedBox(height: 16),
       Row(children: [
-        _InfoCard(Icons.card_giftcard_rounded, 'Rewards', '₹ ${rewards.toStringAsFixed(0)}'),
+        _InfoCard(Icons.card_giftcard_rounded, 'Rewards', '₹ ${rewards.toStringAsFixed(2)}'),
         const SizedBox(width: 10),
-        _InfoCard(Icons.account_balance_rounded, 'Commission', '₹ ${commission.toStringAsFixed(0)}', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommissionHistoryScreen()))),
+        _InfoCard(Icons.account_balance_rounded, 'Commission', '₹ ${commission.toStringAsFixed(2)}', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommissionHistoryScreen()))),
         const SizedBox(width: 10),
-        _InfoCard(Icons.credit_card_rounded, 'CC Balance', '₹ ${(wp.stats?.ccBalance ?? 0).toStringAsFixed(0)}'),
+        _InfoCard(Icons.credit_card_rounded, 'CC Balance', '₹ 0.00'),
       ]),
     ]);
   }
