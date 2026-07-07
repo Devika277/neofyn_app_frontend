@@ -181,6 +181,7 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
 
       // Call API
       final response = await _apiService.createTransfer(request);
+      final status = response['status'] ?? 'success'; // Get status from backend
 
       print('📡 Transfer Response: $response');
 

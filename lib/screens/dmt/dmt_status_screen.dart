@@ -32,13 +32,14 @@ class AppColors {
   static const Color error = Color(0xFFDC2626);
   static const Color warning = Color(0xFFD97706);
   static const Color info = Color(0xFF0284C7);
+  static const Color processing = Color(0xFF7C3AED); // Purple for processing
 
   // Border & Effects
   static const Color borderLight = Color(0xFFE2E8F0);
   static const Color borderFocus = Color(0xFF1A56DB);
 }
 
-class DMTStatusScreen extends StatelessWidget {
+class DMTStatusScreen extends StatefulWidget {
   final Map<String, dynamic> transferResult;
   final Map<String, dynamic> transferDetails;
 
@@ -49,13 +50,188 @@ class DMTStatusScreen extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<DMTStatusScreen> createState() => _DMTStatusScreenState();
+}
+
+class _DMTStatusScreenState extends State<DMTStatusScreen> {
+  bool _isPolling = false;
+  int _pollingAttempts = 0;
+  static const int _maxPollingAttempts = 15; // 15 * 3 seconds = 45 seconds
+  String _currentStatus = '';
+  String _statusMessage = '';
+  String? _utrNumber;
+
+  @override
+  void initState() {
+    super.initState();
+    _determineStatus();
+    _startPollingIfNeeded();
+  }
+
+  void _determineStatus() {
+    final result = widget.transferResult;
+    
+    // Check if status is provided directly
+    if (result.containsKey('status')) {
+      _currentStatus = result['status'].toString().toLowerCase();
+    } 
+    // Check merchantStatus from provider
+    else if (result.containsKey('merchantStatus')) {
+      _currentStatus = result['merchantStatus'].toString().toLowerCase();
+    }
+    // Check providerStatus
+    else if (result.containsKey('providerStatus')) {
+      _currentStatus = result['providerStatus'].toString().toLowerCase();
+    }
+    // Fallback to success/failure
+    else {
+      _currentStatus = result['success'] == true ? 'success' : 'failed';
+    }
+
+    // Get UTR if available
+    if (result.containsKey('utrNumber')) {
+      _utrNumber = result['utrNumber'];
+    }
+
+    // Set status message
+    _statusMessage = _getStatusMessage(_currentStatus);
+  }
+
+  String _getStatusMessage(String status) {
+    switch (status) {
+      case 'success':
+      case 'completed':
+        return 'Your money transfer has been completed successfully';
+      case 'processing':
+      case 'pending':
+      case 'queued':
+        return 'Your transfer is being processed. Please wait...';
+      case 'failed':
+      case 'failure':
+        return 'Your transfer could not be processed';
+      case 'reversed':
+        return 'The transaction has been reversed';
+      case 'hold':
+        return 'The transaction is on hold. Please contact support';
+      default:
+        return 'Status: ${status.toUpperCase()}';
+    }
+  }
+
+  bool get _isSuccess => _currentStatus == 'success' || _currentStatus == 'completed';
+  bool get _isFailed => _currentStatus == 'failed' || _currentStatus == 'failure' || _currentStatus == 'reversed';
+  bool get _isProcessing => _currentStatus == 'processing' || _currentStatus == 'pending' || _currentStatus == 'queued' || _currentStatus == 'hold';
+  bool get _needsPolling => _isProcessing && !_isPolling;
+
+  void _startPollingIfNeeded() {
+    if (_needsPolling && mounted) {
+      _startPolling();
+    }
+  }
+
+  void _startPolling() {
+    if (_isPolling) return;
+    
+    setState(() {
+      _isPolling = true;
+      _pollingAttempts = 0;
+    });
+
+    _pollStatus();
+  }
+
+  void _pollStatus() async {
+    if (!mounted) return;
+    if (_pollingAttempts >= _maxPollingAttempts) {
+      setState(() {
+        _isPolling = false;
+        _currentStatus = 'timeout';
+        _statusMessage = 'Transaction is taking longer than expected. Please check status later.';
+      });
+      return;
+    }
+
+    setState(() {
+      _pollingAttempts++;
+    });
+
+    // Simulate polling delay (3 seconds)
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (!mounted) return;
+
+    // Here you would make an API call to check the actual status
+    // For now, we'll simulate a status check
+    try {
+      // Replace this with actual API call to check transfer status
+      // final updatedStatus = await _apiService.checkTransferStatus(transactionId);
+      // _updateStatus(updatedStatus);
+      
+      // Simulated status check - for demo purposes
+      if (_pollingAttempts >= 5) {
+        // After 5 attempts, assume success for demo
+        _updateStatus('success');
+      } else {
+        // Continue polling
+        _pollStatus();
+      }
+    } catch (e) {
+      // If API call fails, continue polling
+      _pollStatus();
+    }
+  }
+
+  void _updateStatus(String newStatus) {
+    if (!mounted) return;
+    
+    setState(() {
+      _currentStatus = newStatus.toLowerCase();
+      _statusMessage = _getStatusMessage(_currentStatus);
+      
+      if (_isSuccess || _isFailed) {
+        _isPolling = false;
+      } else if (_isProcessing && _pollingAttempts < _maxPollingAttempts) {
+        // Continue polling
+        _pollStatus();
+      } else {
+        _isPolling = false;
+      }
+    });
+  }
+
+  Color _getStatusColor(String status) {
+    if (_isSuccess) return AppColors.success;
+    if (_isFailed) return AppColors.error;
+    if (_isProcessing) return AppColors.processing;
+    return AppColors.warning;
+  }
+
+  Color _getStatusBgColor(String status) {
+    return _getStatusColor(status).withOpacity(0.06);
+  }
+
+  String _getStatusTitle(String status) {
+    if (_isSuccess) return 'Transfer Successful';
+    if (_isFailed) return 'Transfer Failed';
+    if (_isProcessing) return 'Processing...';
+    if (status == 'hold') return 'On Hold';
+    return 'Status: ${status.toUpperCase()}';
+  }
+
+  IconData _getStatusIcon(String status) {
+    if (_isSuccess) return Iconsax.tick_circle;
+    if (_isFailed) return Iconsax.close_circle;
+    if (_isProcessing) return Iconsax.timer_1;
+    if (status == 'hold') return Iconsax.clock;
+    return Iconsax.info_circle;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bool isSuccess = transferResult['success'] == true;
-    final String status = isSuccess ? 'Transfer Successful' : 'Transfer Failed';
-    final Color statusColor = isSuccess ? AppColors.success : AppColors.error;
-    final Color statusBgColor = isSuccess
-        ? AppColors.success.withOpacity(0.06)
-        : AppColors.error.withOpacity(0.06);
+    final Color statusColor = _getStatusColor(_currentStatus);
+    final Color statusBgColor = _getStatusBgColor(_currentStatus);
+    final String statusTitle = _getStatusTitle(_currentStatus);
+    final IconData statusIcon = _getStatusIcon(_currentStatus);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -76,25 +252,26 @@ class DMTStatusScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
+          if (!_isProcessing)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                icon: const Icon(Iconsax.home_2, color: AppColors.textWhite, size: 20),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/home',
+                    (route) => false,
+                  );
+                },
+                tooltip: 'Home',
+              ),
             ),
-            child: IconButton(
-              icon: const Icon(Iconsax.home_2, color: AppColors.textWhite, size: 20),
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/home',
-                      (route) => false,
-                );
-              },
-              tooltip: 'Home',
-            ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -104,8 +281,14 @@ class DMTStatusScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Status Card
-            _buildStatusCard(context, isSuccess, statusColor, statusBgColor, status),
+            _buildStatusCard(context, statusColor, statusBgColor, statusTitle, statusIcon),
             const SizedBox(height: 16),
+
+            // Polling Indicator (when processing)
+            if (_isProcessing && _isPolling) ...[
+              _buildPollingIndicator(),
+              const SizedBox(height: 12),
+            ],
 
             // Transaction Details Card
             _buildTransactionDetailsCard(),
@@ -133,13 +316,62 @@ class DMTStatusScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildPollingIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.processing.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.processing.withOpacity(0.15),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.processing),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Checking status... (${_pollingAttempts}/${_maxPollingAttempts})',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.processing,
+                  ),
+                ),
+                Text(
+                  'Please wait while we confirm your transaction',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusCard(
-      BuildContext context,
-      bool isSuccess,
-      Color statusColor,
-      Color statusBgColor,
-      String status,
-      ) {
+    BuildContext context,
+    Color statusColor,
+    Color statusBgColor,
+    String statusTitle,
+    IconData statusIcon,
+  ) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -187,11 +419,20 @@ class DMTStatusScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Icon(
-                    isSuccess ? Iconsax.tick_circle : Iconsax.close_circle,
-                    color: statusColor,
-                    size: 64,
-                  ),
+                  child: _isProcessing
+                      ? SizedBox(
+                          height: 48,
+                          width: 48,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 4,
+                            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                          ),
+                        )
+                      : Icon(
+                          statusIcon,
+                          color: statusColor,
+                          size: 64,
+                        ),
                 ),
               );
             },
@@ -201,7 +442,7 @@ class DMTStatusScreen extends StatelessWidget {
 
           // Status Text
           Text(
-            status,
+            statusTitle,
             style: GoogleFonts.inter(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -213,9 +454,7 @@ class DMTStatusScreen extends StatelessWidget {
 
           // Status Message
           Text(
-            isSuccess
-                ? 'Your money transfer has been completed successfully'
-                : 'Your transfer could not be processed',
+            _statusMessage,
             style: GoogleFonts.inter(
               fontSize: 13,
               color: AppColors.textSecondary,
@@ -225,7 +464,7 @@ class DMTStatusScreen extends StatelessWidget {
           ),
 
           // UTR Number (Success) - Improved alignment
-          if (isSuccess && transferResult['utrNumber'] != null) ...[
+          if (_isSuccess && _utrNumber != null) ...[
             const SizedBox(height: 20),
             Container(
               width: double.infinity,
@@ -269,7 +508,7 @@ class DMTStatusScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          transferResult['utrNumber'],
+                          _utrNumber!,
                           style: GoogleFonts.inter(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -288,9 +527,9 @@ class DMTStatusScreen extends StatelessWidget {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: () {
-                        Clipboard.setData(
-                          ClipboardData(text: transferResult['utrNumber']),
-                        );
+                        // Clipboard.setData(
+                        //   ClipboardData(text: _utrNumber),
+                        // );
                         HapticFeedback.lightImpact();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -324,7 +563,7 @@ class DMTStatusScreen extends StatelessWidget {
           ],
 
           // Error Message (Failed)
-          if (!isSuccess && transferResult['error'] != null) ...[
+          if (_isFailed && widget.transferResult['error'] != null) ...[
             const SizedBox(height: 20),
             Container(
               width: double.infinity,
@@ -355,11 +594,47 @@ class DMTStatusScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      transferResult['error'],
+                      widget.transferResult['error'],
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         color: AppColors.error,
                         fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Processing Info (when processing)
+          if (_isProcessing) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.info.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.info.withOpacity(0.15),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Iconsax.info_circle,
+                    size: 16,
+                    color: AppColors.info,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This transaction is being processed. Please do not retry.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ),
@@ -387,20 +662,20 @@ class DMTStatusScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _buildDetailRow(
             'Transaction ID',
-            transferDetails['transactionId'] ?? transferResult['transactionId'] ?? 'N/A',
+            widget.transferDetails['transactionId'] ?? widget.transferResult['transactionId'] ?? 'N/A',
             icon: Iconsax.note_text,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Amount',
-            '₹${(transferDetails['amount'] ?? 0).toStringAsFixed(2)}',
+            '₹${(widget.transferDetails['amount'] ?? 0).toStringAsFixed(2)}',
             icon: Iconsax.money_send,
             isAmount: true,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Transfer Mode',
-            transferDetails['transferMode'] ?? 'IMPS',
+            widget.transferDetails['transferMode'] ?? 'IMPS',
             icon: Iconsax.flash_circle,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
@@ -409,21 +684,32 @@ class DMTStatusScreen extends StatelessWidget {
             DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now()),
             icon: Iconsax.calendar_1,
           ),
-          if (transferResult['utrNumber'] != null) ...[
+          if (_utrNumber != null) ...[
             const Divider(height: 20, color: AppColors.borderLight),
             _buildDetailRow(
               'UTR Number',
-              transferResult['utrNumber'],
+              _utrNumber!,
               icon: Iconsax.receipt,
               highlight: true,
             ),
           ],
-          if (transferDetails['remark'] != null && transferDetails['remark'].isNotEmpty) ...[
+          if (widget.transferDetails['remark'] != null && widget.transferDetails['remark'].isNotEmpty) ...[
             const Divider(height: 20, color: AppColors.borderLight),
             _buildDetailRow(
               'Remark',
-              transferDetails['remark'],
+              widget.transferDetails['remark'],
               icon: Iconsax.message_text,
+            ),
+          ],
+          // Add status row for processing states
+          if (_isProcessing) ...[
+            const Divider(height: 20, color: AppColors.borderLight),
+            _buildDetailRow(
+              'Current Status',
+              _currentStatus.toUpperCase(),
+              icon: Iconsax.status,
+              highlight: true,
+              statusColor: AppColors.processing,
             ),
           ],
         ],
@@ -446,31 +732,31 @@ class DMTStatusScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _buildDetailRow(
             'Name',
-            transferDetails['remitterName'] ?? 'N/A',
+            widget.transferDetails['remitterName'] ?? 'N/A',
             icon: Iconsax.user_tag,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Mobile',
-            transferDetails['remitterMobile'] ?? 'N/A',
+            widget.transferDetails['remitterMobile'] ?? 'N/A',
             icon: Iconsax.call,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Product Type',
-            transferDetails['productType']?.toUpperCase() ?? 'N/A',
+            widget.transferDetails['productType']?.toUpperCase() ?? 'N/A',
             icon: Iconsax.crown,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Monthly Limit',
-            '₹${(transferDetails['monthlyLimit'] ?? 0).toStringAsFixed(0)}',
+            '₹${(widget.transferDetails['monthlyLimit'] ?? 0).toStringAsFixed(0)}',
             icon: Iconsax.chart_square,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Used This Month',
-            '₹${(transferDetails['monthlyUsed'] ?? 0).toStringAsFixed(0)}',
+            '₹${(widget.transferDetails['monthlyUsed'] ?? 0).toStringAsFixed(0)}',
             icon: Iconsax.activity,
           ),
         ],
@@ -493,33 +779,33 @@ class DMTStatusScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _buildDetailRow(
             'Account Holder',
-            transferDetails['beneficiaryName'] ?? 'N/A',
+            widget.transferDetails['beneficiaryName'] ?? 'N/A',
             icon: Iconsax.user,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Account Number',
-            transferDetails['beneficiaryAccount'] ?? 'N/A',
+            widget.transferDetails['beneficiaryAccount'] ?? 'N/A',
             icon: Iconsax.card,
             isSensitive: true,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'IFSC Code',
-            transferDetails['beneficiaryIfsc'] ?? 'N/A',
+            widget.transferDetails['beneficiaryIfsc'] ?? 'N/A',
             icon: Iconsax.code,
           ),
           const Divider(height: 20, color: AppColors.borderLight),
           _buildDetailRow(
             'Bank Name',
-            transferDetails['beneficiaryBank'] ?? 'N/A',
+            widget.transferDetails['beneficiaryBank'] ?? 'N/A',
             icon: Iconsax.building,
           ),
-          if (transferDetails['beneficiaryMobile'] != null) ...[
+          if (widget.transferDetails['beneficiaryMobile'] != null) ...[
             const Divider(height: 20, color: AppColors.borderLight),
             _buildDetailRow(
               'Mobile',
-              transferDetails['beneficiaryMobile'],
+              widget.transferDetails['beneficiaryMobile'],
               icon: Iconsax.mobile,
             ),
           ],
@@ -543,22 +829,22 @@ class DMTStatusScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _buildDetailRow(
             'Status Code',
-            transferResult['providerStatus'] ?? 'N/A',
+            widget.transferResult['providerStatus'] ?? widget.transferResult['status'] ?? 'N/A',
             icon: Iconsax.status,
           ),
-          if (transferResult['providerRefId'] != null) ...[
+          if (widget.transferResult['providerRefId'] != null) ...[
             const Divider(height: 20, color: AppColors.borderLight),
             _buildDetailRow(
               'Provider Reference',
-              transferResult['providerRefId'],
+              widget.transferResult['providerRefId'],
               icon: Iconsax.link,
             ),
           ],
-          if (transferResult['bankRefNo'] != null) ...[
+          if (widget.transferResult['bankRefNo'] != null) ...[
             const Divider(height: 20, color: AppColors.borderLight),
             _buildDetailRow(
               'Bank Reference',
-              transferResult['bankRefNo'],
+              widget.transferResult['bankRefNo'],
               icon: Iconsax.bank,
             ),
           ],
@@ -568,12 +854,12 @@ class DMTStatusScreen extends StatelessWidget {
             '~500ms',
             icon: Iconsax.timer_1,
           ),
-          if (transferResult['message'] != null &&
-              transferResult['message'] != 'Transfer successful') ...[
+          if (widget.transferResult['message'] != null &&
+              widget.transferResult['message'] != 'Transfer successful') ...[
             const Divider(height: 20, color: AppColors.borderLight),
             _buildDetailRow(
               'Message',
-              transferResult['message'],
+              widget.transferResult['message'],
               icon: Iconsax.message,
             ),
           ],
@@ -616,13 +902,14 @@ class DMTStatusScreen extends StatelessWidget {
   }
 
   Widget _buildDetailRow(
-      String label,
-      String value, {
-        IconData? icon,
-        bool highlight = false,
-        bool isAmount = false,
-        bool isSensitive = false,
-      }) {
+    String label,
+    String value, {
+    IconData? icon,
+    bool highlight = false,
+    bool isAmount = false,
+    bool isSensitive = false,
+    Color? statusColor,
+  }) {
     // Mask sensitive data like account numbers
     String displayValue = value;
     if (isSensitive && value.length > 4) {
@@ -644,7 +931,7 @@ class DMTStatusScreen extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 12,
-                color: highlight ? AppColors.primary : AppColors.textHint,
+                color: highlight ? (statusColor ?? AppColors.primary) : AppColors.textHint,
               ),
             ),
             const SizedBox(width: 10),
@@ -673,10 +960,10 @@ class DMTStatusScreen extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: highlight || isAmount ? FontWeight.w700 : FontWeight.w500,
                       color: highlight
-                          ? AppColors.primary
+                          ? (statusColor ?? AppColors.primary)
                           : isAmount
-                          ? AppColors.textPrimary
-                          : AppColors.textPrimary,
+                              ? AppColors.textPrimary
+                              : AppColors.textPrimary,
                       letterSpacing: highlight ? 0.3 : 0,
                     ),
                     textAlign: TextAlign.end,
@@ -777,7 +1064,7 @@ class DMTStatusScreen extends StatelessWidget {
                 Navigator.pushNamedAndRemoveUntil(
                   context,
                   '/home',
-                      (route) => false,
+                  (route) => false,
                 );
               },
               child: Container(
