@@ -67,6 +67,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   bool _isCheckingBBPS = false;
   bool _isAEPSOnboarded = false;
   bool _isCheckingAEPS = false;
+  bool _isInitialLoading = true;
   String get _userPhone => _phone.replaceAll(RegExp(r'\s+'), '').replaceAll('+91', '').trim();
   late final WalletProvider _walletProvider = WalletProvider();
 
@@ -85,16 +86,124 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       _name = name;
       _phone = prefs.getString('phone') ?? '';
       _userId = uid.isNotEmpty ? uid : 'PN8472193';
+      _isInitialLoading = true;
     });
 
     if (uid.isNotEmpty) {
       _walletProvider.setUserId(uid);
       _walletProvider.setUserName(name);
-      _checkBBPSStatus();
+      await _checkBBPSStatus();
       _checkAEPSStatus();
     }
-  }
 
+    if (mounted) {
+      setState(() => _isInitialLoading = false);
+
+      // Show BBPS required popup if not onboarded after initial load
+      if (!_isBBPSOnboarded) {
+        // Small delay to ensure UI is built before showing dialog
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _showBBPSRequiredOnStartup();
+          }
+        });
+      }
+    }
+  }
+  void _showBBPSRequiredOnStartup() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must interact with dialog
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [AppColors.warning, Color(0xFFFF8F00)],
+                ),
+              ),
+              child: const Icon(Icons.lock_rounded, color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Welcome! Complete Onboarding',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'To access all services including AEPS, DMT, Recharge, and Bill Payments, you need to complete the BBPS merchant onboarding first.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white60, fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning.withOpacity(0.2)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, color: AppColors.warning, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'This is mandatory to use all features',
+                      style: TextStyle(color: AppColors.warning, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // User chose later - show toast reminder
+              _showToast('You can complete onboarding anytime from Bills section', isError: false);
+            },
+            child: const Text(
+              'Remind Later',
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _navigateToOnboarding();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Start Onboarding',
+              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      ),
+    );
+  }
   Future<void> _checkAEPSStatus() async {
     if (_isCheckingAEPS) return;
     setState(() => _isCheckingAEPS = true);
@@ -169,18 +278,26 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       final isOnboarded = await ApiService().checkBBPSOnboardingStatus(_userId);
 
       if (mounted) {
-        setState(() => _isBBPSOnboarded = isOnboarded);
+        setState(() {
+          _isBBPSOnboarded = isOnboarded;
+          _isCheckingBBPS = false;
+        });
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isBBPSOnboarded', isOnboarded);
+
+        if (isOnboarded) {
+          _showToast('BBPS Onboarding completed! Services unlocked 🎉');
+        }
       }
     } catch (e) {
       debugPrint('❌ [BBPS] Error: $e');
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
-        setState(() => _isBBPSOnboarded = prefs.getBool('isBBPSOnboarded') ?? false);
+        setState(() {
+          _isBBPSOnboarded = prefs.getBool('isBBPSOnboarded') ?? false;
+          _isCheckingBBPS = false;
+        });
       }
-    } finally {
-      if (mounted) setState(() => _isCheckingBBPS = false);
     }
   }
 
@@ -292,14 +409,72 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
   void _onServiceTap(String serviceName) {
     HapticFeedback.lightImpact();
+
+    // Check BBPS onboarding status for all services except Bills
+    if (!_isBBPSOnboarded && serviceName != 'Bills') {
+      _showBBPSRequiredDialog();
+      return;
+    }
+
     switch (serviceName) {
       case 'AEPS': _navigateToAEPS(); break;
       case 'DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => const DMTSelectorScreen())); break;
       case 'Recharge': Navigator.push(context, MaterialPageRoute(builder: (_) => RechargePage())); break;
       case 'Bills': _handleBillsNavigation(); break;
-      // case 'PPI DMT': Navigator.push(context, MaterialPageRoute(builder: (_) => const DmtPhoneEntryPage())); break;
       default: _showToast('Coming soon!');
     }
+  }
+
+  void _showBBPSRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(colors: [AppColors.warning, Colors.orange]),
+              ),
+              child: const Icon(Icons.lock_rounded, color: Colors.white, size: 32),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Services Locked',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Please complete BBPS onboarding to unlock all services including AEPS, DMT, Recharge, and Bill Payments.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white60, fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Later', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _navigateToOnboarding();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Start Onboarding', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _navigateToAEPS() {
@@ -314,41 +489,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     if (_isBBPSOnboarded) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const BillPaymentScreen()));
     } else {
-      _showOnboardingDialog();
+      _navigateToOnboarding();
     }
   }
 
   void _navigateToOnboarding() {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => OnboardingPage(onOnboardingComplete: () { _checkBBPSStatus(); _showToast('Onboarding completed! 🎉'); })));
-  }
-
-  void _showOnboardingDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 64, height: 64,
-            decoration: BoxDecoration(shape: BoxShape.circle, gradient: const LinearGradient(colors: [AppColors.primary, AppColors.accent])),
-            child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 32),
-          ),
-          const SizedBox(height: 20),
-          const Text('BBPS Onboarding Required', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          const Text('Complete onboarding to access bill payments.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 14)),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later', style: TextStyle(color: Colors.white54))),
-          ElevatedButton(
-            onPressed: () { Navigator.pop(ctx); _navigateToOnboarding(); },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text('Start Onboarding', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => OnboardingPage(onOnboardingComplete: () {
+      _checkBBPSStatus();
+      _showToast('Onboarding completed! 🎉');
+    })));
   }
 
   @override
@@ -360,19 +509,71 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         value: _walletProvider,
         child: Scaffold(
           backgroundColor: AppColors.bg,
-          body: SafeArea(
+          body: _isInitialLoading
+              ? _buildLoadingScreen()
+              : SafeArea(
             child: IndexedStack(
               index: _selectedIndex,
               children: [
-                HomeDashboard(onLogout: _logout, onServiceTap: _onServiceTap, isBBPSOnboarded: _isBBPSOnboarded, isCheckingBBPS: _isCheckingBBPS),
-                ServicesFullPage(onServiceTap: _onServiceTap),
+                HomeDashboard(
+                  onLogout: _logout,
+                  onServiceTap: _onServiceTap,
+                  isBBPSOnboarded: _isBBPSOnboarded,
+                  isCheckingBBPS: _isCheckingBBPS,
+                ),
+                ServicesFullPage(
+                  onServiceTap: _onServiceTap,
+                  isBBPSOnboarded: _isBBPSOnboarded,
+                  isCheckingBBPS: _isCheckingBBPS,
+                  onNavigateToOnboarding: _navigateToOnboarding,
+                ),
                 HistoryDashboardScreen(),
                 ProfilePage(onLogout: _logout),
               ],
             ),
           ),
-          bottomNavigationBar: _buildNavBar(),
+          bottomNavigationBar: _isInitialLoading ? null : _buildNavBar(),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingScreen() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [AppColors.primary, AppColors.accent]),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Center(
+              child: Icon(Icons.fingerprint, color: Colors.white, size: 40),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Loading your account...',
+            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Please wait while we set up your services',
+            style: TextStyle(color: AppColors.textHint, fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          const SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppColors.accent,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -397,6 +598,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             HapticFeedback.selectionClick();
             if (i == 3) {
               _handleProfileNavigation();
+            } else if (i == 1 && !_isBBPSOnboarded) {
+              // Services tab - show BBPS required dialog if not onboarded
+              _showBBPSRequiredDialog();
             } else {
               setState(() => _selectedIndex = i);
             }
@@ -404,11 +608,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           elevation: 0,
           selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           unselectedLabelStyle: const TextStyle(fontSize: 10),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'Services'),
-            BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'History'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+          items: [
+            const BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+            BottomNavigationBarItem(
+              icon: _isBBPSOnboarded
+                  ? const Icon(Icons.grid_view_rounded)
+                  : const Icon(Icons.lock_rounded),
+              label: 'Services',
+            ),
+            const BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'History'),
+            const BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
           ],
         ),
       ),
@@ -445,7 +654,7 @@ class HomeDashboard extends StatelessWidget {
               const SizedBox(height: 24),
               _buildBalanceCard(wp, context),
               const SizedBox(height: 20),
-              const BannerSlider(), // ✅ BANNER SLIDER ADDED HERE
+              const BannerSlider(),
               const SizedBox(height: 24),
               _buildServicesGrid(),
               const SizedBox(height: 24),
@@ -478,6 +687,7 @@ class HomeDashboard extends StatelessWidget {
       ),
       if (isCheckingBBPS) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryLight))),
       if (!isCheckingBBPS && isBBPSOnboarded) const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.verified, color: AppColors.success, size: 18)),
+      if (!isCheckingBBPS && !isBBPSOnboarded) const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.lock_rounded, color: AppColors.warning, size: 18)),
       _IconBtn(Icons.notifications_outlined, () {}),
       const SizedBox(width: 6),
       _IconBtn(Icons.logout_rounded, onLogout, destructive: true),
@@ -510,32 +720,52 @@ class HomeDashboard extends StatelessWidget {
           const SizedBox(height: 20),
           Row(children: [
             Expanded(
-              child: GestureDetector(
-                onTap: () => showAddFundSheet(context, wp.userId),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.add_circle_outline, color: Colors.white, size: 16),
-                    const SizedBox(width: 6),
-                    Text('₹ ${(wp.mainWallet?.balance ?? 0).toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, bottom: 4),
+                    child: Text('Main Wallet', style: TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.w500)),
+                  ),
+                  GestureDetector(
+                    onTap: () => showAddFundSheet(context, wp.userId),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.add_circle_outline, color: Colors.white, size: 16),
+                        const SizedBox(width: 6),
+                        Text('₹ ${(wp.mainWallet?.balance ?? 0).toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: GestureDetector(
-                onTap: () => showAepsWalletOptions(context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.fingerprint, color: Colors.white, size: 16),
-                    const SizedBox(width: 6),
-                    Text('₹ ${(wp.aepsWallet?.balance ?? 0).toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, bottom: 4),
+                    child: Text('AEPS Wallet', style: TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.w500)),
+                  ),
+                  GestureDetector(
+                    onTap: () => showAepsWalletOptions(context),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.fingerprint, color: Colors.white, size: 16),
+                        const SizedBox(width: 6),
+                        Text('₹ ${(wp.aepsWallet?.balance ?? 0).toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                ],
               ),
             ),
           ]),
@@ -551,20 +781,40 @@ class HomeDashboard extends StatelessWidget {
       ]),
     ]);
   }
-
   Widget _buildServicesGrid() {
     final services = [
       {'name': 'AEPS', 'icon': Icons.fingerprint},
       {'name': 'DMT', 'icon': Icons.swap_horiz},
       {'name': 'Recharge', 'icon': Icons.phone_android},
       {'name': 'Bills', 'icon': Icons.description},
-      // {'name': 'PPI DMT', 'icon': Icons.account_balance_wallet},
     ];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 16),
-        child: Text('Services', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          children: [
+            const Text('Services', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
+            const Spacer(),
+            if (!isBBPSOnboarded)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_rounded, color: AppColors.warning, size: 12),
+                    SizedBox(width: 4),
+                    Text('Complete BBPS', style: TextStyle(color: AppColors.warning, fontSize: 10, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
       GridView.builder(
         shrinkWrap: true,
@@ -573,6 +823,7 @@ class HomeDashboard extends StatelessWidget {
         itemCount: services.length,
         itemBuilder: (_, i) {
           final s = services[i];
+          final isLocked = !isBBPSOnboarded && s['name'] != 'Bills';
           return GestureDetector(
             onTap: () => onServiceTap(s['name'] as String),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -581,12 +832,38 @@ class HomeDashboard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border, width: 0.5),
+                  border: Border.all(
+                    color: isLocked ? AppColors.warning.withOpacity(0.5) : AppColors.border,
+                    width: 0.5,
+                  ),
                 ),
-                child: Icon(s['icon'] as IconData, color: AppColors.accent, size: 24),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Icon(
+                        isLocked ? Icons.lock_rounded : s['icon'] as IconData,
+                        color: isLocked ? AppColors.warning.withOpacity(0.5) : AppColors.accent,
+                        size: 24,
+                      ),
+                    ),
+                    if (isLocked)
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Icon(Icons.lock_rounded, color: AppColors.warning.withOpacity(0.7), size: 10),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
-              Text(s['name'] as String, style: const TextStyle(fontSize: 11, color: AppColors.textHint), textAlign: TextAlign.center),
+              Text(
+                s['name'] as String,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isLocked ? AppColors.textHint.withOpacity(0.5) : AppColors.textHint,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ]),
           );
         },
@@ -741,14 +1018,12 @@ class _BannerSliderState extends State<BannerSlider> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
                     onTap: () {
-                      // Handle banner tap if needed
                       HapticFeedback.lightImpact();
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       child: Row(
                         children: [
-                          // Icon Container
                           Container(
                             width: 56,
                             height: 56,
@@ -767,7 +1042,6 @@ class _BannerSliderState extends State<BannerSlider> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          // Text Content
                           Expanded(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -792,7 +1066,6 @@ class _BannerSliderState extends State<BannerSlider> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                // Progress indicator within banner
                                 Container(
                                   width: 40,
                                   height: 3,
@@ -804,7 +1077,6 @@ class _BannerSliderState extends State<BannerSlider> {
                               ],
                             ),
                           ),
-                          // Arrow indicator
                           Container(
                             width: 32,
                             height: 32,
@@ -828,7 +1100,6 @@ class _BannerSliderState extends State<BannerSlider> {
           ),
         ),
         const SizedBox(height: 12),
-        // Dot indicators
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_banners.length, (index) {
@@ -865,7 +1136,17 @@ class _BannerSliderState extends State<BannerSlider> {
 // ─────────────────────────────────────────────────────────────────────────────
 class ServicesFullPage extends StatelessWidget {
   final void Function(String) onServiceTap;
-  const ServicesFullPage({super.key, required this.onServiceTap});
+  final bool isBBPSOnboarded;
+  final bool isCheckingBBPS;
+  final VoidCallback? onNavigateToOnboarding;
+
+  const ServicesFullPage({
+    super.key,
+    required this.onServiceTap,
+    this.isBBPSOnboarded = false,
+    this.isCheckingBBPS = false,
+    this.onNavigateToOnboarding,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -874,7 +1155,6 @@ class ServicesFullPage extends StatelessWidget {
       {'name': 'DMT', 'icon': Icons.swap_horiz, 'desc': 'Domestic Money Transfer'},
       {'name': 'Recharge', 'icon': Icons.phone_android, 'desc': 'Mobile & DTH Recharge'},
       {'name': 'Bills', 'icon': Icons.description, 'desc': 'Bill Payments (BBPS)'},
-      // {'name': 'PPI DMT', 'icon': Icons.account_balance_wallet, 'desc': 'PPI Money Transfer'},
     ];
 
     return Container(
@@ -883,33 +1163,159 @@ class ServicesFullPage extends StatelessWidget {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('All Services', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
-          const SizedBox(height: 4),
-          const Text('Manage your financial services', style: TextStyle(fontSize: 13, color: AppColors.textHint)),
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('All Services', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                    SizedBox(height: 4),
+                    Text('Manage your financial services', style: TextStyle(fontSize: 13, color: AppColors.textHint)),
+                  ],
+                ),
+              ),
+              if (isCheckingBBPS)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryLight),
+                )
+              else if (!isBBPSOnboarded)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock_rounded, color: AppColors.warning, size: 14),
+                      SizedBox(width: 4),
+                      Text('Locked', style: TextStyle(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_rounded, color: AppColors.success, size: 14),
+                      SizedBox(width: 4),
+                      Text('Unlocked', style: TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 24),
+          if (!isBBPSOnboarded && !isCheckingBBPS)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.warning.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, color: AppColors.warning, size: 20),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Complete BBPS onboarding to unlock all services',
+                      style: TextStyle(color: AppColors.warning, fontSize: 12),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: onNavigateToOnboarding,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Onboard',
+                        style: TextStyle(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: services.length,
             itemBuilder: (_, i) {
               final s = services[i];
+              final isLocked = !isBBPSOnboarded && s['name'] != 'Bills';
+
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border, width: 0.5),
+                  border: Border.all(
+                    color: isLocked ? AppColors.warning.withOpacity(0.2) : AppColors.border,
+                    width: 0.5,
+                  ),
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   leading: Container(
                     width: 44, height: 44,
-                    decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                    child: Icon(s['icon'] as IconData, color: AppColors.accent, size: 22),
+                    decoration: BoxDecoration(
+                      color: isLocked
+                          ? AppColors.warning.withOpacity(0.1)
+                          : AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      isLocked ? Icons.lock_rounded : s['icon'] as IconData,
+                      color: isLocked ? AppColors.warning : AppColors.accent,
+                      size: 22,
+                    ),
                   ),
-                  title: Text(s['name'] as String, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                  subtitle: Text(s['desc'] as String, style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.textHint, size: 20),
+                  title: Row(
+                    children: [
+                      Text(
+                        s['name'] as String,
+                        style: TextStyle(
+                          color: isLocked ? AppColors.textHint : Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (isLocked) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.lock_rounded, color: AppColors.warning, size: 12),
+                      ],
+                    ],
+                  ),
+                  subtitle: Text(
+                    isLocked ? 'Complete BBPS onboarding' : s['desc'] as String,
+                    style: TextStyle(
+                      color: isLocked ? AppColors.warning.withOpacity(0.7) : AppColors.textHint,
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: Icon(
+                    isLocked ? Icons.lock_rounded : Icons.chevron_right,
+                    color: isLocked ? AppColors.warning : AppColors.textHint,
+                    size: 20,
+                  ),
                   onTap: () => onServiceTap(s['name'] as String),
                 ),
               );
