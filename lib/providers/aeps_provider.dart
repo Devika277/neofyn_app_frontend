@@ -3,6 +3,7 @@ import 'dart:developer' as DebugLogger;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:my_app/config/api_config.dart';
+import 'package:my_app/services/api_logger.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/AEPS/aeps_service.dart' as aeps;
@@ -63,6 +64,14 @@ class AepsProvider extends ChangeNotifier {
   String? _last2FADate;
   static const String _keyLast2FADate = 'last_2fa_date';
 
+  // ✅ NEW: 2FA Status per pipe
+  Map<String, Map<String, dynamic>> _pipes2FAStatus = {
+    '1': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+    '2': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+    '3': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+  };
+  bool _any2FADoneToday = false;
+
   // Getters
   List<aeps.Bank> get banks => _banks;
   List<aeps.State> get states => _states;
@@ -77,6 +86,14 @@ class AepsProvider extends ChangeNotifier {
   bool get isMerchantActive => _merchantId != null && _merchantId!.isNotEmpty;
   String? get realMerchantId => _realMerchantId;
   String? get ipAddress => _ipAddress;
+
+  // ✅ NEW: 2FA per-pipe getters
+  Map<String, Map<String, dynamic>> get pipes2FAStatus => _pipes2FAStatus;
+  bool get any2FADoneToday => _any2FADoneToday;
+
+  bool is2FADoneForPipe(String pipe) {
+    return _pipes2FAStatus[pipe]?['2fa_done_today'] ?? false;
+  }
 
   // ✅ FIX: Make pipe settable
   String? get pipe => _pipe;
@@ -171,6 +188,13 @@ class AepsProvider extends ChangeNotifier {
     _pipe = null;
     _last2FADate = null;
     _is2FAVerifiedToday = false;
+    // ✅ NEW: Reset 2FA per-pipe status
+    _pipes2FAStatus = {
+      '1': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+      '2': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+      '3': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+    };
+    _any2FADoneToday = false;
     SharedPreferences.getInstance().then((prefs) {
       prefs.remove(_keyAuthToken);
       prefs.remove(_keyUserId);
@@ -402,6 +426,8 @@ class AepsProvider extends ChangeNotifier {
         _is2FAVerifiedToday = true;
         _errorMessage = null;
         await _saveLast2FADate(today);
+        // ✅ NEW: Update per-pipe 2FA status
+        set2FADoneForPipe(currentPipe);
         notifyListeners();
         return true;
       } else {
@@ -635,7 +661,7 @@ class AepsProvider extends ChangeNotifier {
 
   Future<void> fetchMerchantByUserId(String userId, {String pipe = '1'}) async {
     try {
-      final res = await http.get(
+      final res = await LoggedHttpClient.get(
         Uri.parse(
           '${ApiConfig.baseUrl}/api/aeps/merchant-status?userId=$userId&pipe=$pipe',
         ),
@@ -756,6 +782,8 @@ class AepsProvider extends ChangeNotifier {
         _last2FADate = today;
         _is2FAVerifiedToday = true;
         await _saveLast2FADate(today);
+        // ✅ NEW: Update per-pipe 2FA status
+        set2FADoneForPipe(pipe);
         return true;
       } else {
         _errorMessage = response.statusDescription ?? '2FA failed';
@@ -769,6 +797,91 @@ class AepsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // =========================================================================
+  // ✅ NEW: 2FA STATUS CHECKING METHODS
+  // =========================================================================
+
+  /// Fetch 2FA status for all pipes from backend
+  Future<void> fetch2FAStatus(String userId) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/aeps/2fa/status/$userId');
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 🔍 [2FA] Checking 2FA Status');
+      debugPrint('│ 📍 URL: $url');
+      debugPrint('│ 👤 UserID: $userId');
+      debugPrint('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${_authToken ?? ''}',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      debugPrint('│ 📥 [2FA] Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true && data['data'] != null) {
+          final pipesData = data['data']['pipes'];
+
+          if (pipesData != null && pipesData is Map<String, dynamic>) {
+            pipesData.forEach((pipe, status) {
+              if (_pipes2FAStatus.containsKey(pipe)) {
+                _pipes2FAStatus[pipe] = {
+                  'merchant_id': status['merchant_id'],
+                  'last_2fa_at': status['last_2fa_at'],
+                  '2fa_done_today': status['2fa_done_today'] ?? false,
+                };
+              }
+            });
+          }
+
+          _any2FADoneToday = data['data']['any_2fa_done_today'] ?? false;
+
+          debugPrint('│ ✅ [2FA] Status updated:');
+          _pipes2FAStatus.forEach((pipe, status) {
+            debugPrint('│    Pipe $pipe: 2FA Done = ${status['2fa_done_today']}');
+          });
+
+          notifyListeners();
+        }
+      } else {
+        debugPrint('│ ⚠️ [2FA] Failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('│ ❌ [2FA] Error: $e');
+    }
+  }
+
+  /// Update 2FA status for a specific pipe after successful 2FA
+  void set2FADoneForPipe(String pipe) {
+    if (_pipes2FAStatus.containsKey(pipe)) {
+      _pipes2FAStatus[pipe] = {
+        'merchant_id': _pipes2FAStatus[pipe]!['merchant_id'],
+        'last_2fa_at': DateTime.now().toIso8601String(),
+        '2fa_done_today': true,
+      };
+      _any2FADoneToday = true;
+
+      // Also update local 2FA tracking
+      final today = DateTime.now().toIso8601String().split('T')[0];
+      _last2FADate = today;
+      _is2FAVerifiedToday = true;
+      _saveLast2FADate(today);
+
+      notifyListeners();
+      debugPrint('✅ [2FA] Pipe $pipe marked as done for today');
+    }
+  }
+
+  // =========================================================================
+  // TRANSACTION METHODS
+  // =========================================================================
 
   // Transaction methods (unchanged)
   Future<TransactionResponse?> executeTransaction(

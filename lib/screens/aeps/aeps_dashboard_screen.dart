@@ -1,3 +1,4 @@
+// lib/screens/aeps/aeps_dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/aeps_provider.dart';
@@ -5,6 +6,7 @@ import 'aeps_transaction_screen.dart';
 import 'bank_list_screen.dart';
 import 'transaction_status_screen.dart';
 import 'aeps_history_screen.dart';
+import 'two_factor_auth_screen.dart'; // ✅ Import 2FA screen
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NEOFYN BRAND TOKENS
@@ -39,11 +41,20 @@ class AePSColors {
 }
 
 class AepsDashboardScreen extends StatelessWidget {
-  const AepsDashboardScreen({super.key});
+  final String? pipe; // ✅ Accept pipe parameter
+
+  const AepsDashboardScreen({super.key, this.pipe});
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AepsProvider>(context);
+
+    // ✅ Set active pipe if passed
+    if (pipe != null && pipe!.isNotEmpty) {
+      provider.setActivePipe(pipe!);
+    }
+
+    final currentPipe = pipe ?? provider.pipe ?? '1';
 
     return Scaffold(
       body: Container(
@@ -65,7 +76,10 @@ class AepsDashboardScreen extends StatelessWidget {
             children: [
               // App Bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     IconButton(
@@ -74,7 +88,11 @@ class AepsDashboardScreen extends StatelessWidget {
                         color: Colors.white70,
                         size: 20,
                       ),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () {
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context);
+                        }
+                      },
                     ),
                     const Expanded(
                       child: Text(
@@ -88,11 +106,18 @@ class AepsDashboardScreen extends StatelessWidget {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.logout_rounded, color: Colors.white54, size: 20),
+                      icon: const Icon(
+                        Icons.logout_rounded,
+                        color: Colors.white54,
+                        size: 20,
+                      ),
                       onPressed: () async {
                         provider.clearMerchantData();
                         if (context.mounted) {
-                          Navigator.pop(context);
+                          // Navigator.pop(context);
+                          Navigator.of(
+                            context,
+                          ).pushNamedAndRemoveUntil('/home', (route) => false);
                         }
                       },
                     ),
@@ -112,11 +137,15 @@ class AepsDashboardScreen extends StatelessWidget {
                       const SizedBox(height: 20),
 
                       // Pipe Info
-                      _buildPipeInfo(provider),
+                      _buildPipeInfo(provider, currentPipe),
+                      const SizedBox(height: 20),
+
+                      // ✅ 2FA Status Banner
+                      _build2FAStatusBanner(context, provider, currentPipe),
                       const SizedBox(height: 20),
 
                       // Service Buttons Grid
-                      _buildServicesGrid(context),
+                      _buildServicesGrid(context, currentPipe),
                     ],
                   ),
                 ),
@@ -124,6 +153,80 @@ class AepsDashboardScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ✅ NEW: 2FA Status Banner
+  Widget _build2FAStatusBanner(
+    BuildContext context,
+    AepsProvider provider,
+    String pipe,
+  ) {
+    final is2FADone = provider.is2FADoneForPipe(pipe);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: is2FADone
+            ? AePSColors.success.withOpacity(0.1)
+            : AePSColors.warning.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: is2FADone
+              ? AePSColors.success.withOpacity(0.3)
+              : AePSColors.warning.withOpacity(0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            is2FADone ? Icons.check_circle : Icons.warning_amber_rounded,
+            color: is2FADone ? AePSColors.success : AePSColors.warning,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              is2FADone
+                  ? '2FA Verified for Pipe $pipe today ✓'
+                  : '2FA Required for Pipe $pipe! Please verify first.',
+              style: TextStyle(
+                color: is2FADone ? AePSColors.success : AePSColors.warning,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          if (!is2FADone)
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TwoFactorAuthScreen(
+                      pipe: pipe,
+                      merchantId:
+                          provider.getMerchantIdForPipe(pipe) ??
+                          provider.merchantId,
+                      merchantRefId:
+                          provider.getMerchantRefIdForPipe(pipe) ??
+                          provider.merchantRefId,
+                      aadhaarNumber: provider.aadhaarNo,
+                    ),
+                  ),
+                );
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: AePSColors.warning,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              child: const Text(
+                'Verify',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -168,20 +271,18 @@ class AepsDashboardScreen extends StatelessWidget {
           const SizedBox(height: 8),
           _merchantInfoRow('Mobile', provider.mobileNo ?? 'N/A'),
           const SizedBox(height: 8),
-         /* _merchantInfoRow('Aadhaar', provider.aadhaarNo != null
-              ? 'XXXX XXXX ${provider.aadhaarNo!.substring(provider.aadhaarNo!.length - 4)}'
-              : 'N/A'),*/
           _merchantInfoRow('Aadhaar', _safeMaskAadhaar(provider.aadhaarNo)),
-
         ],
       ),
     );
   }
+
   String _safeMaskAadhaar(String? aadhaar) {
     if (aadhaar == null || aadhaar.isEmpty) return 'N/A';
     if (aadhaar.length < 4) return aadhaar;
     return 'XXXX XXXX ${aadhaar.substring(aadhaar.length - 4)}';
   }
+
   Widget _merchantInfoRow(String label, String value) {
     return Row(
       children: [
@@ -189,10 +290,7 @@ class AepsDashboardScreen extends StatelessWidget {
           width: 90,
           child: Text(
             label,
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
           ),
         ),
         Expanded(
@@ -209,7 +307,7 @@ class AepsDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPipeInfo(AepsProvider provider) {
+  Widget _buildPipeInfo(AepsProvider provider, String pipe) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -225,8 +323,11 @@ class AepsDashboardScreen extends StatelessWidget {
               color: AePSColors.success.withOpacity(0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.settings_input_component_rounded,
-                color: AePSColors.success, size: 20),
+            child: const Icon(
+              Icons.settings_input_component_rounded,
+              color: AePSColors.success,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -235,10 +336,7 @@ class AepsDashboardScreen extends StatelessWidget {
               children: [
                 Text(
                   'Active Pipe',
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: Colors.white60, fontSize: 11),
                 ),
                 SizedBox(height: 2),
                 Text(
@@ -261,7 +359,7 @@ class AepsDashboardScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              'Pipe ${provider.pipe ?? "1"}',
+              'Pipe $pipe',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -274,16 +372,56 @@ class AepsDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildServicesGrid(BuildContext context) {
+  Widget _buildServicesGrid(BuildContext context, String pipe) {
     final services = [
-      _ServiceItem('Cash\nWithdrawal', Icons.money_rounded, AePSColors.withdrawal, 'CW'),
-      _ServiceItem('Balance\nEnquiry', Icons.account_balance_wallet_rounded, AePSColors.balance, 'BE'),
-      _ServiceItem('Mini\nStatement', Icons.receipt_long_rounded, AePSColors.statement, 'MS'),
-      _ServiceItem('Aadhaar\nPay', Icons.credit_card_rounded, AePSColors.aadhaarPay, 'AP'),
-      _ServiceItem('Cash\nDeposit', Icons.attach_money_rounded, AePSColors.deposit, 'CD'),
-      _ServiceItem('Bank\nList', Icons.account_balance_rounded, AePSColors.bankList, 'BANKS'),
-      _ServiceItem('Transaction\nHistory', Icons.history_rounded, AePSColors.history, 'HISTORY'),
-      _ServiceItem('Txn\nStatus', Icons.track_changes_rounded, AePSColors.txnStatus, 'STATUS'),
+      _ServiceItem(
+        'Cash\nWithdrawal',
+        Icons.money_rounded,
+        AePSColors.withdrawal,
+        'CW',
+      ),
+      _ServiceItem(
+        'Balance\nEnquiry',
+        Icons.account_balance_wallet_rounded,
+        AePSColors.balance,
+        'BE',
+      ),
+      _ServiceItem(
+        'Mini\nStatement',
+        Icons.receipt_long_rounded,
+        AePSColors.statement,
+        'MS',
+      ),
+      _ServiceItem(
+        'Aadhaar\nPay',
+        Icons.credit_card_rounded,
+        AePSColors.aadhaarPay,
+        'AP',
+      ),
+      _ServiceItem(
+        'Cash\nDeposit',
+        Icons.attach_money_rounded,
+        AePSColors.deposit,
+        'CD',
+      ),
+      _ServiceItem(
+        'Bank\nList',
+        Icons.account_balance_rounded,
+        AePSColors.bankList,
+        'BANKS',
+      ),
+      _ServiceItem(
+        'Transaction\nHistory',
+        Icons.history_rounded,
+        AePSColors.history,
+        'HISTORY',
+      ),
+      _ServiceItem(
+        'Txn\nStatus',
+        Icons.track_changes_rounded,
+        AePSColors.txnStatus,
+        'STATUS',
+      ),
       _ServiceItem('Help', Icons.help_outline_rounded, AePSColors.help, 'HELP'),
     ];
 
@@ -305,6 +443,7 @@ class AepsDashboardScreen extends StatelessWidget {
           icon: service.icon,
           color: service.color,
           type: service.type,
+          pipe: pipe,
         );
       },
     );
@@ -316,11 +455,12 @@ class AepsDashboardScreen extends StatelessWidget {
     required IconData icon,
     required Color color,
     required String type,
+    required String pipe,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _handleServiceTap(context, type),
+        onTap: () => _handleServiceTap(context, type, pipe),
         borderRadius: BorderRadius.circular(16),
         splashColor: color.withOpacity(0.1),
         highlightColor: color.withOpacity(0.05),
@@ -335,9 +475,7 @@ class AepsDashboardScreen extends StatelessWidget {
               ],
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: color.withOpacity(0.2),
-            ),
+            border: Border.all(color: color.withOpacity(0.2)),
             boxShadow: [
               BoxShadow(
                 color: color.withOpacity(0.05),
@@ -378,7 +516,48 @@ class AepsDashboardScreen extends StatelessWidget {
     );
   }
 
-  void _handleServiceTap(BuildContext context, String type) {
+  void _handleServiceTap(BuildContext context, String type, String pipe) {
+    final provider = context.read<AepsProvider>();
+
+    // ✅ Check if 2FA is required for transaction types
+    final needs2FA =
+        type == 'CW' ||
+        type == 'BE' ||
+        type == 'MS' ||
+        type == 'AP' ||
+        type == 'CD';
+
+    if (needs2FA && !provider.is2FADoneForPipe(pipe)) {
+      // ✅ 2FA not done → Redirect to 2FA screen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('2FA required for Pipe $pipe. Please verify first.'),
+          backgroundColor: AePSColors.warning,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TwoFactorAuthScreen(
+            pipe: pipe,
+            merchantId:
+                provider.getMerchantIdForPipe(pipe) ?? provider.merchantId,
+            merchantRefId:
+                provider.getMerchantRefIdForPipe(pipe) ??
+                provider.merchantRefId,
+            aadhaarNumber: provider.aadhaarNo,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // ✅ 2FA done or not required → Proceed
     switch (type) {
       case 'CW':
       case 'BE':
@@ -430,8 +609,11 @@ class AepsDashboardScreen extends StatelessWidget {
                 color: AePSColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.help_outline_rounded,
-                  color: AePSColors.primary, size: 20),
+              child: const Icon(
+                Icons.help_outline_rounded,
+                color: AePSColors.primary,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             const Text(
@@ -444,20 +626,35 @@ class AepsDashboardScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _helpItem(Icons.money_rounded, 'Cash Withdrawal',
-                'Withdraw money using Aadhaar'),
+            _helpItem(
+              Icons.money_rounded,
+              'Cash Withdrawal',
+              'Withdraw money using Aadhaar',
+            ),
             const SizedBox(height: 12),
-            _helpItem(Icons.account_balance_wallet_rounded, 'Balance Enquiry',
-                'Check account balance'),
+            _helpItem(
+              Icons.account_balance_wallet_rounded,
+              'Balance Enquiry',
+              'Check account balance',
+            ),
             const SizedBox(height: 12),
-            _helpItem(Icons.receipt_long_rounded, 'Mini Statement',
-                'Get last 5-10 transactions'),
+            _helpItem(
+              Icons.receipt_long_rounded,
+              'Mini Statement',
+              'Get last 5-10 transactions',
+            ),
             const SizedBox(height: 12),
-            _helpItem(Icons.credit_card_rounded, 'Aadhaar Pay',
-                'Customer pays merchant via Aadhaar'),
+            _helpItem(
+              Icons.credit_card_rounded,
+              'Aadhaar Pay',
+              'Customer pays merchant via Aadhaar',
+            ),
             const SizedBox(height: 12),
-            _helpItem(Icons.attach_money_rounded, 'Cash Deposit',
-                'Deposit cash into bank account'),
+            _helpItem(
+              Icons.attach_money_rounded,
+              'Cash Deposit',
+              'Deposit cash into bank account',
+            ),
           ],
         ),
         actions: [

@@ -24,7 +24,18 @@ enum DeviceType {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class TwoFactorAuthScreen extends StatefulWidget {
-  const TwoFactorAuthScreen({super.key});
+  final String? merchantId;
+  final String? merchantRefId;
+  final String? pipe;
+  final String? aadhaarNumber;
+
+  const TwoFactorAuthScreen({
+    super.key,
+    this.merchantId,
+    this.merchantRefId,
+    this.pipe,
+    this.aadhaarNumber,
+  });
 
   @override
   State<TwoFactorAuthScreen> createState() => _TwoFactorAuthScreenState();
@@ -64,11 +75,21 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     super.initState();
 
     final provider = context.read<AepsProvider>();
-    if (provider.aadhaarNo?.isNotEmpty == true) {
+
+    // ✅ Use passed aadhaar number, or fallback to provider's stored one
+    if (widget.aadhaarNumber?.isNotEmpty == true) {
+      _aadhaarController.text = widget.aadhaarNumber!;
+    } else if (provider.aadhaarNo?.isNotEmpty == true) {
       _aadhaarController.text = provider.aadhaarNo!;
     }
 
-    _checkDailyVerificationStatus();
+    // ✅ Set the active pipe if provided
+    if (widget.pipe != null && widget.pipe!.isNotEmpty) {
+      provider.setActivePipe(widget.pipe!);
+    }
+
+    // ✅ Check if 2FA already done for this pipe today
+    _checkPipe2FAStatus();
 
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -88,13 +109,28 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Check Daily Verification Status
+  // Check if 2FA already done for this pipe today
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Future<void> _checkDailyVerificationStatus() async {
+  Future<void> _checkPipe2FAStatus() async {
     final provider = context.read<AepsProvider>();
+    final currentPipe = widget.pipe ?? provider.pipe ?? '1';
+
+    // ✅ NEW: Check per-pipe 2FA status
+    if (provider.is2FADoneForPipe(currentPipe)) {
+      print('✅ Pipe $currentPipe: 2FA already done today → Redirecting to dashboard');
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AepsDashboardScreen()),
+        );
+      }
+      return;
+    }
+
+    // Fallback to old check
     if (!provider.needs2FA()) {
-      print('✅ Already verified today - redirecting to dashboard');
+      print('✅ Already verified today (legacy check) → Redirecting to dashboard');
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -153,14 +189,14 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
 
     try {
       final provider = context.read<AepsProvider>();
-      final currentPipe = provider.pipe ?? '1';
+      final currentPipe = widget.pipe ?? provider.pipe ?? '1';
 
       final pidXml = await BiometricService.capturePid(
         clientKey: 'NEOFYN',
         skipWadh: true,
         pipe: currentPipe,
       );
-      print('✅ PID captured for 2FA: ${pidXml?.substring(0, 100)}...');
+      print('✅ PID captured for 2FA (Pipe $currentPipe): ${pidXml?.substring(0, 100)}...');
 
       setState(() {
         _pidXml = pidXml;
@@ -197,26 +233,33 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     final provider = context.read<AepsProvider>();
     final aadhaar = _aadhaarController.text.trim();
 
-    final currentPipe = provider.pipe ?? '1';
-    final merchantRefId = provider.getMerchantRefIdForPipe(currentPipe);
-    final refId = merchantRefId ?? provider.merchantRefId ??
-        'NEO_${provider.userId}_${DateTime.now().millisecondsSinceEpoch}';
-    print('🔵 Using merchantRefId: $refId');
-    print('🔵 Device: ${_selectedDevice.apiValue}');
+    final currentPipe = widget.pipe ?? provider.pipe ?? '1';
+    final merchantIdToUse = widget.merchantId ?? provider.getMerchantIdForPipe(currentPipe) ?? provider.merchantId;
+    final merchantRefIdToUse = widget.merchantRefId ?? provider.getMerchantRefIdForPipe(currentPipe) ?? provider.merchantRefId;
+    final refId = merchantRefIdToUse ?? 'NEO_${provider.userId}_${DateTime.now().millisecondsSinceEpoch}';
+
+    print('🔵 [2FA] Pipe: $currentPipe');
+    print('🔵 [2FA] MerchantId: $merchantIdToUse');
+    print('🔵 [2FA] MerchantRefId: $refId');
+    print('🔵 [2FA] Device: ${_selectedDevice.apiValue}');
 
     try {
-      // ✅ Using selected device type
-      final bool success = await provider.performDaily2FA(
-        _pidXml!,
-        deviceType: _selectedDevice.apiValue, // ✅ Dynamic device type
-        aadhaarNumber: aadhaar,
+      // ✅ Use perform2FA with explicit pipe parameter
+      final bool success = await provider.perform2FA(
+        merchantId: merchantIdToUse!,
         merchantRefId: refId,
+        pipe: currentPipe,
+        aadhaarNumber: aadhaar,
+        pidData: _pidXml!,
+        deviceType: _selectedDevice.apiValue,
       );
 
       if (!mounted) return;
 
       if (success) {
-        _showSnackBar('Verification successful!', isError: false);
+        // ✅ 2FA status is already updated in provider's set2FADoneForPipe()
+        print('✅ [2FA] Pipe $currentPipe: Verification successful!');
+        _showSnackBar('Verification successful for Pipe $currentPipe!', isError: false);
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
           Navigator.pushReplacement(
@@ -370,13 +413,14 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     final bool busy = _isCapturing || _isVerifying;
     final bool canCapture = _deviceState == _DeviceState.connected && !busy;
     final bool canVerify = _deviceState == _DeviceState.connected && _isCaptured && !busy;
+    final currentPipe = widget.pipe ?? context.read<AepsProvider>().pipe ?? '1';
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text(
-          'Daily Biometric Verification',
-          style: TextStyle(color: Colors.white, fontSize: 17),
+        title: Text(
+          '2FA - Pipe $currentPipe',
+          style: const TextStyle(color: Colors.white, fontSize: 17),
         ),
         backgroundColor: const Color(0xFF1A1A1A),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -389,6 +433,27 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ✅ Pipe indicator banner
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2ECC71).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2ECC71).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Color(0xFF2ECC71), size: 18),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Authenticating for Pipe $currentPipe',
+                      style: const TextStyle(color: Color(0xFF2ECC71), fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
               // ── Step 1: Select Device ──────────────────────────────────
               _stepLabel('Step 1 – Select Device'),
               const SizedBox(height: 10),
@@ -584,8 +649,8 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
               ),
 
               const SizedBox(height: 20),
-              const Text(
-                'Biometric verification is required once per day before performing any AePS transaction.',
+              Text(
+                'Biometric verification is required once per day per pipe before performing any AePS transaction.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white38, fontSize: 12),
               ),

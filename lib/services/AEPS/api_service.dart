@@ -506,4 +506,44 @@ class ApiService {
       return null;
     }
   }
+  // ─── Check 2FA Status for Today (All Pipes) ─────────────────
+  Future<Map<String, dynamic>> check2FAStatus(String userId) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/aeps/2fa/status/$userId');
+      final headers = await _getAuthHeaders();
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 🔍 [2FA] Checking 2FA Status');
+      debugPrint('│ 📍 URL: $url');
+      debugPrint('│ 👤 UserID: $userId');
+      debugPrint('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.get(
+        url,
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
+
+      debugPrint('┌──────────────────────────────────────────');
+      debugPrint('│ 📥 [2FA] Response');
+      debugPrint('│ 📊 Status: ${response.statusCode}');
+      debugPrint('│ 📦 Body: ${response.body}');
+      debugPrint('└──────────────────────────────────────────');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'user_id': data['data']['user_id'],
+            'pipes': data['data']['pipes'] ?? {},
+            'any_2fa_done_today': data['data']['any_2fa_done_today'] ?? false,
+          };
+        }
+      }
+      return {'success': false};
+    } catch (e) {
+      debugPrint('❌ [2FA] Error: $e');
+      return {'success': false};
+    }
+  }
 }
