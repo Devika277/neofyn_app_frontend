@@ -532,4 +532,146 @@ class ApiService {
   ) async {
     return await checkRemitter(phone, productType);
   }
+
+  /// Check DMT Transaction Status (POST version)
+// In your api_service.dart, replace the checkDmtStatus method with this:
+
+  /// Check DMT Transaction Status (POST version - matches backend)
+  Future<Map<String, dynamic>> checkDmtStatus({
+    required String transactionId,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+
+      print('┌──────────────────────────────────────────');
+      print('│ 🔍 [DMT] Checking Transaction Status');
+      print('│ 📍 Transaction ID: $transactionId');
+      print('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.post(
+        Uri.parse('$baseUrl/api/dmt/status'),
+        headers: headers,
+        body: json.encode({
+          'transactionId': transactionId,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      print('┌──────────────────────────────────────────');
+      print('│ 📥 [DMT] Status Response');
+      print('│ 📊 Status: ${response.statusCode}');
+      print('│ 📦 Body: ${response.body.length > 300 ? response.body.substring(0, 300) + '...' : response.body}');
+      print('└──────────────────────────────────────────');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true) {
+          final txData = data['data'] ?? data;
+
+          print('✅ [DMT] Status: ${txData['status']} | UTR: ${txData['utrNumber']}');
+
+          return {
+            'success': true,
+            'data': {
+              'status': txData['status']?.toString().toLowerCase() ?? 'pending',
+              'rrn': txData['utrNumber']?.toString(), // ✅ RRN is stored in utr_number
+              'utrNumber': txData['utrNumber']?.toString(),
+              'bankRefNo': txData['utrNumber']?.toString(),
+              'message': txData['message']?.toString() ?? txData['failureReason']?.toString(),
+              'failureReason': txData['failureReason']?.toString(),
+              'amount': txData['amount']?.toString(),
+              'transferMode': txData['transferMode']?.toString(),
+              'remitterName': txData['remitterName']?.toString(),
+              'remitterMobile': txData['remitterMobile']?.toString(),
+              'beneficiaryName': txData['beneficiaryName']?.toString(),
+              'beneficiaryAccount': txData['beneficiaryAccount']?.toString(),
+              'beneficiaryIfsc': txData['beneficiaryIfsc']?.toString(),
+              'beneficiaryBank': txData['beneficiaryBank']?.toString(),
+              'beneficiaryMobile': txData['beneficiaryMobile']?.toString(),
+              'commissionAmount': txData['commissionAmount']?.toString(),
+              'createdAt': txData['createdAt']?.toString(),
+              'updatedAt': txData['updatedAt']?.toString(),
+            }
+          };
+        }
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'message': 'Transaction not found',
+        };
+      } else if (response.statusCode == 401) {
+        throw Exception('Session expired. Please login again.');
+      }
+
+      return {
+        'success': false,
+        'message': 'Failed to check status. Code: ${response.statusCode}',
+      };
+    } catch (e) {
+      print('❌ [DMT] Status check error: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+/*Future<Map<String, dynamic>> checkDmtStatus({
+    required String transactionId,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+
+      print('┌──────────────────────────────────────────');
+      print('│ 🔍 [DMT] Checking Transaction Status');
+      print('│ 📍 Transaction ID: $transactionId');
+      print('└──────────────────────────────────────────');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/dmt/status'),
+        headers: headers,
+        body: json.encode({
+          'transactionId': transactionId,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      print('┌──────────────────────────────────────────');
+      print('│ 📥 [DMT] Status Response');
+      print('│ 📊 Status: ${response.statusCode}');
+      print('│ 📦 Body: ${response.body}');
+      print('└──────────────────────────────────────────');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true) {
+          final txData = data['data'] ?? data['transaction'] ?? data;
+
+          print('✅ [DMT] Status: ${txData['status']} | RRN: ${txData['rrn']}');
+
+          return {
+            'success': true,
+            'data': {
+              'status': txData['status']?.toString().toLowerCase() ?? 'pending',
+              'rrn': txData['rrn']?.toString(),
+              'utrNumber': txData['utrNumber']?.toString() ?? txData['utr_number']?.toString(),
+              'bankRefNo': txData['bankRefNo']?.toString() ?? txData['bank_ref_no']?.toString(),
+              'message': txData['message']?.toString(),
+              'failureReason': txData['failureReason']?.toString() ?? txData['failure_reason']?.toString(),
+            }
+          };
+        }
+      }
+
+      return {
+        'success': false,
+        'message': 'Failed to check status',
+      };
+    } catch (e) {
+      print('❌ [DMT] Status check error: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }*/
 }

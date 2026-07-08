@@ -49,7 +49,66 @@ class DmtReceiptModel {
   String get formattedDate => DateFormat('dd MMM yyyy, hh:mm a').format(transactionDate);
   String get formattedDateShort => DateFormat('dd/MM/yyyy').format(transactionDate);
   String get formattedTime => DateFormat('hh:mm:ss a').format(transactionDate);
-  bool get isSuccess => status.toLowerCase() == 'success';
+
+  // Smart status checks
+  bool get isSuccess => status.toLowerCase() == 'success' || status.toLowerCase() == 'completed';
+  bool get isFailed => status.toLowerCase() == 'failed' || status.toLowerCase() == 'failure' || status.toLowerCase() == 'reversed';
+  bool get isProcessing => status.toLowerCase() == 'processing' || status.toLowerCase() == 'pending' || status.toLowerCase() == 'queued';
+  bool get isOnHold => status.toLowerCase() == 'hold';
+
+  // Status message with smart label
+  String get statusMessage {
+    if (isSuccess) return failureReason.isNotEmpty ? failureReason : 'Transaction completed successfully';
+    if (isFailed) return failureReason.isNotEmpty ? failureReason : 'Transaction failed';
+    if (isProcessing) return 'Transaction is being processed';
+    if (isOnHold) return 'Transaction is on hold. Please contact support';
+    return 'Status: ${status.toUpperCase()}';
+  }
+
+  // Status label
+  String get statusLabel {
+    if (isFailed) return 'Failure Reason';
+    if (isSuccess && failureReason.isNotEmpty) return 'Status Message';
+    if (isProcessing) return 'Current Status';
+    if (isOnHold) return 'Hold Info';
+    return 'Message';
+  }
+
+  // Status color
+  Color get statusColor {
+    if (isSuccess) return const Color(0xFF10B981);
+    if (isFailed) return const Color(0xFFEF4444);
+    if (isProcessing) return const Color(0xFF8B5CF6);
+    if (isOnHold) return const Color(0xFFF59E0B);
+    return const Color(0xFF6B7280);
+  }
+
+  // Status icon
+  IconData get statusIcon {
+    if (isSuccess) return Iconsax.tick_circle;
+    if (isFailed) return Iconsax.close_circle;
+    if (isProcessing) return Iconsax.timer_1;
+    if (isOnHold) return Iconsax.clock;
+    return Iconsax.info_circle;
+  }
+
+  // Status title
+  String get statusTitle {
+    if (isSuccess) return 'Transaction Successful';
+    if (isFailed) return 'Transaction Failed';
+    if (isProcessing) return 'Processing...';
+    if (isOnHold) return 'On Hold';
+    return 'Status: ${status.toUpperCase()}';
+  }
+
+  // Status subtitle
+  String get statusSubtitle {
+    if (isSuccess) return 'Sent Successfully';
+    if (isFailed) return 'Transaction could not be completed';
+    if (isProcessing) return 'Please wait while we process your transaction';
+    if (isOnHold) return 'Please contact customer support';
+    return 'Unknown status';
+  }
 }
 
 class DmtReceiptScreen extends StatelessWidget {
@@ -82,6 +141,10 @@ class DmtReceiptScreen extends StatelessWidget {
             icon: const Icon(Iconsax.share, color: Colors.white70, size: 20),
             onPressed: () => _shareReceipt(context),
           ),
+          IconButton(
+            icon: const Icon(Iconsax.copy, color: Colors.white70, size: 20),
+            onPressed: () => _copyReceiptDetails(context),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -103,6 +166,7 @@ class DmtReceiptScreen extends StatelessWidget {
   }
 
   Widget _buildStatusCard() {
+    final sc = receipt.statusColor;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -113,34 +177,33 @@ class DmtReceiptScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Status Icon
+          // Status Icon with animation for processing
           Container(
             width: 72,
             height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: receipt.isSuccess
-                  ? const Color(0xFF10B981).withOpacity(0.1)
-                  : const Color(0xFFEF4444).withOpacity(0.1),
-              border: Border.all(
-                color: receipt.isSuccess
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFFEF4444),
-                width: 2,
-              ),
+              color: sc.withOpacity(0.1),
+              border: Border.all(color: sc, width: 2),
             ),
-            child: Icon(
-              receipt.isSuccess ? Iconsax.tick_circle : Iconsax.close_circle,
-              color: receipt.isSuccess
-                  ? const Color(0xFF10B981)
-                  : const Color(0xFFEF4444),
+            child: receipt.isProcessing
+                ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(sc),
+              ),
+            )
+                : Icon(
+              receipt.statusIcon,
+              color: sc,
               size: 36,
             ),
           ),
           const SizedBox(height: 16),
           // Status Text
           Text(
-            receipt.isSuccess ? 'Transaction Successful' : 'Transaction Failed',
+            receipt.statusTitle,
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -154,19 +217,69 @@ class DmtReceiptScreen extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 32,
               fontWeight: FontWeight.w700,
-              color: receipt.isSuccess
-                  ? const Color(0xFF10B981)
-                  : const Color(0xFFEF4444),
+              color: sc,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Sent Successfully',
+            receipt.statusSubtitle,
             style: GoogleFonts.poppins(
               fontSize: 12,
               color: Colors.white54,
             ),
+            textAlign: TextAlign.center,
           ),
+
+          // Status Message Box (if available)
+          if (receipt.statusMessage.isNotEmpty &&
+              (receipt.isFailed || receipt.isProcessing || receipt.isOnHold ||
+                  (receipt.isSuccess && receipt.failureReason.isNotEmpty))) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: sc.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: sc.withOpacity(0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    receipt.isFailed ? Iconsax.warning_2 : Iconsax.info_circle,
+                    size: 16,
+                    color: sc,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          receipt.statusLabel,
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: sc.withOpacity(0.7),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          receipt.statusMessage,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: sc,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -186,39 +299,65 @@ class DmtReceiptScreen extends StatelessWidget {
           // Header
           _buildHeader(),
           const Divider(color: Color(0xFF2A342A), height: 24),
+
           // Transaction Details
           _buildSectionTitle('Transaction Details'),
-          _buildDetailRow('Transaction ID', receipt.transactionId),
-          _buildDetailRow('UTR Number', receipt.utrNumber),
+          _buildDetailRow('Transaction ID', receipt.transactionId, showCopy: true),
+          if (receipt.utrNumber.isNotEmpty && receipt.utrNumber != 'N/A')
+            _buildDetailRow('UTR Number', receipt.utrNumber, showCopy: true, isHighlight: true),
           _buildDetailRow('Transfer Mode', receipt.transferMode),
           _buildDetailRow('Date', receipt.formattedDate),
+          _buildDetailRow('Status', receipt.status.toUpperCase(),
+              valueColor: receipt.statusColor, isHighlight: true),
           if (receipt.remark.isNotEmpty)
             _buildDetailRow('Remark', receipt.remark),
           const Divider(color: Color(0xFF2A342A), height: 24),
+
           // Remitter Details
           _buildSectionTitle('Remitter Details'),
           _buildDetailRow('Name', receipt.remitterName),
           if (receipt.remitterMobile.isNotEmpty)
             _buildDetailRow('Mobile', receipt.remitterMobile),
           const Divider(color: Color(0xFF2A342A), height: 24),
+
           // Beneficiary Details
           _buildSectionTitle('Beneficiary Details'),
           _buildDetailRow('Name', receipt.beneficiaryName),
-          _buildDetailRow('Account Number', _maskAccount(receipt.accountNumber)),
+          _buildDetailRow('Account Number', _maskAccount(receipt.accountNumber), showCopy: true),
           _buildDetailRow('Bank', receipt.bankName),
           if (receipt.ifscCode.isNotEmpty)
-            _buildDetailRow('IFSC Code', receipt.ifscCode),
+            _buildDetailRow('IFSC Code', receipt.ifscCode, showCopy: true),
           if (receipt.beneficiaryMobile.isNotEmpty)
             _buildDetailRow('Mobile', receipt.beneficiaryMobile),
           const Divider(color: Color(0xFF2A342A), height: 24),
+
           // Amount Details
           _buildSectionTitle('Amount Details'),
-          _buildDetailRow('Transfer Amount', '₹${receipt.amount}'),
+          _buildDetailRow('Transfer Amount', '₹${receipt.amount}', isHighlight: true),
           if (receipt.commission.isNotEmpty && receipt.commission != 'null')
             _buildDetailRow('Commission', '₹${receipt.commission}'),
-          if (receipt.failureReason.isNotEmpty)
-            _buildDetailRow('Failure Reason', receipt.failureReason,
-                valueColor: const Color(0xFFEF4444)),
+
+          // Show appropriate message based on status
+          if (receipt.isFailed && receipt.failureReason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildDetailRow(
+              'Failure Reason',
+              receipt.failureReason,
+              valueColor: const Color(0xFFEF4444),
+              isHighlight: true,
+            ),
+          ],
+
+          if (receipt.isSuccess && receipt.failureReason.isNotEmpty &&
+              receipt.failureReason.toLowerCase() != 'transaction successful') ...[
+            const SizedBox(height: 8),
+            _buildDetailRow(
+              'Status Message',
+              receipt.failureReason,
+              valueColor: const Color(0xFF10B981),
+            ),
+          ],
+
           const Divider(color: Color(0xFF2A342A), height: 24),
           // Footer
           _buildFooter(),
@@ -307,7 +446,8 @@ class DmtReceiptScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
+  Widget _buildDetailRow(String label, String value,
+      {Color? valueColor, bool showCopy = false, bool isHighlight = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -324,14 +464,35 @@ class DmtReceiptScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: valueColor ?? Colors.white,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: isHighlight ? FontWeight.w600 : FontWeight.w500,
+                      color: valueColor ?? Colors.white,
+                    ),
+                  ),
+                ),
+                if (showCopy) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: value));
+                      HapticFeedback.lightImpact();
+                    },
+                    child: Icon(
+                      Iconsax.copy,
+                      size: 14,
+                      color: Colors.white30,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -340,41 +501,40 @@ class DmtReceiptScreen extends StatelessWidget {
   }
 
   Widget _buildFooter() {
+    final sc = receipt.statusColor;
     return Column(
       children: [
         // Status Badge
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: receipt.isSuccess
-                ? const Color(0xFF10B981).withOpacity(0.1)
-                : const Color(0xFFEF4444).withOpacity(0.1),
+            color: sc.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: receipt.isSuccess
-                  ? const Color(0xFF10B981)
-                  : const Color(0xFFEF4444),
-            ),
+            border: Border.all(color: sc),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                receipt.isSuccess ? Iconsax.shield_tick : Iconsax.warning_2,
+                receipt.statusIcon,
                 size: 14,
-                color: receipt.isSuccess
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFFEF4444),
+                color: sc,
               ),
               const SizedBox(width: 6),
               Text(
-                receipt.isSuccess ? 'Verified Transaction' : 'Failed Transaction',
+                receipt.isSuccess
+                    ? 'Verified Transaction'
+                    : receipt.isFailed
+                    ? 'Failed Transaction'
+                    : receipt.isProcessing
+                    ? 'Transaction Processing'
+                    : receipt.isOnHold
+                    ? 'Transaction On Hold'
+                    : 'Status: ${receipt.status.toUpperCase()}',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: receipt.isSuccess
-                      ? const Color(0xFF10B981)
-                      : const Color(0xFFEF4444),
+                  color: sc,
                 ),
               ),
             ],
@@ -432,6 +592,44 @@ class DmtReceiptScreen extends StatelessWidget {
   String _maskAccount(String account) {
     if (account.length <= 4) return account;
     return '${'*' * (account.length - 4)}${account.substring(account.length - 4)}';
+  }
+
+  void _copyReceiptDetails(BuildContext context) {
+    final details = '''
+Transaction Receipt
+-------------------
+Status: ${receipt.statusTitle}
+Amount: ₹${receipt.amount}
+Transaction ID: ${receipt.transactionId}
+UTR Number: ${receipt.utrNumber}
+Date: ${receipt.formattedDate}
+Transfer Mode: ${receipt.transferMode}
+Remitter: ${receipt.remitterName}
+Beneficiary: ${receipt.beneficiaryName}
+Account: ${_maskAccount(receipt.accountNumber)}
+Bank: ${receipt.bankName}
+${receipt.ifscCode.isNotEmpty ? 'IFSC: ${receipt.ifscCode}' : ''}
+${receipt.statusMessage.isNotEmpty ? '\n${receipt.statusLabel}: ${receipt.statusMessage}' : ''}
+-------------------
+${receipt.merchantName}
+''';
+
+    Clipboard.setData(ClipboardData(text: details));
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Iconsax.tick_circle, color: Color(0xFF10B981), size: 20),
+            const SizedBox(width: 8),
+            const Text('Receipt details copied to clipboard'),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1A1F1A),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   void _shareReceipt(BuildContext context) {

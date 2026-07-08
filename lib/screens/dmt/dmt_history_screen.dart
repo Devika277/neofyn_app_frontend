@@ -1,6 +1,7 @@
 // lib/screens/history/dmt_history_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +20,7 @@ class AppColors {
   static const Color success = Color(0xFF10B981);
   static const Color error = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
+  static const Color processing = Color(0xFF8B5CF6);
   static const Color borderDark = Color(0xFF2A342A);
 }
 
@@ -59,6 +61,7 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
     'SUCCESS': {'label': 'Success', 'color': AppColors.success},
     'FAILED': {'label': 'Failed', 'color': AppColors.error},
     'PENDING': {'label': 'Pending', 'color': AppColors.warning},
+    'PROCESSING': {'label': 'Processing', 'color': AppColors.processing},
   };
 
   @override
@@ -82,7 +85,6 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
   bool get _hasActiveFilters =>
       _selectedStatus != 'ALL' || _searchQuery.isNotEmpty || _selectedDateFilter != 'ALL';
 
-  // ─── FETCH ALL HISTORY (No Pagination - Like BBPS) ────────
   Future<void> _fetchHistory() async {
     if (_isFetching) return;
     _isFetching = true;
@@ -93,14 +95,12 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
     });
 
     try {
-      // Load a large batch to get all transactions
       final list = await _apiService.getDmtHistory(
         userId: _userId,
         limit: 1000,
         offset: 0,
       );
 
-      // Remove duplicates by ID
       final seenIds = <String>{};
       final uniqueList = list.where((tx) {
         final id = tx['id']?.toString() ?? '';
@@ -128,13 +128,11 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
 
   void _applyFilters() {
     final filtered = _allTransactions.where((tx) {
-      // Status filter
       if (_selectedStatus != 'ALL') {
         final status = (tx['status'] ?? '').toString().toUpperCase();
         if (status != _selectedStatus) return false;
       }
 
-      // Search filter
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         final fields = [
@@ -154,7 +152,6 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
         }
       }
 
-      // Date filter
       if (_selectedDateFilter != 'ALL') {
         final txDate = _parseDate(tx['created_at']);
         if (txDate == null) return false;
@@ -181,7 +178,6 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
       return true;
     }).toList();
 
-    // Sort by date (newest first)
     filtered.sort((a, b) {
       final dateA = _parseDate(a['created_at']) ?? DateTime(2000);
       final dateB = _parseDate(b['created_at']) ?? DateTime(2000);
@@ -264,7 +260,7 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
 
       final receipt = DmtReceiptModel(
         transactionId: tx['iyda_txn_id']?.toString() ?? tx['id']?.toString() ?? 'N/A',
-        utrNumber: tx['utr_number']?.toString() ?? 'N/A',
+        utrNumber: tx['utr_number']?.toString() ?? '',
         amount: tx['amount']?.toString() ?? '0',
         commission: tx['commission_amount']?.toString() ?? '',
         status: tx['status']?.toString() ?? 'PENDING',
@@ -298,6 +294,20 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
         ),
       );
     }
+  }
+
+  void _copyToClipboard(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label copied to clipboard'),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   @override
@@ -530,11 +540,23 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
 
   Widget _buildCard(Map<String, dynamic> tx) {
     final status = (tx['status'] ?? 'pending').toString().toLowerCase();
-    final isSuccess = status == 'success';
-    final isFailed = status == 'failed';
+    final isSuccess = status == 'success' || status == 'completed';
+    final isFailed = status == 'failed' || status == 'failure' || status == 'reversed';
+    final isProcessing = status == 'processing' || status == 'pending' || status == 'queued';
 
-    final Color sc = isSuccess ? AppColors.success : (isFailed ? AppColors.error : AppColors.warning);
-    final IconData si = isSuccess ? Iconsax.tick_circle : (isFailed ? Iconsax.close_circle : Iconsax.clock);
+    final Color sc = isSuccess
+        ? AppColors.success
+        : isFailed
+        ? AppColors.error
+        : isProcessing
+        ? AppColors.processing
+        : AppColors.warning;
+
+    final IconData si = isSuccess
+        ? Iconsax.tick_circle
+        : isFailed
+        ? Iconsax.close_circle
+        : Iconsax.clock;
 
     final amount = tx['amount']?.toString() ?? '0';
     final beneName = tx['beneficiary_name']?.toString() ?? 'N/A';
@@ -543,13 +565,10 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
     final bankName = tx['bank_name']?.toString();
     final date = tx['created_at'];
     final commission = tx['commission_amount'];
+    final utrNumber = tx['utr_number']?.toString();
 
     return GestureDetector(
-      onTap: () {
-        if (isSuccess) {
-          _showReceipt(tx);
-        }
-      },
+      onTap: () => _showReceipt(tx),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
@@ -562,31 +581,76 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
           children: [
             Row(children: [
               Container(
-                width: 42, height: 42,
-                decoration: BoxDecoration(color: sc.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: sc.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Icon(si, color: sc, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(beneName, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textWhite), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  if (remitterName != 'N/A')
-                    Text('From: $remitterName', style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkHint), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  Text(txnId, style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkHint), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      beneName,
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textWhite),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    if (remitterName != 'N/A')
+                      Text(
+                        'From: $remitterName',
+                        style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkHint),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            txnId,
+                            style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkHint),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => _copyToClipboard(txnId, 'Transaction ID'),
+                          child: Icon(Iconsax.copy, size: 10, color: AppColors.textDarkHint),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(width: 8),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('₹$amount', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textWhite)),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: sc.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                  child: Text(status.toUpperCase(), style: GoogleFonts.poppins(fontSize: 8, fontWeight: FontWeight.w600, color: sc)),
-                ),
-              ]),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₹$amount',
+                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textWhite),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: sc.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      status.toUpperCase(),
+                      style: GoogleFonts.poppins(fontSize: 8, fontWeight: FontWeight.w600, color: sc),
+                    ),
+                  ),
+                ],
+              ),
             ]),
             const SizedBox(height: 8),
             Row(children: [
@@ -603,6 +667,19 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
                 const SizedBox(width: 8),
                 Text('Comm: ₹$commission', style: GoogleFonts.poppins(fontSize: 9, color: AppColors.primaryLight)),
               ],
+              if (isSuccess && utrNumber != null && utrNumber.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'UTR: $utrNumber',
+                    style: GoogleFonts.poppins(fontSize: 9, color: AppColors.success),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              Icon(Iconsax.arrow_right_3, size: 12, color: AppColors.textDarkHint),
             ]),
           ],
         ),
