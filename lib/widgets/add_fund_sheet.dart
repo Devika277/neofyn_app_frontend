@@ -19,37 +19,37 @@ class _BankInfo {
   final String accountNumber;
   final String ifsc;
   final String accountName;
-  final String accountType;
+  // final String accountType;
   const _BankInfo({
     required this.name,
     required this.accountNumber,
     required this.ifsc,
     required this.accountName,
-    required this.accountType,
+    // required this.accountType,
   });
 }
 
 const List<_BankInfo> _banks = [
   _BankInfo(
     name:          'HDFC Bank',
-    accountNumber: '50200012345678',
-    ifsc:          'HDFC0001234',
-    accountName:   'Neofyn Pvt Ltd',
-    accountType:   'Current Account',
+    accountNumber: '50200119405733',
+    ifsc:          'HDFC0001552',
+    accountName:   'Neofyn Bharath Private Limited',
+    // accountType:   'Current Account',
   ),
   _BankInfo(
     name:          'Axis Bank',
-    accountNumber: '91234567890123',
-    ifsc:          'UTIB0000123',
-    accountName:   'Neofyn Pvt Ltd',
-    accountType:   'Current Account',
+    accountNumber: '925020049386006',
+    ifsc:          'UTIB0001765',
+    accountName:   'Neofyn Bharath Private Limited',
+    // accountType:   'Current Account',
   ),
   _BankInfo(
     name:          'IDFC First Bank',
-    accountNumber: '10012345678901',
-    ifsc:          'IDFB0040101',
-    accountName:   'Neofyn Pvt Ltd',
-    accountType:   'Current Account',
+    accountNumber: '10274584545',
+    ifsc:          'IDFB0080551',
+    accountName:   'Neofyn Bharath Private Limited',
+    // accountType:   'Current Account',
   ),
 ];
 
@@ -700,7 +700,7 @@ class _BankDetailsCard extends StatelessWidget {
           _detailRow('Account Name', bank.accountName),
           _detailRow('Account Number', bank.accountNumber),
           _detailRow('IFSC Code', bank.ifsc),
-          _detailRow('Account Type', bank.accountType),
+          // _detailRow('Account Type', bank.accountType),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: () {
