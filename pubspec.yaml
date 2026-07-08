@@ -86,6 +86,8 @@ dependencies:
   # printing: ^5.15.0
   # path_provider: ^2.1.6
   # share_plus: ^10.1.4
+  open_file: ^4.0.0
+
 
 
 
