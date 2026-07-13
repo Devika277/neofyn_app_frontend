@@ -98,11 +98,16 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
       _aadhaarNumber.length == 12 &&
           RegExp(r'^\d{12}$').hasMatch(_aadhaarNumber);
 
+  // ─── FIX: _checkDeviceAvailability ─────────────────────────
+
   Future<void> _checkDeviceAvailability() async {
     _addDebugLog('🔍 Checking RD Service availability for ${_selectedDevice.displayName}...');
     setState(() => _isCheckingDevice = true);
     try {
-      final available = await BiometricService.checkDevice();
+      // ✅ FIX: Pass deviceType parameter
+      final available = await BiometricService.checkDevice(
+        deviceType: _selectedDevice.apiValue,  // ← ADD THIS
+      );
       _addDebugLog('📱 RD Service check result: $available');
       setState(() {
         _deviceAvailable = available;
@@ -163,7 +168,7 @@ class _EKYC_ScreenState extends State<EKYC_Screen> {
 
     try {
       _addDebugLog('📤 Capturing fingerprint from ${_selectedDevice.displayName} device...');
-      String pidData = await BiometricService.capturePid(clientKey: 'NEOFYN');
+      String pidData = await BiometricService.capturePid(clientKey: 'NEOFYN',deviceType: _selectedDevice.apiValue);
       _lastPidData = pidData;
       _addDebugLog('✅ PID captured successfully (${pidData.length} chars)');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
