@@ -106,12 +106,17 @@ class _DMTStatusScreenState extends State<DMTStatusScreen> {
     _referenceId = result['providerRefId']?.toString() ??
         details['providerRefId']?.toString();
 
-    _rrnNumber = result['rrn']?.toString() ??
-        result['bankRefNo']?.toString() ??
-        result['utrNumber']?.toString() ??
-        result['utr_number']?.toString() ??
-        details['utrNumber']?.toString() ??
-        details['utr_number']?.toString();
+     // ✅ FIX: Prioritize UTR/utrNumber over RRN
+  _rrnNumber = result['utrNumber']?.toString() ??
+      result['utr_number']?.toString() ??
+      result['utr']?.toString() ??
+      result['rrn']?.toString() ??
+      result['RRN']?.toString() ??
+      result['bankRefNo']?.toString() ??
+      result['BankRefNo']?.toString() ??
+      details['utrNumber']?.toString() ??
+      details['utr_number']?.toString() ??
+      details['rrn']?.toString();
 
     _statusMessage = _getStatusMessage(_currentStatus);
 
@@ -200,10 +205,14 @@ class _DMTStatusScreenState extends State<DMTStatusScreen> {
         if (response['success'] == true) {
           final data = response['data'] ?? response;
           final newStatus = data['status']?.toString().toLowerCase() ?? '';
-          final rrn = data['rrn']?.toString() ??
-              data['bankRefNo']?.toString() ??
-              data['utrNumber']?.toString() ??
-              data['utr_number']?.toString();
+           // ✅ FIX: Prioritize UTR/utrNumber
+        final rrn = data['utrNumber']?.toString() ??
+            data['utr_number']?.toString() ??
+            data['utr']?.toString() ??
+            data['rrn']?.toString() ??
+            data['RRN']?.toString() ??
+            data['bankRefNo']?.toString() ??
+            data['BankRefNo']?.toString();
 
           debugPrint('📡 New Status: $newStatus | RRN: $rrn');
 

@@ -59,12 +59,16 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
   String? _errorMessage;
 
   double get _surcharge {
-    if (widget.productType != 'lite') return 0;
-    final amount = double.tryParse(_amountController.text) ?? 0;
-    if (amount >= 100 && amount <= 1000) return 10;
-    if (amount > 1000) return amount * 0.01;
-    return 0;
-  }
+  // Apply to BOTH lite and smart
+  final amount = double.tryParse(_amountController.text) ?? 0;
+  if (amount < 100) return 0;
+  
+  // Same surcharge for both
+  if (amount >= 100 && amount <= 1000) return 10;
+  if (amount > 1000) return amount * 0.01;
+  
+  return 0;
+}
 
   double get _totalAmount {
     final amount = double.tryParse(_amountController.text) ?? 0;
@@ -373,7 +377,7 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
             _buildSectionLabel('Enter Amount'),
             const SizedBox(height: 6),
             _buildAmountField(),
-            if (widget.productType == 'lite' && _amountController.text.isNotEmpty) ...[
+            if (_amountController.text.isNotEmpty) ...[
               const SizedBox(height: 8),
               _buildSurchargeCard(),
             ],
@@ -540,7 +544,18 @@ class _DMTTransferScreenState extends State<DMTTransferScreen> {
           const SizedBox(height: 4),
           _buildSurchargeRow('Processing Fee', '₹${_surcharge.toStringAsFixed(2)}', AppColors.warning, false),
           const SizedBox(height: 4),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('${_surcharge == 10 ? 'Flat ₹10' : '1% of amount'}', style: GoogleFonts.poppins(fontSize: 9, color: AppColors.warning))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4)
+            ),
+            child: Text(
+              // ✅ Dynamic text based on product type
+              '${widget.productType.toUpperCase()} ${_surcharge == 10 ? 'Flat ₹10' : '1% of amount'}',
+              style: GoogleFonts.poppins(fontSize: 9, color: AppColors.warning)
+            ),
+          ),
         ],
         const Divider(height: 14, color: AppColors.borderDark),
         _buildSurchargeRow('Total to Debit', '₹${_totalAmount.toStringAsFixed(2)}', AppColors.primaryLight, true),
