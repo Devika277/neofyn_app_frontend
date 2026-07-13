@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Mantra MFS100 USB Vendor ID -->
-    <usb-device vendor-id="1204" />
+    <!-- MANTRA Devices -->
+    <!-- MFS100 Series -->
+    <usb-device vendor-id="1204" product-id="1000" />
+    <usb-device vendor-id="1204" product-id="1001" />
+    <usb-device vendor-id="1204" product-id="1002" />
+    <usb-device vendor-id="1204" product-id="1003" />
+    
+    <!-- MFS110 Series -->
+    <usb-device vendor-id="1204" product-id="1100" />
+    <usb-device vendor-id="1204" product-id="1101" />
+    <usb-device vendor-id="1204" product-id="1102" />
+    
+    <!-- MORPHO Devices -->
+    <!-- MSO 1300 Series -->
+    <usb-device vendor-id="0x0BB4" product-id="0x0C01" />
+    <usb-device vendor-id="0x0BB4" product-id="0x0C02" />
+    
+    <!-- STARTEK Devices -->
+    <usb-device vendor-id="0x0483" product-id="0x5720" />
+    <usb-device vendor-id="0x0483" product-id="0x5721" />
+    
+    <!-- Generic Fingerprint Readers -->
+    <usb-device vendor-id="0x1D6B" product-id="0x0002" />
+    
+    <!-- Allow any USB device (for testing) -->
+    <usb-device />
 </resources>
