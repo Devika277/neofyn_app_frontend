@@ -150,16 +150,16 @@ class _DMTDashboardScreenState extends State<DMTDashboardScreen> {
           const SizedBox(height: 8),
           Text('₹${_remitter!.monthlyUsed.toStringAsFixed(0)} of ₹${_remitter!.monthlyLimit.toStringAsFixed(0)} used', style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withOpacity(0.6))),
         ]),
-        if (_remitter!.kycStatus != 'verified') ...[
-          const SizedBox(height: 16),
-          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.warning.withOpacity(0.3))),
-              child: Row(children: [
-                Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: const Icon(Iconsax.shield_cross, color: AppColors.warning, size: 16)),
-                const SizedBox(width: 10),
-                Expanded(child: Text('Complete KYC to increase your transfer limits', style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w500))),
-                const Icon(Iconsax.arrow_right_3, color: AppColors.warning, size: 16),
-              ])),
-        ],
+        // if (_remitter!.kycStatus != 'verified') ...[
+        //   const SizedBox(height: 16),
+        //   Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.warning.withOpacity(0.3))),
+        //       child: Row(children: [
+        //         Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: const Icon(Iconsax.shield_cross, color: AppColors.warning, size: 16)),
+        //         const SizedBox(width: 10),
+        //         Expanded(child: Text('Complete KYC to increase your transfer limits', style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w500))),
+        //         const Icon(Iconsax.arrow_right_3, color: AppColors.warning, size: 16),
+        //       ])),
+        // ],
       ]),
     );
   }
