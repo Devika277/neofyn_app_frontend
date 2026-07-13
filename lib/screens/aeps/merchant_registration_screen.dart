@@ -1,3 +1,4 @@
+// lib/screens/aeps/merchant_registration_screen.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../../layout/UserHomeScreen.dart';
 import '../../services/AEPS/location_service.dart';
 import 'aeps_wrapper_screen.dart';
 import 'ekyc_screen.dart';
+import 'otp_ekyc_screen.dart';
 
 // ─── NEOFYN BRAND TOKENS ──────────────────────────────────────
 class AppColors {
@@ -314,10 +316,27 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         print('📊 Phone: $phoneNumber');
         print('📊 Error/Message: $errorMessage');
 
+        // Handle already registered case - show success and OTP popup
         if (errorMessage.toLowerCase().contains('already registered') ||
             errorMessage.toLowerCase().contains('already exist')) {
           print('⚠️ Merchant already registered in pipe $currentPipe');
-          _showError('This merchant is already registered in Pipe $currentPipe');
+
+          _showSuccess('Merchant already registered! Proceeding to verification.');
+
+          if (merchantId != null && merchantId.isNotEmpty) {
+            _merchantId = merchantId;
+            _merchantRefId = merchantRefId;
+            if (phoneNumber.isNotEmpty) {
+              _mobileController.text = phoneNumber;
+            }
+
+            Future.delayed(const Duration(milliseconds: 800), () {
+              if (mounted) {
+                _handleResendOtp();
+                _showOtpPopup();
+              }
+            });
+          }
           return;
         }
 
@@ -347,11 +366,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (_) => EKYC_Screen(
+                builder: (_) => OtpEkycScreen(
                   merchantId: merchantId ?? '',
                   merchantRefId: merchantRefId ?? '',
                   pipe: currentPipe,
                   aadhaarNumber: provider.aadhaarNo ?? '',
+                  phoneNumber: _mobileController.text.isNotEmpty ? _mobileController.text : (widget.phone ?? ''),
                 ),
               ),
             );
@@ -749,25 +769,111 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
     });
 
     if (success) {
+      // ✅ Case 2 & 3: Proceed with OTP flow
       setState(() {
         _merchantId = provider.merchantId;
         _merchantRefId = provider.merchantRefId;
         _isRegistrationComplete = true;
         _isSubmitting = false;
       });
-      print('✅ Registration success for Pipe $currentPipe');
-      print('✅ MerchantId: $_merchantId');
-      print('✅ MerchantRefId: $_merchantRefId');
-      _showRegistrationSuccessPopup();
+
+      final errorMsg = provider.errorMessage ?? '';
+
+      if (errorMsg.toLowerCase().contains('already registered for pipe')) {
+        // Case 2: Already registered for another pipe - show success + OTP popup
+        _showSuccess('Merchant already registered! Proceeding to verification.');
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _handleResendOtp();
+            _showOtpPopup();
+          }
+        });
+      } else {
+        // Case 3: New registration - show success popup with OTP option
+        _showRegistrationSuccessPopup();
+      }
+
     } else {
+      // ❌ Case 1: Contact Support popup
       setState(() => _isSubmitting = false);
       final errorMsg = provider.errorMessage ?? 'Registration failed';
-      print('❌ Registration failed for Pipe $currentPipe');
-      print('❌ Error: $errorMsg');
-      _showError(errorMsg);
+
+      if (errorMsg.toLowerCase().contains('ekyc') ||
+          errorMsg.toLowerCase().contains('already exist')) {
+        _showContactSupportPopup(errorMsg);
+      } else {
+        _showError(errorMsg);
+      }
     }
   }
-
+  void _showContactSupportPopup(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1F1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [AppColors.warning, Color(0xFFFF8F00)],
+                ),
+              ),
+              child: const Icon(Icons.warning_rounded, color: Colors.white, size: 32),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Merchant Already Exists',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+              ),
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Please contact support for assistance.',
+              style: TextStyle(color: Colors.white60, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Go Back', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showError('Please contact support at support@neofyn.com');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Contact Support', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
   // ─── Show Registration Success Popup ─────────────────────────
   void _showRegistrationSuccessPopup() {
     print('🎉 Showing registration success popup');
@@ -990,11 +1096,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       final provider = context.read<AepsProvider>();
       print('🔐 Verifying OTP for Pipe: $currentPipe, MerchantId: $merchantId');
 
+      // Use the verifyOtp method from your provider with correct signature
       final success = await provider.verifyOtp(
         merchantId,
         _otpController.text,
         merchantRefId,
-        pipe: _currentPipe,
+        pipe: currentPipe,
       );
 
       _logResponse('verifyOtp', {
@@ -1021,11 +1128,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => EKYC_Screen(
+            builder: (_) => OtpEkycScreen(
               merchantId: merchantId,
               merchantRefId: merchantRefId,
               pipe: currentPipe,
-              aadhaarNumber: provider.aadhaarNo ?? '',
+              aadhaarNumber: _aadhaarController.text.replaceAll(' ', '').trim(),
+              phoneNumber: _mobileController.text.trim(),
             ),
           ),
         );
@@ -1075,7 +1183,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
 
       print('📤 Sending/Resending OTP for Pipe: $currentPipe, MerchantId: $merchantId');
 
-      final success = await provider.sendOtp(merchantId, _mobileController.text.trim(),pipe: _currentPipe,);
+      // Use the sendOtp method from your provider with correct signature
+      final success = await provider.sendOtp(
+        merchantId,
+        _mobileController.text.trim(),
+        pipe: currentPipe,
+      );
 
       _logResponse('sendOtp', {
         'success': success,
@@ -2338,12 +2451,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                       margin: const EdgeInsets.only(bottom: 50),
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
-                                          colors: _isRegistrationComplete
+                                          colors: (_isSubmitting || _isRegistrationComplete)
                                               ? [Colors.grey.shade600, Colors.grey.shade700]
                                               : [AppColors.primary, AppColors.primaryLight],
                                         ),
                                         borderRadius: BorderRadius.circular(12),
-                                        boxShadow: _isRegistrationComplete ? [] : [
+                                        boxShadow:(_isSubmitting || _isRegistrationComplete) ? [] : [
                                           BoxShadow(
                                             color: AppColors.primary.withOpacity(0.3),
                                             blurRadius: 12,
@@ -2352,7 +2465,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                         ],
                                       ),
                                       child: ElevatedButton(
-                                        onPressed: (provider.isLoading || _isSubmitting || _isRegistrationComplete)
+                                        onPressed: (_isSubmitting || _isRegistrationComplete)
                                             ? null
                                             : _registerMerchant,
                                         style: ElevatedButton.styleFrom(
@@ -2363,7 +2476,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                         ),
-                                        child: _isSubmitting || provider.isLoading
+                                        child: _isSubmitting
                                             ? const SizedBox(
                                           height: 24,
                                           width: 24,
