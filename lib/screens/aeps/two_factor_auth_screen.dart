@@ -1,4 +1,3 @@
-// lib/screens/aeps/two_factor_auth_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -50,6 +49,7 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
   // ── Device ────────────────────────────────────────────────────────────────
   _DeviceState _deviceState = _DeviceState.unknown;
   String _deviceStatusMsg = 'Tap "Check Device" to detect scanner';
+  bool _usbConnected = false;
 
   // ─── DEVICE SELECTION ───────────────────────────────────────
   DeviceType _selectedDevice = DeviceType.mantra;
@@ -88,6 +88,9 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
       provider.setActivePipe(widget.pipe!);
     }
 
+    // ✅ Initialize Biometric Service
+    _initializeBiometricService();
+
     // ✅ Check if 2FA already done for this pipe today
     _checkPipe2FAStatus();
 
@@ -108,15 +111,41 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     super.dispose();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Check if 2FA already done for this pipe today
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── INITIALIZE BIOMETRIC SERVICE ────────────────────────────────────────
+
+  Future<void> _initializeBiometricService() async {
+    try {
+      await BiometricService.initialize();
+      print('✅ Biometric Service initialized');
+      
+      // Check USB connection status
+      _usbConnected = BiometricService.isUsbConnected;
+      print('📱 USB Connected: $_usbConnected');
+      
+      if (_usbConnected) {
+        setState(() {
+          _deviceStatusMsg = 'USB device detected. Tap "Check Device" to verify RD Service.';
+        });
+      } else {
+        setState(() {
+          _deviceStatusMsg = 'No USB device detected. Please connect your ${_selectedDevice.shortName} device.';
+        });
+      }
+    } catch (e) {
+      print('❌ Biometric Service initialization error: $e');
+      setState(() {
+        _deviceStatusMsg = 'Error initializing service: $e';
+        _deviceState = _DeviceState.error;
+      });
+    }
+  }
+
+  // ─── CHECK 2FA STATUS ────────────────────────────────────────────────────
 
   Future<void> _checkPipe2FAStatus() async {
     final provider = context.read<AepsProvider>();
     final currentPipe = widget.pipe ?? provider.pipe ?? '1';
 
-    // ✅ NEW: Check per-pipe 2FA status
     if (provider.is2FADoneForPipe(currentPipe)) {
       print('✅ Pipe $currentPipe: 2FA already done today → Redirecting to dashboard');
       if (mounted) {
@@ -128,7 +157,6 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
       return;
     }
 
-    // Fallback to old check
     if (!provider.needs2FA()) {
       print('✅ Already verified today (legacy check) → Redirecting to dashboard');
       if (mounted) {
@@ -140,10 +168,10 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     }
   }
 
-  // ── Check Device Connection ─────────────────────────────────────────────
+  // ── CHECK DEVICE CONNECTION ─────────────────────────────────────────────
 
   Future<void> _checkDeviceConnection() async {
-    if (_deviceState == _DeviceState.checking || _deviceState == _DeviceState.connected) return;
+    if (_deviceState == _DeviceState.checking) return;
 
     setState(() {
       _deviceState = _DeviceState.checking;
@@ -151,7 +179,22 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     });
 
     try {
-      final connected = await BiometricService.checkDevice();
+      // First check USB connection
+      _usbConnected = BiometricService.isUsbConnected;
+      
+      if (!_usbConnected) {
+        setState(() {
+          _deviceState = _DeviceState.notConnected;
+          _deviceStatusMsg = 'USB device not connected. Please connect your ${_selectedDevice.shortName} device.';
+        });
+        return;
+      }
+
+      // Check RD Service
+      final connected = await BiometricService.checkDevice(
+        deviceType: _selectedDevice.apiValue,
+      );
+      
       if (!mounted) return;
 
       if (connected) {
@@ -159,22 +202,26 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
           _deviceState = _DeviceState.connected;
           _deviceStatusMsg = '${_selectedDevice.displayName} RD Service ready.';
         });
+        _showSnackBar('${_selectedDevice.shortName} device connected!', isError: false);
       } else {
         setState(() {
           _deviceState = _DeviceState.notConnected;
-          _deviceStatusMsg = '${_selectedDevice.displayName} RD Service not running. Install RD Service APK.';
+          _deviceStatusMsg = '${_selectedDevice.displayName} RD Service not running.\n'
+              'Please ensure the RD Service app is installed and running.';
         });
+        _showSnackBar('RD Service not running. Please install the RD Service app.', isError: true);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _deviceState = _DeviceState.error;
-        _deviceStatusMsg = 'Error: $e';
+        _deviceStatusMsg = 'Error: ${e.toString()}';
       });
+      _showSnackBar('Error: ${e.toString()}', isError: true);
     }
   }
 
-  // ── Capture Fingerprint ──────────────────────────────────────────────────
+  // ── CAPTURE FINGERPRINT ──────────────────────────────────────────────────
 
   Future<void> _captureFingerprint() async {
     if (_deviceState != _DeviceState.connected) {
@@ -191,31 +238,41 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
       final provider = context.read<AepsProvider>();
       final currentPipe = widget.pipe ?? provider.pipe ?? '1';
 
+      print('📤 Capturing fingerprint with ${_selectedDevice.apiValue} device...');
+      
       final pidXml = await BiometricService.capturePid(
         clientKey: 'NEOFYN',
         skipWadh: true,
         pipe: currentPipe,
+        deviceType: _selectedDevice.apiValue,
       );
-      print('✅ PID captured for 2FA (Pipe $currentPipe): ${pidXml?.substring(0, 100)}...');
+      
+      print('✅ PID captured for 2FA (Pipe $currentPipe)');
 
       setState(() {
         _pidXml = pidXml;
         _isCaptured = true;
         _deviceStatusMsg = '✓ Fingerprint captured successfully';
       });
-      _showSnackBar('Captured! Tap Verify Now.', isError: false);
+      _showSnackBar('Fingerprint captured! Tap Verify Now.', isError: false);
+      
     } catch (e) {
       setState(() {
         _deviceStatusMsg = 'Capture failed: ${e.toString()}';
         _isCaptured = false;
+        _pidXml = null;
       });
-      _showSnackBar(e.toString(), isError: true);
+      _showSnackBar('Capture failed: ${e.toString()}', isError: true);
+      
+      // If capture fails, check device again
+      await _checkDeviceConnection();
+      
     } finally {
       if (mounted) setState(() => _isCapturing = false);
     }
   }
 
-  // ── Submit Verification ─────────────────────────────────────────────────
+  // ── SUBMIT VERIFICATION ─────────────────────────────────────────────────
 
   Future<void> _startVerification() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -234,9 +291,14 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     final aadhaar = _aadhaarController.text.trim();
 
     final currentPipe = widget.pipe ?? provider.pipe ?? '1';
-    final merchantIdToUse = widget.merchantId ?? provider.getMerchantIdForPipe(currentPipe) ?? provider.merchantId;
-    final merchantRefIdToUse = widget.merchantRefId ?? provider.getMerchantRefIdForPipe(currentPipe) ?? provider.merchantRefId;
-    final refId = merchantRefIdToUse ?? 'NEO_${provider.userId}_${DateTime.now().millisecondsSinceEpoch}';
+    final merchantIdToUse = widget.merchantId ?? 
+        provider.getMerchantIdForPipe(currentPipe) ?? 
+        provider.merchantId;
+    final merchantRefIdToUse = widget.merchantRefId ?? 
+        provider.getMerchantRefIdForPipe(currentPipe) ?? 
+        provider.merchantRefId;
+    final refId = merchantRefIdToUse ?? 
+        'NEO_${provider.userId}_${DateTime.now().millisecondsSinceEpoch}';
 
     print('🔵 [2FA] Pipe: $currentPipe');
     print('🔵 [2FA] MerchantId: $merchantIdToUse');
@@ -244,7 +306,6 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     print('🔵 [2FA] Device: ${_selectedDevice.apiValue}');
 
     try {
-      // ✅ Use perform2FA with explicit pipe parameter
       final bool success = await provider.perform2FA(
         merchantId: merchantIdToUse!,
         merchantRefId: refId,
@@ -257,7 +318,6 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
       if (!mounted) return;
 
       if (success) {
-        // ✅ 2FA status is already updated in provider's set2FADoneForPipe()
         print('✅ [2FA] Pipe $currentPipe: Verification successful!');
         _showSnackBar('Verification successful for Pipe $currentPipe!', isError: false);
         await Future.delayed(const Duration(milliseconds: 500));
@@ -281,6 +341,10 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Error: $e', isError: true);
+      setState(() {
+        _isCaptured = false;
+        _pidXml = null;
+      });
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -297,6 +361,7 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
         backgroundColor: isError ? Colors.red[700] : Colors.green[700],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -353,7 +418,10 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                   _deviceStatusMsg = 'Tap "Check Device" to detect scanner';
                   _isCaptured = false;
                   _pidXml = null;
+                  _usbConnected = false;
                 });
+                // Reinitialize for new device type
+                _initializeBiometricService();
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -365,8 +433,8 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                   borderRadius: BorderRadius.circular(10),
                   border: isSelected
                       ? Border.all(
-                      color: const Color(0xFF2ECC71).withOpacity(0.5),
-                      width: 1.5)
+                          color: const Color(0xFF2ECC71).withOpacity(0.5),
+                          width: 1.5)
                       : null,
                 ),
                 child: Column(
@@ -425,6 +493,17 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
         backgroundColor: const Color(0xFF1A1A1A),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        actions: [
+          // USB Status Indicator
+          IconButton(
+            icon: Icon(
+              _usbConnected ? Icons.usb : Icons.usb_off,
+              color: _usbConnected ? Colors.green : Colors.red,
+            ),
+            onPressed: _checkDeviceConnection,
+            tooltip: _usbConnected ? 'USB Connected' : 'USB Not Connected',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -433,7 +512,7 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ✅ Pipe indicator banner
+              // Pipe indicator banner
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
@@ -449,18 +528,35 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                       'Authenticating for Pipe $currentPipe',
                       style: const TextStyle(color: Color(0xFF2ECC71), fontSize: 13, fontWeight: FontWeight.w500),
                     ),
+                    const Spacer(),
+                    // USB status indicator
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _usbConnected ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _usbConnected ? 'USB ✓' : 'USB ✗',
+                        style: TextStyle(
+                          color: _usbConnected ? Colors.green : Colors.red,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // ── Step 1: Select Device ──────────────────────────────────
+              // Step 1: Select Device
               _stepLabel('Step 1 – Select Device'),
               const SizedBox(height: 10),
               _buildDeviceSelector(),
               const SizedBox(height: 28),
 
-              // ── Step 2: Aadhaar ──────────────────────────────────────────
+              // Step 2: Aadhaar
               _stepLabel('Step 2 – Enter Aadhaar'),
               const SizedBox(height: 10),
               TextFormField(
@@ -480,11 +576,11 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
               ),
               const SizedBox(height: 28),
 
-              // ── Step 3: Connect & Capture ────────────────────────────────
+              // Step 3: Connect & Capture
               _stepLabel('Step 3 – Connect & Capture'),
               const SizedBox(height: 10),
 
-              // Device chip - DYNAMIC
+              // Device info
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
@@ -517,13 +613,13 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                 onPressed: _deviceState == _DeviceState.connected ? null : _checkDeviceConnection,
                 icon: _deviceState == _DeviceState.checking
                     ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
                     : Icon(
-                    _deviceState == _DeviceState.connected ? Icons.check_circle : Icons.usb,
-                    size: 20),
+                        _deviceState == _DeviceState.connected ? Icons.check_circle : Icons.usb,
+                        size: 20),
                 label: Text(
                   _deviceState == _DeviceState.checking
                       ? 'Detecting…'
@@ -547,11 +643,11 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                   children: [
                     _isCaptured
                         ? AnimatedBuilder(
-                      animation: _pulseAnim,
-                      builder: (_, child) =>
-                          Transform.scale(scale: _pulseAnim.value, child: child),
-                      child: Icon(_statusIcon, color: _statusColor, size: 26),
-                    )
+                            animation: _pulseAnim,
+                            builder: (_, child) =>
+                                Transform.scale(scale: _pulseAnim.value, child: child),
+                            child: Icon(_statusIcon, color: _statusColor, size: 26),
+                          )
                         : Icon(_statusIcon, color: _statusColor, size: 26),
                     const SizedBox(width: 12),
                     Expanded(
@@ -584,10 +680,10 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                   onPressed: canCapture ? _captureFingerprint : null,
                   icon: _isCapturing
                       ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
                       : Icon(_isCaptured ? Icons.refresh : Icons.fingerprint, size: 22),
                   label: Text(
                     _isCapturing
@@ -599,7 +695,7 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
               ),
               const SizedBox(height: 32),
 
-              // ── Step 4: Verify ───────────────────────────────────────────
+              // Step 4: Verify
               _stepLabel('Step 4 – Verify'),
               const SizedBox(height: 10),
 
@@ -639,12 +735,12 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
                   onPressed: canVerify ? _startVerification : null,
                   child: _isVerifying
                       ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5),
-                  )
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5),
+                        )
                       : const Text('Verify Now',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
 
@@ -664,37 +760,37 @@ class _TwoFactorAuthScreenState extends State<TwoFactorAuthScreen>
   // ── Small widget helpers ──────────────────────────────────────────────────
 
   Widget _stepLabel(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: Color(0xFF2ECC71),
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 1.1,
-    ),
-  );
+        text,
+        style: const TextStyle(
+          color: Color(0xFF2ECC71),
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.1,
+        ),
+      );
 
   InputDecoration _inputDecoration(String label, IconData icon) => InputDecoration(
-    labelText: label,
-    labelStyle: const TextStyle(color: Colors.white54),
-    prefixIcon: Icon(icon, color: Colors.white38),
-    counterStyle: const TextStyle(color: Colors.white38),
-    border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey[800]!)),
-    enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey[800]!)),
-    focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF2ECC71), width: 2)),
-    errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.redAccent, width: 1.5)),
-    focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.redAccent, width: 2)),
-    errorStyle: const TextStyle(color: Colors.redAccent),
-  );
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white54),
+        prefixIcon: Icon(icon, color: Colors.white38),
+        counterStyle: const TextStyle(color: Colors.white38),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[800]!)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[800]!)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2ECC71), width: 2)),
+        errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.redAccent, width: 1.5)),
+        focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.redAccent, width: 2)),
+        errorStyle: const TextStyle(color: Colors.redAccent),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
