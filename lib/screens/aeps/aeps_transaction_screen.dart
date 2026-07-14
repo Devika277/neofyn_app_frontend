@@ -8,6 +8,7 @@ import '../../services/AEPS/location_service.dart';
 import '../receipt_screen.dart';
 import 'biometric_service.dart';
 import '../../services/AEPS/aeps_service.dart' as aeps;
+import 'dart:convert';
 
 class TxnColors {
   static const Color primary = Color(0xFF008169);
@@ -288,31 +289,226 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
   // ======================================================================
   // OPEN RECEIPT SCREEN
   // ======================================================================
+  // void _openReceiptScreen(dynamic response) {
+  //   try {
+  //     final p = context.read<AepsProvider>();
+  //     final isSuccess = response.responseCode == '000' || response.status == '000';
+  //     final receipt = ReceiptModel.fromApiResponse({
+  //       'data': {
+  //         'status': isSuccess ? '000' : '001',
+  //         'merchantRefId': p.merchantRefId ?? p.getMerchantRefIdForPipe(p.pipe ?? '1') ?? '',
+  //         'txnRefId': response.txnRefId?.toString() ?? '',
+  //         'merchantId': p.merchantId ?? '',
+  //         'aadhaarNo': _aadhaar.text,
+  //         'transactionAmount': _currentService.isAmountRequired ? _amount.text : '0',
+  //         'availableBalance': response.availableBalance?.toString() ?? '0',
+  //         'txnDateTime': response.txnDateTime?.toString() ?? DateTime.now().toString(),
+  //         'bankIIN': _bankIIN ?? '',
+  //         'npciCode': response.npciCode?.toString() ?? '',
+  //         'npciMessage': response.npciMessage?.toString() ?? '',
+  //         'statusDescription': response.statusDescription?.toString() ?? 'Completed',
+  //         'rrn': response.rrn?.toString() ?? '',
+  //         'pipe': p.pipe ?? '1',
+  //       }
+  //     }, transactionType: _currentService.code, merchantId: p.merchantId ?? 'N/A', mobileNumber: _mobile.text.isNotEmpty ? _mobile.text : (p.mobileNo ?? ''));
+  //     Navigator.push(context, MaterialPageRoute(builder: (_) => ReceiptScreen(receipt: receipt)));
+  //   } catch (e) { debugPrint('Receipt error: $e'); }
+  // }
+
+
   void _openReceiptScreen(dynamic response) {
-    try {
-      final p = context.read<AepsProvider>();
-      final isSuccess = response.responseCode == '000' || response.status == '000';
-      final receipt = ReceiptModel.fromApiResponse({
-        'data': {
-          'status': isSuccess ? '000' : '001',
-          'merchantRefId': p.merchantRefId ?? p.getMerchantRefIdForPipe(p.pipe ?? '1') ?? '',
-          'txnRefId': response.txnRefId?.toString() ?? '',
-          'merchantId': p.merchantId ?? '',
-          'aadhaarNo': _aadhaar.text,
-          'transactionAmount': _currentService.isAmountRequired ? _amount.text : '0',
-          'availableBalance': response.availableBalance?.toString() ?? '0',
-          'txnDateTime': response.txnDateTime?.toString() ?? DateTime.now().toString(),
-          'bankIIN': _bankIIN ?? '',
-          'npciCode': response.npciCode?.toString() ?? '',
-          'npciMessage': response.npciMessage?.toString() ?? '',
-          'statusDescription': response.statusDescription?.toString() ?? 'Completed',
-          'rrn': response.rrn?.toString() ?? '',
-          'pipe': p.pipe ?? '1',
+  try {
+    final p = context.read<AepsProvider>();
+    final isSuccess = response.responseCode == '000' || response.status == '000';
+
+    // ✅ Extract mini statement entries from response
+    List<MiniStatementEntry> miniStatementEntries = [];
+    
+    // Try to get transactionList from response
+    dynamic transactionListData;
+    
+    // Check if response has transactionList directly
+    if (response is Map) {
+      transactionListData = response['transactionList'] ?? response['transaction_list'];
+    } else {
+      // Try to get from object properties
+      try {
+        transactionListData = (response as dynamic).transactionList;
+      } catch (_) {}
+    }
+    
+    // If transactionList is a string, parse it
+    if (transactionListData is String && transactionListData.isNotEmpty) {
+      try {
+        final parsed = jsonDecode(transactionListData);
+        if (parsed is List) {
+          for (var item in parsed) {
+            if (item is Map<String, dynamic>) {
+              final entry = MiniStatementEntry(
+                date: item['date']?.toString() ?? '',
+                txnType: item['txnType']?.toString() ?? 'Dr',
+                amount: item['amount']?.toString() ?? '0',
+                narration: item['narration']?.toString() ?? '',
+              );
+              miniStatementEntries.add(entry);
+            }
+          }
         }
-      }, transactionType: _currentService.code, merchantId: p.merchantId ?? 'N/A', mobileNumber: _mobile.text.isNotEmpty ? _mobile.text : (p.mobileNo ?? ''));
-      Navigator.push(context, MaterialPageRoute(builder: (_) => ReceiptScreen(receipt: receipt)));
-    } catch (e) { debugPrint('Receipt error: $e'); }
+        debugPrint('✅ Parsed ${miniStatementEntries.length} entries from transactionList string');
+      } catch (e) {
+        debugPrint('❌ Error parsing transactionList string: $e');
+      }
+    } 
+    // If transactionList is a List, use it directly
+    else if (transactionListData is List) {
+      for (var item in transactionListData) {
+        if (item is Map<String, dynamic>) {
+          final entry = MiniStatementEntry(
+            date: item['date']?.toString() ?? '',
+            txnType: item['txnType']?.toString() ?? 'Dr',
+            amount: item['amount']?.toString() ?? '0',
+            narration: item['narration']?.toString() ?? '',
+          );
+          miniStatementEntries.add(entry);
+        }
+      }
+      debugPrint('✅ Parsed ${miniStatementEntries.length} entries from transactionList list');
+    }
+
+    // ✅ Also try to get from data field if available
+    if (miniStatementEntries.isEmpty && response is Map && response.containsKey('data')) {
+      final dataMap = response['data'] as Map?;
+      if (dataMap != null) {
+        dynamic dataList = dataMap['transactionList'] ?? dataMap['transaction_list'];
+        if (dataList is List) {
+          for (var item in dataList) {
+            if (item is Map<String, dynamic>) {
+              final entry = MiniStatementEntry(
+                date: item['date']?.toString() ?? '',
+                txnType: item['txnType']?.toString() ?? 'Dr',
+                amount: item['amount']?.toString() ?? '0',
+                narration: item['narration']?.toString() ?? '',
+              );
+              miniStatementEntries.add(entry);
+            }
+          }
+          debugPrint('✅ Parsed ${miniStatementEntries.length} entries from data.transactionList');
+        }
+      }
+    }
+
+    debugPrint('📄 Mini statement entries: ${miniStatementEntries.length}');
+
+    // Get amount
+    String amount = _currentService.isAmountRequired ? _amount.text : '0';
+    if (amount.isEmpty) amount = '0';
+    
+    // Get available balance from response
+    String availableBalance = '0';
+    try {
+      if (response is Map) {
+        availableBalance = response['availableBalance']?.toString() ?? '0';
+      } else {
+        availableBalance = (response as dynamic).availableBalance?.toString() ?? '0';
+      }
+    } catch (_) {}
+
+    // Get NPCI message
+    String npciMessage = '';
+    try {
+      if (response is Map) {
+        npciMessage = response['npciMessage']?.toString() ?? '';
+      } else {
+        npciMessage = (response as dynamic).npciMessage?.toString() ?? '';
+      }
+    } catch (_) {}
+
+    // Get status description
+    String statusDescription = '';
+    try {
+      if (response is Map) {
+        statusDescription = response['statusDescription']?.toString() ?? '';
+      } else {
+        statusDescription = (response as dynamic).statusDescription?.toString() ?? '';
+      }
+    } catch (_) {}
+
+    // Build receipt data
+    final Map<String, dynamic> apiResponse = {
+      'data': {
+        'status': isSuccess ? '000' : '001',
+        'successStatus': isSuccess ? 'true' : 'false',
+        'merchantRefId': p.merchantRefId ?? p.getMerchantRefIdForPipe(p.pipe ?? '1') ?? '',
+        'txnRefId': _safeGet(response, 'txnRefId', ''),
+        'merchantId': p.merchantId ?? '',
+        'aadhaarNo': _aadhaar.text,
+        'aadhaarNumber': _aadhaar.text,
+        'aadhaar_last4': _aadhaar.text.length >= 4 ? _aadhaar.text.substring(_aadhaar.text.length - 4) : _aadhaar.text,
+        'transactionAmount': amount,
+        'amount': amount,
+        'availableBalance': availableBalance,
+        'txnDateTime': _safeGet(response, 'txnDateTime', DateTime.now().toString()),
+        'bankIIN': _bankIIN ?? '',
+        'bankName': _bankName ?? 'Not Available',
+        'bank_name': _bankName ?? 'Not Available',
+        'bank_iin': _bankIIN ?? '',
+        'npciCode': _safeGet(response, 'npciCode', ''),
+        'npciMessage': npciMessage,
+        'statusDescription': statusDescription.isNotEmpty ? statusDescription : (isSuccess ? 'Transaction Successful' : 'Transaction Failed'),
+        'rrn': _safeGet(response, 'rrn', ''),
+        'pipe': p.pipe ?? '1',
+        'deviceUsed': _selectedDevice.shortName,
+        'device_used': _selectedDevice.shortName,
+        'provider': 'VimoPay',
+        'mobileNumber': _mobile.text.isNotEmpty ? _mobile.text : (p.mobileNo ?? ''),
+        'txn_type': _currentService.code,
+        'transactionType': _currentService.code,
+        // ✅ Pass the parsed mini statement entries as List
+        'transactionList': miniStatementEntries.map((e) => e.toJson()).toList(),
+        'udf1': '',
+        'udf2': '',
+        'udf3': '',
+      }
+    };
+
+    final receipt = ReceiptModel.fromApiResponse(
+      apiResponse,
+      transactionType: _currentService.code,
+      merchantId: p.merchantId ?? 'N/A',
+      mobileNumber: _mobile.text.isNotEmpty ? _mobile.text : (p.mobileNo ?? ''),
+    );
+
+    debugPrint('📄 Opening receipt with ${receipt.miniStatementEntries?.length ?? 0} mini statement entries');
+    
+    Navigator.push(
+      context, 
+      MaterialPageRoute(builder: (_) => ReceiptScreen(receipt: receipt))
+    );
+  } catch (e, stack) {
+    debugPrint('❌ Receipt error: $e');
+    debugPrint('❌ Stack: $stack');
+    _err('Error opening receipt');
   }
+}
+
+// ✅ Helper to safely get values from response
+String _safeGet(dynamic obj, String key, [String defaultValue = '']) {
+  try {
+    if (obj == null) return defaultValue;
+    if (obj is Map) {
+      return obj[key]?.toString() ?? defaultValue;
+    }
+    // Try as object
+    try {
+      final value = (obj as dynamic)[key];
+      return value?.toString() ?? defaultValue;
+    } catch (_) {
+      return defaultValue;
+    }
+  } catch (_) {
+    return defaultValue;
+  }
+}
 
   // ======================================================================
   // SNACKBARS

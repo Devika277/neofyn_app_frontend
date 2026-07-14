@@ -461,7 +461,7 @@ class MiniStatementEntry {
 
 
   // ✅ ADD THE toJson METHOD HERE - after fromJson
-  Map<String, dynamic> toJson() {
+    Map<String, dynamic> toJson() {
     return {
       'date': date,
       'txnType': txnType,

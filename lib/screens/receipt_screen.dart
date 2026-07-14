@@ -110,6 +110,11 @@ Widget _buildReceiptCard() {
   final statusColor =
       isSuccess ? const Color(0xFF2ECC71) : const Color(0xFFEF4444);
 
+
+  
+  // ✅ Check if we have mini statement entries
+  final bool hasMiniStatement = widget.receipt.miniStatementEntries != null && 
+                                widget.receipt.miniStatementEntries!.isNotEmpty;
   return Container(
     width: double.infinity,
     padding: const EdgeInsets.all(24),
@@ -184,7 +189,7 @@ Widget _buildReceiptCard() {
         const SizedBox(height: 6),
 
         // Mini Statement badge with icon
-        if (widget.receipt.isMiniStatement)
+         if (widget.receipt.isMiniStatement || hasMiniStatement)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
@@ -545,7 +550,8 @@ Widget _buildReceiptCard() {
           _buildDetailRow('UDF3', widget.receipt.udf3!),
 
         // ✅ MINI STATEMENT TABLE
-        if (widget.receipt.isMiniStatement) ...[
+        // ✅ MINI STATEMENT TABLE - Show if transaction is MS OR has entries
+        if (widget.receipt.isMiniStatement || hasMiniStatement) ...[
           const SizedBox(height: 20),
           CustomPaint(
             size: const Size(double.infinity, 1),
@@ -567,6 +573,7 @@ Widget _buildReceiptCard() {
             ),
           ),
         ],
+
 
         const SizedBox(height: 20),
 
