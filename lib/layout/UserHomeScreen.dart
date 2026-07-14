@@ -12,6 +12,7 @@ import 'package:my_app/services/Recharges/rechargeFragment.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app/screens/account/login_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../screens/dmt1/dmt_home_screen.dart';
 import '../screens/account/Profile_screen.dart';
 import '../screens/history/history_dashboard_screen.dart';
@@ -71,6 +72,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   String get _userPhone => _phone.replaceAll(RegExp(r'\s+'), '').replaceAll('+91', '').trim();
   late final WalletProvider _walletProvider = WalletProvider();
 
+  // Support contact details
+  static const String supportPhone = '+917994949990';
+  static const String supportEmail = 'care@myneofin.com';
+
   @override
   void initState() {
     super.initState();
@@ -110,6 +115,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       }
     }
   }
+
   void _showBBPSRequiredOnStartup() {
     showDialog(
       context: context,
@@ -204,6 +210,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       ),
     );
   }
+
   Future<void> _checkAEPSStatus() async {
     if (_isCheckingAEPS) return;
     setState(() => _isCheckingAEPS = true);
@@ -500,6 +507,148 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     })));
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  //  SUPPORT POPUP METHODS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  void _showSupportPopup() {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.accent],
+                ),
+              ),
+              child: const Icon(Icons.support_agent_rounded, color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Need Help?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Choose how you\'d like to reach us',
+              style: TextStyle(color: Colors.white60, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            // Call Option
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchCaller();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.call_rounded, color: AppColors.accent, size: 24),
+                    SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Call Us', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                        SizedBox(height: 2),
+                        Text('+91 7994949990', style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                      ],
+                    ),
+                    Spacer(),
+                    Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textHint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Email Option
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchEmail();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.email_rounded, color: AppColors.accent, size: 24),
+                    SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Email Us', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                        SizedBox(height: 2),
+                        Text('care@myneofin.com', style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                      ],
+                    ),
+                    Spacer(),
+                    Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textHint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close', style: TextStyle(color: Colors.white54, fontSize: 14)),
+          ),
+        ],
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+  }
+
+  Future<void> _launchCaller() async {
+    final Uri launchUri = Uri(scheme: 'tel', path: supportPhone);
+    try {
+      await launchUrl(launchUri);
+    } catch (e) {
+      if (mounted) {
+        _showToast('Unable to make a call', isError: true);
+      }
+    }
+  }
+
+  Future<void> _launchEmail() async {
+    final Uri launchUri = Uri(
+      scheme: 'mailto',
+      path: supportEmail,
+      query: 'subject=Support Request&body=Hello Neofin Support Team,',
+    );
+    try {
+      await launchUrl(launchUri);
+    } catch (e) {
+      if (mounted) {
+        _showToast('Unable to open email app', isError: true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -520,6 +669,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   onServiceTap: _onServiceTap,
                   isBBPSOnboarded: _isBBPSOnboarded,
                   isCheckingBBPS: _isCheckingBBPS,
+                  onSupportTap: _showSupportPopup,
                 ),
                 ServicesFullPage(
                   onServiceTap: _onServiceTap,
@@ -599,7 +749,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             if (i == 3) {
               _handleProfileNavigation();
             } else if (i == 1 && !_isBBPSOnboarded) {
-              // Services tab - show BBPS required dialog if not onboarded
               _showBBPSRequiredDialog();
             } else {
               setState(() => _selectedIndex = i);
@@ -633,10 +782,12 @@ class HomeDashboard extends StatelessWidget {
   final void Function(String) onServiceTap;
   final bool isBBPSOnboarded;
   final bool isCheckingBBPS;
+  final VoidCallback onSupportTap;
 
   const HomeDashboard({
     super.key, required this.onLogout,
-    required this.onServiceTap, this.isBBPSOnboarded = false, this.isCheckingBBPS = false,
+    required this.onServiceTap, this.isBBPSOnboarded = false,
+    this.isCheckingBBPS = false, required this.onSupportTap,
   });
 
   @override
@@ -781,6 +932,7 @@ class HomeDashboard extends StatelessWidget {
       ]),
     ]);
   }
+
   Widget _buildServicesGrid() {
     final services = [
       {'name': 'AEPS', 'icon': Icons.fingerprint},
@@ -882,7 +1034,7 @@ class HomeDashboard extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(child: _ActionCard(Icons.people_rounded, 'Refer & Earn', () {})),
         const SizedBox(width: 10),
-        Expanded(child: _ActionCard(Icons.support_agent_rounded, 'Support', () {})),
+        Expanded(child: _ActionCard(Icons.support_agent_rounded, 'Support', onSupportTap)),
       ]),
     ]);
   }

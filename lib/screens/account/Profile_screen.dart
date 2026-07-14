@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/AEPS/api_service.dart';
 import '../../services/session_service.dart';
@@ -22,12 +23,16 @@ class AppColors {
   static const primary = Color(0xFF008169);
   static const primaryLight = Color(0xFF1AA88A);
   static const primaryDark = Color(0xFF005F4E);
+  static const accent = Color(0xFF00C897);
   static const white = Colors.white;
   static const grey = Color(0xFF8A9A8A);
   static const error = Color(0xFFEF4444);
   static const success = Color(0xFF4CAF50);
+  static const warning = Color(0xFFFFB74D);
   static const bg = Color(0xFF0A0E0A);
+  static const surface = Color(0xFF151915);
   static const card = Color(0xFF0F1A0F);
+  static const textHint = Color(0xFF6B7280);
 }
 
 class ProfilePage extends StatefulWidget {
@@ -68,6 +73,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String _merchantId = '';
   String _merchantRefId = '';
   String _pipe = '';
+
+  // Support contact details
+  static const String supportPhone = '+917994949990';
+  static const String supportEmail = 'care@myneofin.com';
 
   // Responsive dimensions
   double _screenWidth = 0;
@@ -215,10 +224,147 @@ class _ProfilePageState extends State<ProfilePage> {
     return '$masked$last4';
   }
 
-  // ... (keep all existing methods: _pickFromGallery, _takePhoto, _removePhoto,
-  //      _showImagePickerOptions, _buildImageOption, _changeLanguage,
-  //      _showEditProfileDialog, _navigateToChangeMpin, _navigateToTpin,
-  //      _showLogoutDialog, _showToast)
+  // ─────────────────────────────────────────────────────────────────────────
+  //  SUPPORT POPUP METHODS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  void _showSupportPopup() {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.accent],
+                ),
+              ),
+              child: const Icon(Icons.support_agent_rounded, color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Need Help?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Choose how you\'d like to reach us',
+              style: TextStyle(color: Colors.white60, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            // Call Option
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchCaller();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.call_rounded, color: AppColors.accent, size: 24),
+                    SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Call Us', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                        SizedBox(height: 2),
+                        Text('+91 7994949990', style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                      ],
+                    ),
+                    Spacer(),
+                    Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textHint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Email Option
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchEmail();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.email_rounded, color: AppColors.accent, size: 24),
+                    SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Email Us', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                        SizedBox(height: 2),
+                        Text('care@myneofin.com', style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                      ],
+                    ),
+                    Spacer(),
+                    Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textHint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close', style: TextStyle(color: Colors.white54, fontSize: 14)),
+          ),
+        ],
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+  }
+
+  Future<void> _launchCaller() async {
+    final Uri launchUri = Uri(scheme: 'tel', path: supportPhone);
+    try {
+      await launchUrl(launchUri);
+    } catch (e) {
+      if (mounted) {
+        _showToast('Unable to make a call', error: true);
+      }
+    }
+  }
+
+  Future<void> _launchEmail() async {
+    final Uri launchUri = Uri(
+      scheme: 'mailto',
+      path: supportEmail,
+      query: 'subject=Support Request&body=Hello Neofin Support Team,',
+    );
+    try {
+      await launchUrl(launchUri);
+    } catch (e) {
+      if (mounted) {
+        _showToast('Unable to open email app', error: true);
+      }
+    }
+  }
 
   Future<void> _pickFromGallery() async {
     Navigator.pop(context);
@@ -454,7 +600,7 @@ class _ProfilePageState extends State<ProfilePage> {
         SizedBox(height: _spacing * 0.5),
         _buildSectionHeader('Support'),
         SizedBox(height: _spacing),
-        _buildMenuItem(icon: Icons.help_rounded, title: 'Help Center', subtitle: 'Get help & support', onTap: () {}, isCompact: true),
+        _buildMenuItem(icon: Icons.help_rounded, title: 'Help Center', subtitle: 'Get help & support', onTap: _showSupportPopup, isCompact: true),
         SizedBox(height: _spacing * 0.5),
         _buildMenuItem(icon: Icons.description_rounded, title: 'Terms & Conditions', subtitle: 'Read our policies', onTap: () {}, isCompact: true),
         SizedBox(height: _spacing * 2.5),
@@ -532,37 +678,10 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
       ]),
-      /*child: Column(children: [
-        // Personal
-        // _detailRow(Icons.person_outline, 'Name', _name),
-        if (_aadhaarNumber.isNotEmpty) _detailRow(Icons.fingerprint, 'Aadhaar', _maskSensitive(_aadhaarNumber)),
-        // if (_panNumber.isNotEmpty) _detailRow(Icons.credit_card, 'PAN', _maskSensitive(_panNumber)),
-        _detailRow(Icons.email_outlined, 'Email', _email),
-        _detailRow(Icons.phone_outlined, 'Mobile', _phone),
-        const Divider(color: Colors.white12, height: 24),
-
-        // Business
-        if (_businessName.isNotEmpty) _detailRow(Icons.store, 'Business', _businessName),
-        if (_businessType.isNotEmpty) _detailRow(Icons.business, 'Type', _businessType),
-        if (_businessAddress.isNotEmpty) _detailRow(Icons.location_on_outlined, 'Address', _businessAddress),
-        if (_state.isNotEmpty || _city.isNotEmpty) _detailRow(Icons.map_outlined, 'Location', '$_city, $_state'),
-        if (_pincode.isNotEmpty) _detailRow(Icons.pin, 'Pincode', _pincode),
-        const Divider(color: Colors.white12, height: 24),
-
-        // Bank
-        if (_bankAccount.isNotEmpty) _detailRow(Icons.account_balance, 'Bank A/C', _maskSensitive(_bankAccount)),
-        if (_bankIfsc.isNotEmpty) _detailRow(Icons.code, 'IFSC', _bankIfsc),
-        // if (_bankName.isNotEmpty) _detailRow(Icons.badge_outlined, 'Bank Code', _bankName),
-        const Divider(color: Colors.white12, height: 24),
-
-        // Merchant
-        if (_merchantId.isNotEmpty) _detailRow(Icons.verified_user, 'Merchant ID', _merchantId),
-        if (_merchantRefId.isNotEmpty) _detailRow(Icons.qr_code, 'Ref ID', _merchantRefId),
-        // if (_pipe.isNotEmpty) _detailRow(Icons.cable, 'Pipe', _pipe),
-      ]),*/
     );
   }
-// ✅ Modern section chip
+
+  // ✅ Modern section chip
   Widget _buildSectionChip(String title) {
     return Row(children: [
       Container(
@@ -586,7 +705,7 @@ class _ProfilePageState extends State<ProfilePage> {
     ]);
   }
 
-// ✅ Modern detail card container
+  // ✅ Modern detail card container
   Widget _buildModernDetailCard({required List<Widget> items}) {
     return Container(
       padding: EdgeInsets.all(_paddingHorizontal * 0.8),
@@ -620,7 +739,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-// ✅ Modern detail item (replaces old _detailRow)
+  // ✅ Modern detail item (replaces old _detailRow)
   Widget _buildDetailItem(IconData icon, String label, String value) {
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -700,6 +819,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+
   // ✅ Detail row widget (non-editable)
   Widget _detailRow(IconData icon, String label, String value) {
     return Padding(

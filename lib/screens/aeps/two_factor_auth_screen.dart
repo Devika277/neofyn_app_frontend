@@ -8,8 +8,8 @@ import 'biometric_service.dart';
 // ─── DEVICE TYPE ENUM ─────────────────────────────────────────
 enum DeviceType {
   mantra('Mantra MFS-110', 'Mantra', Icons.fingerprint, 'mantra'),
-  morpho('Morpho MSO 1300', 'Morpho', Icons.scanner, 'morpho');
-
+  morpho('Morpho MSO 1300', 'Morpho', Icons.scanner, 'morpho'),
+  startek('Startek FM220', 'Startek', Icons.fingerprint, 'startek');
   final String displayName;
   final String shortName;
   final IconData icon;
