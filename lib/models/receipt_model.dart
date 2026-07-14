@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 
+
+
 class ReceiptModel {
   final String transactionType;
   final String status;
@@ -55,12 +57,49 @@ class ReceiptModel {
     this.miniStatementEntries,
   });
 
+
+  // Add this helper method inside ReceiptModel class
+static List<MiniStatementEntry> _parseTransactionList(dynamic transactionListData) {
+  if (transactionListData == null) return [];
+  
+  // If it's a string, parse it
+  if (transactionListData is String) {
+    if (transactionListData.isEmpty || transactionListData == '[]' || transactionListData == 'null') {
+      return [];
+    }
+    try {
+      final parsed = jsonDecode(transactionListData);
+      if (parsed is List) {
+        return parsed
+            .whereType<Map<String, dynamic>>()
+            .map((e) => MiniStatementEntry.fromJson(e))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('❌ Error parsing transactionList string: $e');
+      return [];
+    }
+  }
+  
+  // If it's already a list
+  if (transactionListData is List) {
+    return transactionListData
+        .whereType<Map<String, dynamic>>()
+        .map((e) => MiniStatementEntry.fromJson(e))
+        .toList();
+  }
+  
+  return [];
+}
   factory ReceiptModel.fromApiResponse(
       Map<String, dynamic> apiResponse, {
         required String transactionType,
         required String merchantId,
         required String mobileNumber,
       }) {
+    debugPrint('📦 ReceiptModel.fromApiResponse - Transaction Type: $transactionType');
+    debugPrint('📦 Raw API Response: ${jsonEncode(apiResponse)}');
+    
     final data = apiResponse['data'] as Map<String, dynamic>? ?? apiResponse;
 
     // ✅ FIX: Get status and determine success
@@ -80,27 +119,172 @@ class ReceiptModel {
     // ✅ FIX: Parse transaction list for Mini Statement - with backward compatibility
     List<MiniStatementEntry>? entries;
     
-    // Try to get transaction list - check both camelCase and snake_case
-    dynamic transactionListData = data['transactionList'] ?? data['transaction_list'];
+    // 🆕 Helper function to recursively search for transactionList in nested objects
+    dynamic findTransactionList(Map<String, dynamic> obj, [int depth = 0]) {
+      debugPrint('🔍 Searching for transactionList at depth $depth in keys: ${obj.keys}');
+      
+      // Check current level
+      if (obj.containsKey('transactionList')) {
+        debugPrint('✅ Found transactionList at current level');
+        return obj['transactionList'];
+      }
+      if (obj.containsKey('transaction_list')) {
+        debugPrint('✅ Found transaction_list at current level');
+        return obj['transaction_list'];
+      }
+      if (obj.containsKey('transactions')) {
+        debugPrint('✅ Found transactions at current level');
+        return obj['transactions'];
+      }
+      if (obj.containsKey('miniStatement')) {
+        debugPrint('✅ Found miniStatement at current level');
+        return obj['miniStatement'];
+      }
+      if (obj.containsKey('mini_statement')) {
+        debugPrint('✅ Found mini_statement at current level');
+        return obj['mini_statement'];
+      }
+      
+      // Search in nested objects
+      for (var key in obj.keys) {
+        final value = obj[key];
+        if (value is Map<String, dynamic>) {
+          final result = findTransactionList(value, depth + 1);
+          if (result != null) {
+            debugPrint('✅ Found transactionList in nested object at key: $key');
+            return result;
+          }
+        }
+      }
+      return null;
+    }
     
-    if (transactionListData != null && transactionListData.toString().isNotEmpty) {
-      try {
-        if (transactionListData is String) {
-          if (transactionListData.isNotEmpty && transactionListData != '[]') {
-            final List<dynamic> parsed = jsonDecode(transactionListData);
+    // Try multiple methods to get transaction list
+    dynamic transactionListData;
+    
+    // Method 1: Direct lookup
+    transactionListData = data['transactionList'] ?? data['transaction_list'];
+    
+    // Method 2: Recursive search in nested structure
+    if (transactionListData == null) {
+      debugPrint('🔍 Direct lookup failed, trying recursive search...');
+      transactionListData = findTransactionList(data);
+    }
+    
+    // Method 3: Check if the response itself is a nested structure
+    if (transactionListData == null) {
+      debugPrint('🔍 Recursive search failed, checking if response is nested...');
+      // Check if apiResponse has the nested structure with 422, 37, etc.
+      if (apiResponse.containsKey('422')) {
+        final firstLevel = apiResponse['422'] as Map<String, dynamic>?;
+        if (firstLevel != null) {
+          for (var secondLevel in firstLevel.values) {
+            if (secondLevel is Map<String, dynamic>) {
+              for (var thirdLevel in secondLevel.values) {
+                if (thirdLevel is Map<String, dynamic>) {
+                  transactionListData = thirdLevel['transactionList'] ?? 
+                                       thirdLevel['transaction_list'] ?? 
+                                       thirdLevel['transactions'];
+                  if (transactionListData != null) {
+                    debugPrint('✅ Found transactionList in nested structure: 422 -> 37 -> bankIIN');
+                    break;
+                  }
+                }
+              }
+            }
+            if (transactionListData != null) break;
+          }
+        }
+      }
+    }
+    
+    // Method 4: Try to parse from narration field as JSON array
+    if (transactionListData == null) {
+      final narrationStr = data['narration']?.toString() ?? '';
+      debugPrint('🔍 Trying to parse narration field: ${narrationStr.substring(0, narrationStr.length > 100 ? 100 : narrationStr.length)}...');
+      if (narrationStr.isNotEmpty && 
+          narrationStr.trim().startsWith('[') && 
+          narrationStr.trim().endsWith(']')) {
+        try {
+          final List<dynamic> parsed = jsonDecode(narrationStr);
+          if (parsed.isNotEmpty && parsed.first is Map) {
+            transactionListData = parsed;
+            debugPrint('✅ Successfully parsed transaction list from narration field');
+          }
+        } catch (e) {
+          debugPrint('❌ Error parsing narration as JSON: $e');
+        }
+      }
+    }
+    
+    // Method 5: Check if the data itself is a list
+    if (transactionListData == null && data is List) {
+      transactionListData = data;
+      debugPrint('✅ Data itself is a list, using it as transaction list');
+    }
+    
+    debugPrint('📊 transactionListData found: ${transactionListData != null}');
+    if (transactionListData != null) {
+      debugPrint('📊 transactionListData type: ${transactionListData.runtimeType}');
+      debugPrint('📊 transactionListData length: ${transactionListData is List ? transactionListData.length : 'N/A'}');
+    }
+    
+    // if (transactionListData != null && transactionListData.toString().isNotEmpty) {
+    //   try {
+    //     if (transactionListData is String) {
+    //       if (transactionListData.isNotEmpty && transactionListData != '[]') {
+    //         final List<dynamic> parsed = jsonDecode(transactionListData);
+    //         entries = parsed
+    //             .whereType<Map<String, dynamic>>()
+    //             .map((e) => MiniStatementEntry.fromJson(e))
+    //             .toList();
+    //         debugPrint('✅ Parsed ${entries?.length} entries from string');
+    //       }
+    //     } else if (transactionListData is List) {
+    //       entries = transactionListData
+    //           .whereType<Map<String, dynamic>>()
+    //           .map((e) => MiniStatementEntry.fromJson(e))
+    //           .toList();
+    //       debugPrint('✅ Parsed ${entries?.length} entries from list');
+    //     }
+    //   } catch (e) {
+    //     debugPrint('❌ Error parsing transactionList: $e');
+    //     debugPrint('❌ transactionListData: $transactionListData');
+    //   }
+    // }
+entries = _parseTransactionList(transactionListData);
+
+    // 🆕 If still empty, check for miniStatement in the raw response
+  if (entries.isNotEmpty) {
+  debugPrint('✅ Parsed ${entries.length} entries from transactionList');
+
+      final miniStatementData = apiResponse['miniStatement'] ?? 
+                               apiResponse['mini_statement'] ?? 
+                               apiResponse['transactionList'] ?? 
+                               apiResponse['transaction_list'];
+      
+      if (miniStatementData != null) {
+        debugPrint('📊 miniStatementData found in raw response');
+        try {
+          if (miniStatementData is String && 
+              miniStatementData.isNotEmpty && 
+              miniStatementData != '[]') {
+            final List<dynamic> parsed = jsonDecode(miniStatementData);
             entries = parsed
                 .whereType<Map<String, dynamic>>()
                 .map((e) => MiniStatementEntry.fromJson(e))
                 .toList();
+            debugPrint('✅ Parsed ${entries?.length} entries from raw miniStatement');
+          } else if (miniStatementData is List) {
+            entries = miniStatementData
+                .whereType<Map<String, dynamic>>()
+                .map((e) => MiniStatementEntry.fromJson(e))
+                .toList();
+            debugPrint('✅ Parsed ${entries?.length} entries from raw miniStatement list');
           }
-        } else if (transactionListData is List) {
-          entries = transactionListData
-              .whereType<Map<String, dynamic>>()
-              .map((e) => MiniStatementEntry.fromJson(e))
-              .toList();
+        } catch (e) {
+          debugPrint('❌ Error parsing raw miniStatement: $e');
         }
-      } catch (e) {
-        debugPrint('Error parsing transactionList: $e');
       }
     }
 
@@ -144,6 +328,8 @@ class ReceiptModel {
                               data['mobile_no']?.toString() ?? 
                               data['mobile']?.toString() ?? 
                               '';
+
+    debugPrint('📊 Final entries count: ${entries?.length ?? 0}');
 
     return ReceiptModel(
       transactionType: transactionType,
@@ -235,27 +421,35 @@ class MiniStatementEntry {
   });
 
   factory MiniStatementEntry.fromJson(Map<String, dynamic> json) {
+    debugPrint('📝 Parsing MiniStatementEntry from: $json');
+    
     // Try multiple possible field names - with backward compatibility
     String date = json['date']?.toString() ?? 
                  json['txnDate']?.toString() ?? 
                  json['txn_date']?.toString() ?? 
                  json['transactionDate']?.toString() ?? 
+                 json['txnDate']?.toString() ??
                  '';
 
     String txnType = json['txnType']?.toString() ?? 
                     json['txn_type']?.toString() ?? 
                     json['type']?.toString() ?? 
+                    json['txnType']?.toString() ??
                     'Dr';
 
     String amount = json['amount']?.toString() ?? 
                    json['txnAmount']?.toString() ?? 
                    json['txn_amount']?.toString() ?? 
+                   json['amt']?.toString() ??
                    '0';
 
     String narration = json['narration']?.toString() ?? 
                       json['remarks']?.toString() ?? 
                       json['description']?.toString() ?? 
+                      json['narration']?.toString() ??
                       '';
+
+    debugPrint('📝 Parsed: date=$date, txnType=$txnType, amount=$amount, narration=$narration');
 
     return MiniStatementEntry(
       date: date,
@@ -263,6 +457,17 @@ class MiniStatementEntry {
       amount: amount,
       narration: narration,
     );
+  }
+
+
+  // ✅ ADD THE toJson METHOD HERE - after fromJson
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'txnType': txnType,
+      'amount': amount,
+      'narration': narration,
+    };
   }
 
   bool get isDebit => txnType == 'Dr' || txnType == 'DEBIT' || txnType == 'D';
