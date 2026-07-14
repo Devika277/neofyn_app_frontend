@@ -105,323 +105,502 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return buffer.toString();
   }
 
-  Widget _buildReceiptCard() {
-    final isSuccess = widget.receipt.isSuccess;
-    final statusColor =
-    isSuccess ? const Color(0xFF2ECC71) : const Color(0xFFEF4444);
+Widget _buildReceiptCard() {
+  final isSuccess = widget.receipt.isSuccess;
+  final statusColor =
+      isSuccess ? const Color(0xFF2ECC71) : const Color(0xFFEF4444);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: statusColor.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Status Icon
-          TweenAnimationBuilder<double>(
-            duration: const Duration(milliseconds: 800),
-            tween: Tween(begin: 0.0, end: 1.0),
-            curve: Curves.elasticOut,
-            builder: (context, value, child) {
-              return Transform.scale(
-                scale: value,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: statusColor.withOpacity(0.1),
-                    border:
-                    Border.all(color: statusColor.withOpacity(0.3), width: 2),
-                  ),
-                  child: Icon(
-                    isSuccess
-                        ? Icons.check_circle_rounded
-                        : Icons.cancel_rounded,
-                    size: 48,
-                    color: statusColor,
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1A1F1A),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: statusColor.withOpacity(0.1),
+          blurRadius: 20,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+  child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // ========== BIG LOGO (No container) ==========
+        Image.asset(
+          'assets/images/logo_white.png',
+          height: 100,  // Big logo
+          width: 100,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            // Fallback when image not found
+            return Container(
+              height: 130,
+              width: 130,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                Icons.account_balance,
+                color: Colors.white.withOpacity(0.3),
+                size: 50,
+              ),
+            );
+          },
+        ),
+        // const SizedBox(height: 12),
+
+        // Title with gradient underline
+        Column(
+          children: [
+            Text(
+              'Neofyn Bharath',
+              style: GoogleFonts.inter(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+            Container(
+              width: 40,
+              height: 2,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    statusColor.withOpacity(0.6),
+                    statusColor.withOpacity(0.1),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+
+        // Mini Statement badge with icon
+        if (widget.receipt.isMiniStatement)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE67E22).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFE67E22).withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  color: Color(0xFFE67E22),
+                  size: 14,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Mini Statement',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFFE67E22),
                   ),
                 ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 20),
-
-          // Title
-          Text(
-            'Neofyn Bharath',
-            style: GoogleFonts.inter(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+              ],
             ),
           ),
-          const SizedBox(height: 4),
+        const SizedBox(height: 14),
 
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              widget.receipt.typeLabel,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Dashed line
-          _buildDashedLine(),
-          const SizedBox(height: 20),
-
-          // Status
-          _buildDetailRow(
-            'Status',
-            widget.receipt.displayStatus,
-            valueColor: statusColor,
-          ),
-
-          // RRN (always show)
-          if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
-            _buildDetailRow('RRN', widget.receipt.rrn!),
-
-          // Transaction Ref ID (show only if available)
-          if (widget.receipt.txnRefId != null &&
-              widget.receipt.txnRefId!.isNotEmpty &&
-              widget.receipt.txnRefId != 'N/A' &&
-              widget.receipt.txnRefId != widget.receipt.rrn)
-            _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
-
-          // Merchant Ref ID (show only if available and not empty)
-          if (widget.receipt.merchantRefId.isNotEmpty &&
-              widget.receipt.merchantRefId != 'N/A' &&
-              widget.receipt.merchantRefId != widget.receipt.rrn)
-            _buildDetailRow('Merchant Ref ID', widget.receipt.merchantRefId),
-
-          // Merchant ID (show only if available and not empty)
-          if (widget.receipt.merchantId.isNotEmpty &&
-              widget.receipt.merchantId != 'N/A')
-            _buildDetailRow('Merchant ID', widget.receipt.merchantId),
-
-          // Date & Time
-          _buildDetailRow(
-            'Date & Time',
-            _formatDate(widget.receipt.transactionDateTime),
-          ),
-
-          // Amount Section - Only for CW (Cash Withdrawal)
-          if (widget.receipt.isAmountRequired &&
-              widget.receipt.transactionAmount != '0' &&
-              widget.receipt.transactionAmount != '0.00') ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusColor.withOpacity(0.1)),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Transaction Amount',
-                    style: GoogleFonts.inter(
-                      color: Colors.white60,
-                      fontSize: 12,
+        // ========== ENHANCED SMALL TICK CIRCLE ==========
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Pulsing outer ring
+            TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 1500),
+              tween: Tween(begin: 0.0, end: 1.0),
+              curve: Curves.easeInOut,
+              builder: (context, value, child) {
+                return Container(
+                  width: 60 + (value * 8),
+                  height: 60 + (value * 8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: statusColor.withOpacity(0.04 * (1 - value * 0.5)),
+                    border: Border.all(
+                      color: statusColor.withOpacity(0.08 * (1 - value * 0.5)),
+                      width: 1,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₹ ${widget.receipt.transactionAmount}',
-                    style: GoogleFonts.inter(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+                );
+              },
+            ),
+            // Main tick with glow
+            TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 800),
+              tween: Tween(begin: 0.0, end: 1.0),
+              curve: Curves.elasticOut,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: value,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: statusColor.withOpacity(0.12),
+                      border: Border.all(
+                        color: statusColor.withOpacity(0.4),
+                        width: 2.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: statusColor.withOpacity(0.3),
+                          blurRadius: 20,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      isSuccess
+                          ? Icons.check_circle_rounded
+                          : Icons.cancel_rounded,
+                      size: 26,
                       color: statusColor,
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ],
+        ),
+        const SizedBox(height: 14),
 
-          // Balance Section - Only for BE (Balance Enquiry) and MS (Mini Statement)
-          if ((widget.receipt.transactionType == 'BE' ||
-              widget.receipt.transactionType == 'MS') &&
-              widget.receipt.availableBalance != null &&
-              widget.receipt.availableBalance != '0' &&
-              widget.receipt.availableBalance != '0.00' &&
-              widget.receipt.availableBalance!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1AA88A).withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF1AA88A).withOpacity(0.1),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Available Balance',
-                    style: GoogleFonts.inter(
-                      color: Colors.white60,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₹ ${widget.receipt.availableBalance}',
-                    style: GoogleFonts.inter(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1AA88A),
-                    ),
-                  ),
-                ],
-              ),
+        // Status Text with gradient
+        ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            colors: [
+              statusColor,
+              statusColor.withOpacity(0.6),
+            ],
+          ).createShader(bounds),
+          child: Text(
+            widget.receipt.displayStatus,
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 0.5,
             ),
-          ],
+          ),
+        ),
+        const SizedBox(height: 8),
 
-          const SizedBox(height: 12),
-
-          // Bank Details
-          _buildDetailRow('Bank IIN', widget.receipt.bankIIN),
-
-          if (widget.receipt.bankName != null &&
-              widget.receipt.bankName!.isNotEmpty &&
-              widget.receipt.bankName != 'N/A' &&
-              widget.receipt.bankName != 'Not Available')
-            _buildDetailRow('Bank Name', widget.receipt.bankName!),
-
-          // Aadhaar (masked)
-          if (widget.receipt.aadhaarNumber != null &&
-              widget.receipt.aadhaarNumber!.isNotEmpty)
-            _buildDetailRow(
-              'Aadhaar',
-              _maskAadhaar(widget.receipt.aadhaarNumber!),
+        // Transaction Type with enhanced styling
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                statusColor.withOpacity(0.15),
+                statusColor.withOpacity(0.05),
+              ],
             ),
-
-          // Mobile
-          if (widget.receipt.mobileNumber.isNotEmpty &&
-              widget.receipt.mobileNumber != 'N/A')
-            _buildDetailRow('Mobile', widget.receipt.mobileNumber),
-
-          // Device Info (show only if available)
-          if (widget.receipt.deviceUsed != null &&
-              widget.receipt.deviceUsed!.isNotEmpty &&
-              widget.receipt.deviceUsed != 'N/A' &&
-              widget.receipt.deviceUsed != 'Not Available')
-            _buildDetailRow('Device', widget.receipt.deviceUsed!),
-
-          // Provider
-          if (widget.receipt.udf1 != null && widget.receipt.udf1!.isNotEmpty)
-            _buildDetailRow('Provider', widget.receipt.udf1!),
-
-          // Pipe
-          if (widget.receipt.pipe.isNotEmpty && widget.receipt.pipe != '1')
-            _buildDetailRow('Pipe', widget.receipt.pipe),
-
-          // NPCI Message
-          if (widget.receipt.npciMessage != null &&
-              widget.receipt.npciMessage!.isNotEmpty &&
-              widget.receipt.npciMessage != 'N/A') ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: statusColor.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSuccess ? Icons.verified : Icons.warning_amber_rounded,
+                size: 14,
+                color: statusColor,
               ),
-              child: Text(
-                widget.receipt.npciMessage!,
-                textAlign: TextAlign.center,
+              const SizedBox(width: 6),
+              Text(
+                widget.receipt.typeLabel,
                 style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                   color: statusColor,
-                  fontSize: 12,
                 ),
               ),
-            ),
-          ],
-
-          // Status Description
-          if (widget.receipt.statusDescription != null &&
-              widget.receipt.statusDescription!.isNotEmpty &&
-              widget.receipt.statusDescription != widget.receipt.npciMessage)
-            _buildDetailRow(
-              'Message',
-              widget.receipt.statusDescription!,
-              valueColor: statusColor,
-            ),
-
-          // UDF fields (show only if available)
-          if (widget.receipt.udf2 != null && widget.receipt.udf2!.isNotEmpty)
-            _buildDetailRow('UDF2', widget.receipt.udf2!),
-          if (widget.receipt.udf3 != null && widget.receipt.udf3!.isNotEmpty)
-            _buildDetailRow('UDF3', widget.receipt.udf3!),
-
-          // ✅ MINI STATEMENT TABLE
-          if (widget.receipt.isMiniStatement) ...[
-            const SizedBox(height: 20),
-            _buildDashedLine(),
-            const SizedBox(height: 16),
-            _buildMiniStatementSection(),
-            const SizedBox(height: 12),
-            _buildDashedLine(),
-          ],
-
-          const SizedBox(height: 20),
-
-          // Footer
-          Text(
-            'Thank you for using Neofyn Bharath',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: Colors.white60,
-            ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Powered by Neofyn Bharath',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: Colors.white38,
-            ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // Enhanced Dashed line
+        CustomPaint(
+          size: const Size(double.infinity, 1),
+          painter: DashedLinePainter(
+            color: Colors.white.withOpacity(0.12),
+            dashWidth: 8,
+            dashSpace: 6,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Generated on ${_formatDate(DateTime.now().toString())}',
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              color: Colors.white24,
+        ),
+        const SizedBox(height: 20),
+
+        // Status
+        _buildDetailRow(
+          'Status',
+          widget.receipt.displayStatus,
+          valueColor: statusColor,
+        ),
+
+        // RRN (always show)
+        if (widget.receipt.rrn != null && widget.receipt.rrn!.isNotEmpty)
+          _buildDetailRow('RRN', widget.receipt.rrn!),
+
+        // Transaction Ref ID (show only if available)
+        if (widget.receipt.txnRefId != null &&
+            widget.receipt.txnRefId!.isNotEmpty &&
+            widget.receipt.txnRefId != 'N/A' &&
+            widget.receipt.txnRefId != widget.receipt.rrn)
+          _buildDetailRow('Transaction Ref ID', widget.receipt.txnRefId!),
+
+        // Merchant Ref ID (show only if available and not empty)
+        if (widget.receipt.merchantRefId.isNotEmpty &&
+            widget.receipt.merchantRefId != 'N/A' &&
+            widget.receipt.merchantRefId != widget.receipt.rrn)
+          _buildDetailRow('Merchant Ref ID', widget.receipt.merchantRefId),
+
+        // Merchant ID (show only if available and not empty)
+        if (widget.receipt.merchantId.isNotEmpty &&
+            widget.receipt.merchantId != 'N/A')
+          _buildDetailRow('Merchant ID', widget.receipt.merchantId),
+
+        // Date & Time
+        _buildDetailRow(
+          'Date & Time',
+          _formatDate(widget.receipt.transactionDateTime),
+        ),
+
+        // Amount Section - Only for CW (Cash Withdrawal)
+        if (widget.receipt.isAmountRequired &&
+            widget.receipt.transactionAmount != '0' &&
+            widget.receipt.transactionAmount != '0.00') ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: statusColor.withOpacity(0.1)),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'Transaction Amount',
+                  style: GoogleFonts.inter(
+                    color: Colors.white60,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹ ${widget.receipt.transactionAmount}',
+                  style: GoogleFonts.inter(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
-    );
-  }
+
+        // Balance Section - Only for BE (Balance Enquiry) and MS (Mini Statement)
+        if ((widget.receipt.transactionType == 'BE' ||
+            widget.receipt.transactionType == 'MS') &&
+            widget.receipt.availableBalance != null &&
+            widget.receipt.availableBalance != '0' &&
+            widget.receipt.availableBalance != '0.00' &&
+            widget.receipt.availableBalance!.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1AA88A).withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFF1AA88A).withOpacity(0.1),
+              ),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'Available Balance',
+                  style: GoogleFonts.inter(
+                    color: Colors.white60,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹ ${widget.receipt.availableBalance}',
+                  style: GoogleFonts.inter(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1AA88A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 12),
+
+        // Bank Details
+        _buildDetailRow('Bank IIN', widget.receipt.bankIIN),
+
+        if (widget.receipt.bankName != null &&
+            widget.receipt.bankName!.isNotEmpty &&
+            widget.receipt.bankName != 'N/A' &&
+            widget.receipt.bankName != 'Not Available')
+          _buildDetailRow('Bank Name', widget.receipt.bankName!),
+
+        // Aadhaar (masked)
+        if (widget.receipt.aadhaarNumber != null &&
+            widget.receipt.aadhaarNumber!.isNotEmpty)
+          _buildDetailRow(
+            'Aadhaar',
+            _maskAadhaar(widget.receipt.aadhaarNumber!),
+          ),
+
+        // Mobile
+        if (widget.receipt.mobileNumber.isNotEmpty &&
+            widget.receipt.mobileNumber != 'N/A')
+          _buildDetailRow('Mobile', widget.receipt.mobileNumber),
+
+        // Device Info (show only if available)
+        if (widget.receipt.deviceUsed != null &&
+            widget.receipt.deviceUsed!.isNotEmpty &&
+            widget.receipt.deviceUsed != 'N/A' &&
+            widget.receipt.deviceUsed != 'Not Available')
+          _buildDetailRow('Device', widget.receipt.deviceUsed!),
+
+        // Provider
+        if (widget.receipt.udf1 != null && widget.receipt.udf1!.isNotEmpty)
+          _buildDetailRow('Provider', widget.receipt.udf1!),
+
+        // Pipe
+        if (widget.receipt.pipe.isNotEmpty && widget.receipt.pipe != '1')
+          _buildDetailRow('Pipe', widget.receipt.pipe),
+
+        // NPCI Message
+        if (widget.receipt.npciMessage != null &&
+            widget.receipt.npciMessage!.isNotEmpty &&
+            widget.receipt.npciMessage != 'N/A') ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              widget.receipt.npciMessage!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: statusColor,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+
+        // Status Description
+        if (widget.receipt.statusDescription != null &&
+            widget.receipt.statusDescription!.isNotEmpty &&
+            widget.receipt.statusDescription != widget.receipt.npciMessage)
+          _buildDetailRow(
+            'Message',
+            widget.receipt.statusDescription!,
+            valueColor: statusColor,
+          ),
+
+        // UDF fields (show only if available)
+        if (widget.receipt.udf2 != null && widget.receipt.udf2!.isNotEmpty)
+          _buildDetailRow('UDF2', widget.receipt.udf2!),
+        if (widget.receipt.udf3 != null && widget.receipt.udf3!.isNotEmpty)
+          _buildDetailRow('UDF3', widget.receipt.udf3!),
+
+        // ✅ MINI STATEMENT TABLE
+        if (widget.receipt.isMiniStatement) ...[
+          const SizedBox(height: 20),
+          CustomPaint(
+            size: const Size(double.infinity, 1),
+            painter: DashedLinePainter(
+              color: Colors.white.withOpacity(0.12),
+              dashWidth: 8,
+              dashSpace: 6,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildMiniStatementSection(),
+          const SizedBox(height: 12),
+          CustomPaint(
+            size: const Size(double.infinity, 1),
+            painter: DashedLinePainter(
+              color: Colors.white.withOpacity(0.12),
+              dashWidth: 8,
+              dashSpace: 6,
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 20),
+
+        // Footer
+        Text(
+          'Thank you for using Neofyn Bharath',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: Colors.white60,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Powered by Neofyn Bharath',
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            color: Colors.white38,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Generated on ${_formatDate(DateTime.now().toString())}',
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            color: Colors.white24,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+
 
   Widget _buildMiniStatementSection() {
     return Column(
@@ -1167,20 +1346,36 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     final pdf = pw.Document();
     final isSuccess = widget.receipt.isSuccess;
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(10),
-        build: (pw.Context context) {
-          final widgets = <pw.Widget>[
-            // Header
-            pw.Text(
-              'Neofyn Bharath',
-              style: pw.TextStyle(
-                fontSize: 16,
-                fontWeight: pw.FontWeight.bold,
+      // Load the logo image
+    final logoImage = await rootBundle.load('assets/images/logo_white.png');
+    final logoBytes = logoImage.buffer.asUint8List();
+    final logo = pw.MemoryImage(logoBytes);
+
+     pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.roll80,
+      margin: const pw.EdgeInsets.all(10),
+      build: (pw.Context context) {
+        final widgets = <pw.Widget>[
+          // Logo and Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Image(
+                logo,
+                height: 30,
+                width: 30,
               ),
-            ),
+              pw.SizedBox(width: 8),
+              pw.Text(
+                'Neofyn Bharath',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
             pw.SizedBox(height: 2),
             pw.Text(
               'AEPS Services',
@@ -1429,20 +1624,31 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
 // ─── DASHED LINE PAINTER ──────────────────────────────────────
 class DashedLinePainter extends CustomPainter {
+  final Color color;
+  final double dashWidth;
+  final double dashSpace;
+
+  const DashedLinePainter({
+    this.color = Colors.white,
+    this.dashWidth = 5.0,
+    this.dashSpace = 3.0,
+  });
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.1)
+      ..color = color
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    const dashWidth = 5.0;
-    const dashSpace = 3.0;
     double startX = 0;
 
     while (startX < size.width) {
       canvas.drawLine(
-          Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
+        Offset(startX, 0),
+        Offset(startX + dashWidth, 0),
+        paint,
+      );
       startX += dashWidth + dashSpace;
     }
   }
