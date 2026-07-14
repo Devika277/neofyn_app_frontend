@@ -165,9 +165,12 @@ class RegisterMerchantResponse {
 
   factory RegisterMerchantResponse.fromJson(Map<String, dynamic> json) =>
       RegisterMerchantResponse(
-        status: json['status'] as String,
+        status: (json['status'] as String?) ?? '999',
         merchantStatus: json['merchantStatus'] as String?,
-        statusDescription: json['statusDescription'] as String,
+        // statusDescription: json['statusDescription'] as String,
+        statusDescription: (json['statusDescription'] as String?) ??
+            (json['message'] as String?) ??
+            'Unknown status',
         merchantId: json['merchantId'] as String?,
         txnRefId: json['txnRefId'] as String?,
         merchantRefId: json['merchantRefId'] as String?,
@@ -1068,8 +1071,47 @@ class AepsService {
   Future<T> _handleResponse<T>(Future<Response> request, T Function(dynamic) fromJson) async {
     try {
       final response = await request;
-        print('📦 Raw response data: ${response.data}'); // ADD THIS
 
+      // ✅ ADD THIS: Log the full response
+      print('📦 Raw response data type: ${response.data.runtimeType}');
+      print('📦 Raw response data: ${response.data}');
+
+      // ✅ Check if response.data is null or empty
+      if (response.data == null) {
+        throw Exception('Server returned empty response');
+      }
+
+      return fromJson(response.data);
+    } on DioException catch (e) {
+      // ✅ Better error handling
+      print('❌ Dio error: ${e.type}');
+      print('❌ Response status: ${e.response?.statusCode}');
+      print('❌ Response data: ${e.response?.data}');
+
+      final responseData = e.response?.data;
+      String message;
+
+      if (responseData is Map) {
+        message = (responseData['message'] as String?) ??
+            (responseData['statusDescription'] as String?) ??
+            (responseData['error'] as String?) ??
+            'Request failed';
+      } else {
+        message = e.message ?? 'Request failed';
+      }
+
+      throw Exception(message);
+    } catch (e) {
+      print('❌ Unexpected error: $e');
+      rethrow;
+    }
+  }
+  /*Future<T> _handleResponse<T>(Future<Response> request, T Function(dynamic) fromJson) async {
+    try {
+      final response = await request;
+      // ✅ ADD THIS: Log the full response
+      print('📦 Raw response data type: ${response.data.runtimeType}');
+      print('📦 Raw response data: ${response.data}');
       return fromJson(response.data);
     } on DioError catch (e) {
       final serverMessage = e.response?.data['message'] ??
@@ -1078,7 +1120,7 @@ class AepsService {
       final message = serverMessage ?? e.message;
       throw Exception(message);
     }
-  }
+  }*/
 
   // ==============================
   // Merchant & Setup

@@ -522,7 +522,6 @@ class AepsProvider extends ChangeNotifier {
   // ✅ FIXED: Merchant Registration - Use the pipe from the request
   // ----------------------------------------------------------------------
   // In AepsProvider, replace registerMerchant response handling:
-
   Future<bool> registerMerchant(MerchantRegistrationRequest request) async {
     _isLoading = true;
     _errorMessage = null;
@@ -561,35 +560,38 @@ class AepsProvider extends ChangeNotifier {
 
       final response = await _aepsService.registerMerchant(regRequest);
 
-      final merchantId = response.merchantId?.toString() ?? '';
-      final merchantRefId = response.merchantRefId?.toString() ?? '';
-      final status = response.status?.toString() ?? '';
-      final statusDescription = response.statusDescription?.toString() ?? '';
+      // ✅ ALL FIELDS WITH NULL SAFETY
+      final merchantId = response.merchantId ?? '';
+      final merchantRefId = response.merchantRefId ?? '';
+      final status = response.status;  // Already safe from your fix (defaults to '999')
+      final statusDescription = response.statusDescription;  // Already safe
+      final txnRefId = response.txnRefId ?? '';
 
       print('📥 Registration Response:');
-      print('   status: $status');
-      print('   statusDescription: $statusDescription');
-      print('   merchantId: $merchantId');
+      print('   status: $status (type: ${status.runtimeType})');
+      print('   statusDescription: $statusDescription (type: ${statusDescription.runtimeType})');
+      print('   merchantId: $merchantId (type: ${merchantId.runtimeType})');
+      print('   merchantRefId: $merchantRefId (type: ${merchantRefId.runtimeType})');
 
-      // ❌ CASE 1: "Merchant already exist... EKYC/2FA" → Contact Support (return false)
-      if (status == '003' &&
-          statusDescription.toLowerCase().contains('ekyc')) {
+      // ✅ SAFE: Check if description contains 'ekyc'
+      final lowerDesc = statusDescription.toLowerCase();
+
+      // Case 1: EKYC/2FA required - Contact Support
+      if (status == '003' && lowerDesc.contains('ekyc')) {
         _errorMessage = statusDescription;
         _isLoading = false;
         notifyListeners();
         return false;
       }
 
-      // ✅ CASE 2: "merchant already registered for pipe X" → Proceed with OTP (return true)
-      if (status != '000' &&
-          statusDescription.toLowerCase().contains('already registered for pipe')) {
+      // Case 2: Already registered for another pipe
+      if (status != '000' && lowerDesc.contains('already registered for pipe')) {
         final pipeMatch = RegExp(r'pipe\s*(\d+)', caseSensitive: false)
             .firstMatch(statusDescription);
         if (pipeMatch != null) {
           _existingPipeNumber = pipeMatch.group(1);
         }
 
-        // Save merchant details if available
         if (merchantId.isNotEmpty) {
           _merchantId = merchantId;
           _merchantRefId = merchantRefId;
@@ -598,21 +600,21 @@ class AepsProvider extends ChangeNotifier {
           _pipe = requestPipe;
 
           await _authService.saveMerchantData(
-            merchantId: _merchantId!,
-            merchantRefId: _merchantRefId!,
-            mobileNo: _mobileNo!,
-            aadhaarNo: _aadhaarNo,
+            merchantId: merchantId,
+            merchantRefId: merchantRefId,
+            mobileNo: request.mobileNo,
+            aadhaarNo: request.aadhaarNo,
           );
         }
 
-        DebugLogger.log('✅ Existing merchant (different pipe). ID: $_merchantId');
+        print('✅ Existing merchant (different pipe). ID: $merchantId');
         _isLoading = false;
         notifyListeners();
-        return true; // ✅ Return true to proceed with OTP
+        return true;
       }
 
-      // ✅ CASE 3: New registration success
-      if (merchantId.isNotEmpty) {
+      // Case 3: New registration success
+      if (status == '000' && merchantId.isNotEmpty) {
         _merchantId = merchantId;
         _merchantRefId = merchantRefId;
         _mobileNo = request.mobileNo;
@@ -620,25 +622,39 @@ class AepsProvider extends ChangeNotifier {
         _pipe = requestPipe;
 
         await _authService.saveMerchantData(
-          merchantId: _merchantId!,
-          merchantRefId: _merchantRefId!,
-          mobileNo: _mobileNo!,
-          aadhaarNo: _aadhaarNo,
+          merchantId: merchantId,
+          merchantRefId: merchantRefId,
+          mobileNo: request.mobileNo,
+          aadhaarNo: request.aadhaarNo,
         );
 
-        DebugLogger.log('✅ New merchant saved. ID: $_merchantId');
+        print('✅ New merchant saved. ID: $merchantId');
         _isLoading = false;
         notifyListeners();
         return true;
-      } else {
-        _errorMessage = statusDescription.isNotEmpty ? statusDescription : 'Registration failed';
-        _isLoading = false;
-        notifyListeners();
-        return false;
       }
-    } catch (e) {
+
+      // Case 4: All other failures
+      _errorMessage = statusDescription.isNotEmpty ? statusDescription : 'Registration failed';
+      print('❌ Registration failed: $_errorMessage');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+
+    } catch (e, stackTrace) {
       print('❌ Registration error: $e');
-      _errorMessage = e.toString();
+      print('❌ Stack trace: $stackTrace');
+      print('❌ Error type: ${e.runtimeType}');
+
+      // ✅ SAFE: Convert error to string
+      String errorStr;
+      if (e is TypeError) {
+        errorStr = 'Data processing error. Please try again.';
+      } else {
+        errorStr = e.toString();
+      }
+
+      _errorMessage = errorStr;
       _isLoading = false;
       notifyListeners();
       return false;

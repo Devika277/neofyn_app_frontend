@@ -20,7 +20,8 @@ class AuthService {
     required String merchantId,
     required String merchantRefId,
     required String mobileNo,
-    String? aadhaarNo, String? pipe,
+    String? aadhaarNo,
+    // String? pipe,
   }) async {
     await _storage.write(key: 'merchant_id', value: merchantId);
     await _storage.write(key: 'merchant_ref_id', value: merchantRefId);
