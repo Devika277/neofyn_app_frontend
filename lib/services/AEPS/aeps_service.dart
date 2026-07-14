@@ -1082,9 +1082,6 @@ class AepsService {
     ),
   );
 }
-
-
-  // Helper to handle errors and extract data
   Future<T> _handleResponse<T>(Future<Response> request, T Function(dynamic) fromJson) async {
     try {
       final response = await request;
@@ -1096,7 +1093,6 @@ class AepsService {
         throw Exception('Server returned empty response');
       }
 
-      // ✅ If response has 'data' key, log it
       if (response.data is Map && (response.data as Map).containsKey('data')) {
         print('📦 Nested data: ${(response.data as Map)['data']}');
       }
@@ -1108,42 +1104,35 @@ class AepsService {
       print('❌ Response data: ${e.response?.data}');
 
       final responseData = e.response?.data;
-      String message;
 
+      // ✅ CHECK: If 500 error contains EKYC/2FA message with merchant data
       if (responseData is Map) {
-        // ✅ Check nested data for error messages too
-        final data = responseData['data'];
-        message = (responseData['message'] as String?) ??
-            (responseData['statusDescription'] as String?) ??
-            (data is Map ? data['statusDescription'] as String? : null) ??
-            (responseData['error'] as String?) ??
-            'Request failed';
-      } else {
-        message = e.message ?? 'Request failed';
+        final message = responseData['message'] as String? ?? '';
+        final lowerMsg = message.toLowerCase();
+
+        // ✅ If this is an EKYC/2FA "already exist" error, extract merchantId from message
+        if ((lowerMsg.contains('ekyc') || lowerMsg.contains('2fa') || lowerMsg.contains('already exist')) &&
+            lowerMsg.contains('merchant')) {
+
+          // Try to find merchant ID in the message or response
+          // The backend might include it in the error message
+          print('⚠️ EKYC/2FA required - treating as existing merchant');
+
+          // Throw a special exception that the provider can handle
+          throw Exception('MERCHANT_EXISTS_EKYC: $message');
+        }
+
+        // Normal error
+        throw Exception(message.isNotEmpty ? message : 'Request failed');
       }
 
-      throw Exception(message);
+      throw Exception(e.message ?? 'Request failed');
     } catch (e) {
       print('❌ Unexpected error: $e');
       rethrow;
     }
   }
 
-  /*Future<T> _handleResponse<T>(Future<Response> request, T Function(dynamic) fromJson) async {
-    try {
-      final response = await request;
-      // ✅ ADD THIS: Log the full response
-      print('📦 Raw response data type: ${response.data.runtimeType}');
-      print('📦 Raw response data: ${response.data}');
-      return fromJson(response.data);
-    } on DioError catch (e) {
-      final serverMessage = e.response?.data['message'] ??
-          e.response?.data['statusDescription'] ??
-          e.response?.data['error'];
-      final message = serverMessage ?? e.message;
-      throw Exception(message);
-    }
-  }*/
 
   // ==============================
   // Merchant & Setup
