@@ -991,7 +991,6 @@ class AepsProvider extends ChangeNotifier {
 
       debugPrint('┌──────────────────────────────────────────');
       debugPrint('│ 🔍 [2FA] Checking 2FA Status');
-      debugPrint('│ 📍 URL: $url');
       debugPrint('│ 👤 UserID: $userId');
       debugPrint('└──────────────────────────────────────────');
 
@@ -1007,33 +1006,48 @@ class AepsProvider extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        debugPrint('│ 📥 [2FA] Raw response: ${jsonEncode(data)}');
 
-        if (data['success'] == true && data['data'] != null) {
-          final pipesData = data['data']['pipes'];
+        // ✅ Handle double-wrapped response
+        var pipesData;
 
-          if (pipesData != null && pipesData is Map<String, dynamic>) {
-            pipesData.forEach((pipe, status) {
-              if (_pipes2FAStatus.containsKey(pipe)) {
-                _pipes2FAStatus[pipe] = {
-                  'merchant_id': status['merchant_id'],
-                  'last_2fa_at': status['last_2fa_at'],
-                  '2fa_done_today': status['2fa_done_today'] ?? false,
-                };
-              }
-            });
-          }
+        // Try direct path first: data.data.pipes
+        if (data['data'] != null && data['data']['pipes'] != null) {
+          pipesData = data['data']['pipes'];
+        }
+        // Try double-wrapped: data.data.data.pipes
+        else if (data['data'] != null &&
+            data['data']['data'] != null &&
+            data['data']['data']['pipes'] != null) {
+          pipesData = data['data']['data']['pipes'];
+          debugPrint('│ ⚠️ [2FA] Detected double-wrapped response');
+        }
 
-          _any2FADoneToday = data['data']['any_2fa_done_today'] ?? false;
-
-          debugPrint('│ ✅ [2FA] Status updated:');
-          _pipes2FAStatus.forEach((pipe, status) {
-            debugPrint('│    Pipe $pipe: 2FA Done = ${status['2fa_done_today']}');
+        if (pipesData != null && pipesData is Map<String, dynamic>) {
+          pipesData.forEach((pipe, status) {
+            if (_pipes2FAStatus.containsKey(pipe)) {
+              final pipeStatus = status as Map<String, dynamic>;
+              _pipes2FAStatus[pipe] = {
+                'merchant_id': pipeStatus['merchant_id'],
+                'last_2fa_at': pipeStatus['last_2fa_at'],
+                '2fa_done_today': pipeStatus['is2FADoneToday'] ?? false,
+              };
+            }
           });
 
-          notifyListeners();
+          // Get any2FADoneToday from either level
+          _any2FADoneToday =
+              data['data']?['any2FADoneToday'] ??
+                  data['data']?['data']?['any2FADoneToday'] ??
+                  false;
         }
-      } else {
-        debugPrint('│ ⚠️ [2FA] Failed: ${response.statusCode}');
+
+        debugPrint('│ ✅ [2FA] Status updated:');
+        _pipes2FAStatus.forEach((pipe, status) {
+          debugPrint('│    Pipe $pipe: 2FA Done = ${status['2fa_done_today']}');
+        });
+
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('│ ❌ [2FA] Error: $e');
