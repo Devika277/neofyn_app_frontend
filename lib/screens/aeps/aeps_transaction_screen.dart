@@ -30,6 +30,7 @@ enum AepsServiceType {
   cashWithdrawal('CW', 'Cash Withdrawal', Icons.money_rounded, Color(0xFF2ECC71)),
   balanceEnquiry('BE', 'Balance Enquiry', Icons.account_balance_wallet_rounded, Color(0xFF3498DB)),
   miniStatement('MS', 'Mini Statement', Icons.receipt_long_rounded, Color(0xFFE67E22));
+
   final String code, displayName;
   final IconData icon;
   final Color color;
@@ -49,22 +50,29 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
   late AepsServiceType _currentService;
   DeviceType _selectedDevice = DeviceType.mantra;
   final LocationService _locationService = LocationService();
+  bool _isProcessing = false;
 
-  final _services = [AepsServiceType.cashWithdrawal, AepsServiceType.balanceEnquiry, AepsServiceType.miniStatement];
+  final _services = [
+    AepsServiceType.cashWithdrawal,
+    AepsServiceType.balanceEnquiry,
+    AepsServiceType.miniStatement,
+  ];
 
+  // Shared controllers
   final _aadhaar = TextEditingController();
   final _amount = TextEditingController();
   final _mobile = TextEditingController();
 
+  // Shared state
   String? _bankIIN, _bankName, _pidData;
-  bool _biometricOk = false, _capturing = false, _processing = false;
+  bool _bioOk = false, _capturing = false;
   Map<String, double>? _loc;
-  bool _gettingLoc = false, _deviceOk = false, _checkingDev = false;
+  bool _gettingLoc = false, _devOk = false, _checkingDev = false;
 
   @override
   void initState() {
     super.initState();
-    _currentService = _services.firstWhere((s) => s.code == widget.serviceType, orElse: () => _services[0]);
+    _currentService = _parseService(widget.serviceType);
     _tabController = TabController(length: _services.length, vsync: this, initialIndex: _services.indexOf(_currentService));
     _tabController.addListener(() { if (!_tabController.indexIsChanging) setState(() => _currentService = _services[_tabController.index]); });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -75,15 +83,19 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
     });
   }
 
+  AepsServiceType _parseService(String t) {
+    for (final s in _services) { if (s.code == t) return s; }
+    return _services[0];
+  }
+
   @override
   void dispose() { _aadhaar.dispose(); _amount.dispose(); _mobile.dispose(); _tabController.dispose(); super.dispose(); }
 
-  // ✅ Reset biometric - call after EVERY transaction
-  void _resetBio() => setState(() { _pidData = null; _biometricOk = false; });
+  void _resetBio() => setState(() { _pidData = null; _bioOk = false; });
 
   Future<void> _checkDev() async {
     setState(() => _checkingDev = true);
-    try { final c = await BiometricService.checkDevice(); if (mounted) setState(() => _deviceOk = c); } catch (_) { if (mounted) setState(() => _deviceOk = false); }
+    try { final c = await BiometricService.checkDevice(); if (mounted) setState(() => _devOk = c); } catch (_) { if (mounted) setState(() => _devOk = false); }
     finally { if (mounted) setState(() => _checkingDev = false); }
   }
 
@@ -99,17 +111,17 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
     try {
       final p = context.read<AepsProvider>();
       final pid = await BiometricService.capturePid(clientKey: 'NEOFYN', skipWadh: true, pipe: p.pipe ?? '1');
-      if (mounted) { setState(() { _pidData = pid; _biometricOk = true; }); _ok('Biometric captured!'); }
+      if (mounted) { setState(() { _pidData = pid; _bioOk = true; }); _ok('Biometric captured!'); }
     } catch (e) { _err('Capture failed: $e'); BiometricService.resetDiscovery(); }
     finally { if (mounted) setState(() => _capturing = false); }
   }
 
   Future<void> _process() async {
-    if (_processing) return;
+    if (_isProcessing) return;
     if (_bankIIN == null) { _err('Select bank'); return; }
     if (_aadhaar.text.length != 12) { _err('Enter 12-digit Aadhaar'); return; }
     if (_currentService.isAmountRequired) { final a = double.tryParse(_amount.text) ?? 0; if (a < 100 || a > 10000) { _err('Amount ₹100-₹10000'); return; } }
-    if (!_biometricOk || _pidData == null) { _err('Capture biometric first'); return; }
+    if (!_bioOk || _pidData == null) { _err('Capture biometric first'); return; }
     if (_loc == null) { await _getLoc(); if (_loc == null) return; }
 
     final p = context.read<AepsProvider>();
@@ -118,7 +130,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
     if (mid == null) { _err('Not registered'); return; }
 
     if (!await _confirm()) return;
-    setState(() => _processing = true);
+    setState(() => _isProcessing = true);
 
     try {
       final r = await p.performAepsTransaction(
@@ -132,24 +144,29 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
       );
       if (mounted && r != null) {
         _showResult(r);
-        // ✅ ALWAYS reset biometric after transaction (success or fail)
-        _resetBio();
+        _resetBio(); // ✅ Reset biometric after transaction
       } else if (mounted) _err(p.errorMessage ?? 'Failed');
     } catch (e) { _err('Failed: $e'); }
-    finally { if (mounted) setState(() => _processing = false); }
+    finally { if (mounted) setState(() => _isProcessing = false); }
   }
 
   Future<bool> _confirm() async => await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
     backgroundColor: TxnColors.cardColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    title: Row(children: [Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _currentService.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Icon(_currentService.icon, color: _currentService.color, size: 24)), const SizedBox(width: 12), const Text('Confirm', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))]),
+    title: Row(children: [
+      Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _currentService.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Icon(_currentService.icon, color: _currentService.color, size: 24)),
+      const SizedBox(width: 12), const Text('Confirm Transaction', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+    ]),
     content: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(12)), child: Column(mainAxisSize: MainAxisSize.min, children: [
       _cr(Icons.category_rounded, 'Service', _currentService.displayName), const SizedBox(height: 10),
       _cr(Icons.credit_card_rounded, 'Aadhaar', _mask(_aadhaar.text)),
       if (_currentService.isAmountRequired) ...[const SizedBox(height: 10), _cr(Icons.currency_rupee_rounded, 'Amount', '₹${_amount.text}')],
       const SizedBox(height: 10), _cr(Icons.account_balance_rounded, 'Bank', _bankName ?? 'N/A'),
-      const SizedBox(height: 10), _cr(Icons.fingerprint, 'Biometric', _biometricOk ? '✓ Ready' : '✗ No'),
+      const SizedBox(height: 10), _cr(Icons.fingerprint, 'Biometric', _bioOk ? '✓ Captured' : '✗ No'),
     ])),
-    actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white60))), ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: _currentService.color, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Confirm'))],
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white60))),
+      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: _currentService.color, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Confirm')),
+    ],
   )) ?? false;
 
   Widget _cr(IconData i, String l, String v) => Row(children: [Icon(i, color: _currentService.color.withOpacity(0.7), size: 18), const SizedBox(width: 10), Text('$l:', style: const TextStyle(color: Colors.white60, fontSize: 13)), const Spacer(), Text(v, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))]);
@@ -162,16 +179,16 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
       title: Column(children: [
         Container(width: 64, height: 64, decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: ok ? [TxnColors.success, TxnColors.success.withOpacity(0.7)] : [TxnColors.error, TxnColors.error.withOpacity(0.7)])), child: Icon(ok ? Icons.check_rounded : Icons.close_rounded, color: Colors.white, size: 36)),
         const SizedBox(height: 16),
-        Text(ok ? 'Successful' : 'Failed', style: TextStyle(color: ok ? TxnColors.success : TxnColors.error, fontSize: 20, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
+        Text(ok ? 'Transaction Successful' : 'Transaction Failed', style: TextStyle(color: ok ? TxnColors.success : TxnColors.error, fontSize: 20, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
       ]),
       content: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(12)), child: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (desc.isNotEmpty) Text(desc, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14), textAlign: TextAlign.center),
-        if (desc.isNotEmpty) const SizedBox(height: 16),
+        if (desc.isNotEmpty) ...[Text(desc, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14), textAlign: TextAlign.center), const SizedBox(height: 16)],
         if (r.rrn != null) _rr('RRN', '${r.rrn}'),
         if (r.txnRefId != null) _rr('Ref ID', '${r.txnRefId}'),
         if (r.availableBalance != null) _rr('Balance', '₹${r.availableBalance}'),
         if (r.npciMessage != null && ok) _rr('NPCI', '${r.npciMessage}'),
-        if (r.transactionList is List && (r.transactionList as List).isNotEmpty) ...[
+        // Mini statement
+        if (_currentService.code == 'MS' && r.transactionList != null) ...[
           const SizedBox(height: 12), const Divider(color: Colors.white12), const SizedBox(height: 8),
           const Text('Mini Statement', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)), const SizedBox(height: 8),
           ...((r.transactionList as List).take(5).map((tx) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
@@ -182,13 +199,54 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
         ],
       ])),
       actions: [
-        Row(children: [
-          Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx), style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Done', style: TextStyle(fontSize: 14)))),
-          const SizedBox(width: 12),
-          Expanded(child: ElevatedButton(onPressed: () => Navigator.pop(ctx), style: ElevatedButton.styleFrom(backgroundColor: TxnColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('New Txn', style: TextStyle(fontSize: 14)))),
-        ]),
+        // View Receipt button
+        SizedBox(width: double.infinity, child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(gradient: const LinearGradient(colors: [TxnColors.primary, TxnColors.primaryLight]), borderRadius: BorderRadius.circular(10)),
+          child: ElevatedButton.icon(
+            onPressed: () { Navigator.pop(ctx); _openReceipt(r); },
+            icon: const Icon(Icons.receipt_long_rounded, size: 20),
+            label: const Text('View Receipt'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(vertical: 14)),
+          ),
+        )),
+        // Done button
+        SizedBox(width: double.infinity, child: Container(
+          decoration: BoxDecoration(gradient: LinearGradient(colors: ok ? [TxnColors.primary, TxnColors.primaryLight] : [TxnColors.error, TxnColors.error.withOpacity(0.7)]), borderRadius: BorderRadius.circular(10)),
+          child: ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(vertical: 14)),
+            child: const Text('Done', style: TextStyle(color: Colors.white, fontSize: 15)),
+          ),
+        )),
       ],
     ));
+  }
+
+  void _openReceipt(dynamic r) {
+    try {
+      final p = context.read<AepsProvider>();
+      final ok = r.responseCode == '000' || r.status == '000';
+      final receipt = ReceiptModel.fromApiResponse({
+        'data': {
+          'status': ok ? '000' : '001',
+          'merchantRefId': p.merchantRefId ?? p.getMerchantRefIdForPipe(p.pipe ?? '1') ?? '',
+          'txnRefId': r.txnRefId?.toString() ?? '',
+          'merchantId': p.merchantId ?? p.getMerchantIdForPipe(p.pipe ?? '1') ?? '',
+          'aadhaarNo': _aadhaar.text,
+          'transactionAmount': _currentService.isAmountRequired ? _amount.text : '0',
+          'availableBalance': r.availableBalance?.toString() ?? '0',
+          'txnDateTime': r.txnDateTime?.toString() ?? DateTime.now().toString(),
+          'bankIIN': _bankIIN ?? '',
+          'npciCode': r.npciCode?.toString() ?? '',
+          'npciMessage': r.npciMessage?.toString() ?? '',
+          'statusDescription': r.statusDescription?.toString() ?? r.npciMessage?.toString() ?? 'Completed',
+          'rrn': r.rrn?.toString() ?? '',
+          'pipe': p.pipe ?? '1',
+        }
+      }, transactionType: _currentService.code, merchantId: p.merchantId ?? 'N/A', mobileNumber: _mobile.text.isNotEmpty ? _mobile.text : (p.mobileNo ?? ''));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ReceiptScreen(receipt: receipt)));
+    } catch (e) { debugPrint('Receipt error: $e'); }
   }
 
   Widget _rr(String l, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [Text('$l:', style: const TextStyle(color: Colors.white60, fontSize: 12)), const SizedBox(width: 8), Expanded(child: Text(v, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500), textAlign: TextAlign.right))]));
@@ -210,7 +268,7 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
             const SizedBox(width: 10), Expanded(child: Text(_currentService.displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 18))),
           ])),
           Container(height: 42, margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: TxnColors.cardColor, borderRadius: BorderRadius.circular(12)), child: TabBar(controller: _tabController, isScrollable: false, indicator: BoxDecoration(color: TxnColors.primary.withOpacity(0.2), borderRadius: BorderRadius.circular(10)), indicatorSize: TabBarIndicatorSize.tab, indicatorPadding: const EdgeInsets.all(3), labelColor: Colors.white, unselectedLabelColor: Colors.white54, labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600), tabs: _services.map((s) => Tab(child: Text(s.displayName))).toList())),
-          Expanded(child: _processing ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(color: TxnColors.primary), SizedBox(height: 16), Text('Processing...', style: TextStyle(color: Colors.white54))])) : TabBarView(controller: _tabController, children: _services.map((s) => _content(s)).toList())),
+          Expanded(child: _isProcessing ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(color: TxnColors.primary), SizedBox(height: 16), Text('Processing...', style: TextStyle(color: Colors.white54))])) : TabBarView(controller: _tabController, children: _services.map((s) => _content(s)).toList())),
         ])),
       ),
     );
@@ -218,11 +276,11 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
 
   Widget _content(AepsServiceType s) {
     final p = context.read<AepsProvider>();
-    final ok = _bankIIN != null && _aadhaar.text.length == 12 && _biometricOk && _loc != null && (!s.isAmountRequired || _amount.text.isNotEmpty);
+    final ok = _bankIIN != null && _aadhaar.text.length == 12 && _bioOk && _loc != null && (!s.isAmountRequired || _amount.text.isNotEmpty);
     final aOk = !s.isAmountRequired || (double.tryParse(_amount.text) ?? 0) >= 100;
     return SingleChildScrollView(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _devSel(), const SizedBox(height: 8),
-      _sc('Device', _deviceOk, _checkingDev, _checkDev), const SizedBox(height: 8),
+      _sc('Device', _devOk, _checkingDev, _checkDev), const SizedBox(height: 8),
       _sc('Location', _loc != null, _gettingLoc, _getLoc), const SizedBox(height: 12),
       _lbl('Select Bank'), const SizedBox(height: 4), _bank(p.bankIINs), const SizedBox(height: 10),
       _lbl('Customer Mobile'), const SizedBox(height: 4), _tf(_mobile, 'Mobile', Icons.phone_android_rounded, TextInputType.phone, 10), const SizedBox(height: 10),
@@ -261,10 +319,10 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
 
   Widget _tf(TextEditingController c, String h, IconData i, TextInputType t, [int? m]) => Container(decoration: BoxDecoration(color: TxnColors.cardColor, borderRadius: BorderRadius.circular(10)), child: TextField(controller: c, keyboardType: t, maxLength: m, inputFormatters: t == TextInputType.number ? [FilteringTextInputFormatter.digitsOnly] : null, style: const TextStyle(color: Colors.white, fontSize: 13), decoration: InputDecoration(hintText: h, hintStyle: const TextStyle(color: Colors.white30, fontSize: 13), prefixIcon: Icon(i, color: Colors.white38, size: 18), border: InputBorder.none, counterText: '', contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12))));
 
-  Widget _bio() => Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: TxnColors.cardColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: _biometricOk ? TxnColors.success.withOpacity(0.3) : Colors.white.withOpacity(0.08))), child: Row(children: [
-    _capturing ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: TxnColors.primary)) : Icon(_biometricOk ? Icons.check_circle : Icons.fingerprint, color: _biometricOk ? TxnColors.success : Colors.white38, size: 22),
-    const SizedBox(width: 10), Expanded(child: Text(_biometricOk ? 'Biometric Captured' : 'Biometric Required', style: TextStyle(color: _biometricOk ? TxnColors.success : Colors.white, fontSize: 13))),
-    if (_bankIIN != null && !_biometricOk) ElevatedButton(onPressed: _captureBio, style: ElevatedButton.styleFrom(backgroundColor: TxnColors.primary, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)), child: const Text('Capture', style: TextStyle(color: Colors.white, fontSize: 11))),
+  Widget _bio() => Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: TxnColors.cardColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: _bioOk ? TxnColors.success.withOpacity(0.3) : Colors.white.withOpacity(0.08))), child: Row(children: [
+    _capturing ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: TxnColors.primary)) : Icon(_bioOk ? Icons.check_circle : Icons.fingerprint, color: _bioOk ? TxnColors.success : Colors.white38, size: 22),
+    const SizedBox(width: 10), Expanded(child: Text(_bioOk ? 'Biometric Captured' : 'Biometric Required', style: TextStyle(color: _bioOk ? TxnColors.success : Colors.white, fontSize: 13))),
+    if (_bankIIN != null && !_bioOk) ElevatedButton(onPressed: _captureBio, style: ElevatedButton.styleFrom(backgroundColor: TxnColors.primary, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)), child: const Text('Capture', style: TextStyle(color: Colors.white, fontSize: 11))),
   ]));
 
   Widget _amtErr() => Container(padding: const EdgeInsets.all(10), margin: const EdgeInsets.only(bottom: 8), decoration: BoxDecoration(color: TxnColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: const Row(children: [Icon(Icons.warning_rounded, color: TxnColors.error, size: 14), SizedBox(width: 6), Text('Amount ₹100-₹10000', style: TextStyle(color: TxnColors.error, fontSize: 11))]));
