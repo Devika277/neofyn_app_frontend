@@ -748,12 +748,24 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
       _merchantRefId = provider.merchantRefId;
 
       if (success) {
-        // ✅ SUCCESS - Green popup
-        print('✅ Registration SUCCESS');
-        setState(() {
-          _isRegistrationComplete = true;
-        });
-        _showRegistrationSuccessPopup();
+        if (success) {
+          // ✅ SUCCESS
+          print('✅ Registration SUCCESS');
+          _merchantId = provider.merchantId;
+          _merchantRefId = provider.merchantRefId;
+
+          setState(() {
+            _isRegistrationComplete = true;
+            _isSubmitting = false;
+          });
+
+          // Show green snackbar
+          _showSuccess('Merchant registered successfully!');
+
+          // Show OTP popup IMMEDIATELY
+          _handleResendOtp();
+          _showOtpPopup();
+        }
       } else {
         // ❌ FAILURE PATH
         print('❌ Registration returned false');

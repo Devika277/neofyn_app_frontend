@@ -31,8 +31,10 @@ android {
         applicationId = "com.example.my_app"
         minSdk = 24
         targetSdk = 36
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 1
+        versionName = "1.0.1"
+//        versionCode = flutter.versionCode
+//        versionName = flutter.versionName
 
         buildConfigField("String", "MATM_SECRET_KEY",   "\"${localProps["MATM_SECRET_KEY"] ?: ""}\"")
         buildConfigField("String", "MATM_SALT_KEY",     "\"${localProps["MATM_SALT_KEY"] ?: ""}\"")
