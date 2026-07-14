@@ -1,6 +1,15 @@
 // lib/screens/payout/payout_status_screen.dart
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../services/payout/payout_service.dart';
 import '../payout/payout_receipt_screen.dart';
 
@@ -20,6 +29,7 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
   bool _isPolling = true;
   int _attempts = 0;
   static const int _maxAttempts = 2;
+  bool _isGeneratingPDF = false;
 
   // ─── Theme Colors ─────────────────────────────────────
   static const Color bg = Color(0xFF0A0E0A);
@@ -125,7 +135,15 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded, color: Colors.white70), onPressed: _manualRefresh, tooltip: 'Refresh'),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white70), 
+            onPressed: _manualRefresh, 
+            tooltip: 'Refresh',
+          ),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: Colors.white70),
+            onPressed: () => _shareReceipt(context),
+          ),
         ],
       ),
       body: _loading
@@ -168,70 +186,311 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(children: [
-        // ── Status Header Card with compact breakdown ────
+        // ── Main Receipt Card ──────────────────────────
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: statusColor.withOpacity(0.3)),
-          ),
-          child: Column(children: [
-            // Status icon & title
-            Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(
+            border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
+            boxShadow: [
+              BoxShadow(
                 color: statusColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
               ),
-              child: Icon(statusIcon, size: 36, color: statusColor),
-            ),
-            const SizedBox(height: 12),
-            Text(statusTitle, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: statusColor)),
-            const SizedBox(height: 2),
-            Text(
-              isProcessing ? 'Your payout is being processed...' : g('message'),
-              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11),
-              textAlign: TextAlign.center,
-            ),
-            if (isProcessing) ...[
-              const SizedBox(height: 12),
-              const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: warning)),
             ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // ========== BIG LOGO ==========
+              Image.asset(
+                'assets/images/logo_white.png',
+                height: 100,
+                width: 100,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    height: 100,
+                    width: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      Icons.account_balance,
+                      color: Colors.white.withOpacity(0.3),
+                      size: 50,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
 
-            // ── Compact deduction summary (inside header) ──
-            if (amount > 0) ...[
+              // Title with gradient underline
+              Column(
+                children: [
+                  Text(
+                    'Neofyn Bharath',
+                    style: GoogleFonts.inter(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Container(
+                    width: 40,
+                    height: 2,
+                    margin: const EdgeInsets.only(top: 6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          statusColor.withOpacity(0.6),
+                          statusColor.withOpacity(0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Payout badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: primary.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.payments_rounded,
+                      color: primary,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Payout Transfer',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
-              Container(height: 1, color: Colors.white.withOpacity(0.08)),
-              const SizedBox(height: 12),
-              Row(children: [
-                _compactChip('AEPS', amount, blue),
-                const SizedBox(width: 8),
-                const Icon(Icons.add_rounded, color: Colors.white24, size: 14),
-                const SizedBox(width: 8),
-                _compactChip('Fee', charge, amber),
-                const SizedBox(width: 8),
-                const Icon(Icons.drag_handle_rounded, color: Colors.white24, size: 14),
-                const SizedBox(width: 8),
-                _compactChip('Total', totalDeduction, primary),
-              ]),
-              const SizedBox(height: 10),
-              Row(children: [
-                _compactBalance('AEPS Bal', aepsBalance, blue),
-                const Spacer(),
-                _compactBalance('Main Bal', mainBalance, amber),
-              ]),
+
+              // ========== STATUS ICON (Small) ==========
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Pulsing outer ring
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 1500),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    curve: Curves.easeInOut,
+                    builder: (context, value, child) {
+                      return Container(
+                        width: 60 + (value * 8),
+                        height: 60 + (value * 8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor.withOpacity(0.04 * (1 - value * 0.5)),
+                          border: Border.all(
+                            color: statusColor.withOpacity(0.08 * (1 - value * 0.5)),
+                            width: 1,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  // Main status icon with glow
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 800),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    curve: Curves.elasticOut,
+                    builder: (context, value, child) {
+                      return Transform.scale(
+                        scale: value,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: statusColor.withOpacity(0.12),
+                            border: Border.all(
+                              color: statusColor.withOpacity(0.4),
+                              width: 2.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: statusColor.withOpacity(0.3),
+                                blurRadius: 20,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            statusIcon,
+                            size: 26,
+                            color: statusColor,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Status Text with gradient
+              ShaderMask(
+                shaderCallback: (bounds) => LinearGradient(
+                  colors: [
+                    statusColor,
+                    statusColor.withOpacity(0.6),
+                  ],
+                ).createShader(bounds),
+                child: Text(
+                  statusTitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+
+              // Status message
+              Text(
+                isProcessing ? 'Your payout is being processed...' : g('message'),
+                style: GoogleFonts.inter(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              if (isProcessing) ...[
+                const SizedBox(height: 12),
+                const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: warning)),
+              ],
+
+              // ── Amount Section ──────────────────────────
+              if (amount > 0) ...[
+                const SizedBox(height: 20),
+                Container(height: 1, color: Colors.white.withOpacity(0.08)),
+                const SizedBox(height: 16),
+                Row(children: [
+                  _compactChip('AEPS', amount, blue),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.add_rounded, color: Colors.white24, size: 14),
+                  const SizedBox(width: 8),
+                  _compactChip('Fee', charge, amber),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.drag_handle_rounded, color: Colors.white24, size: 14),
+                  const SizedBox(width: 8),
+                  _compactChip('Total', totalDeduction, primary),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  _compactBalance('AEPS Bal', aepsBalance, blue),
+                  const Spacer(),
+                  _compactBalance('Main Bal', mainBalance, amber),
+                ]),
+              ],
+
+              const SizedBox(height: 20),
+
+              // Dashed line
+              CustomPaint(
+                size: const Size(double.infinity, 1),
+                painter: DashedLinePainterPayout(
+                  color: Colors.white.withOpacity(0.12),
+                  dashWidth: 8,
+                  dashSpace: 6,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── Transaction Details ────────────────────
+              _buildDetailRow('Transaction ID', g('id')),
+              _buildDetailRow('Reference ID', g('merchantrefid')),
+              _buildDetailRow('Amount', '₹${amount.toStringAsFixed(2)}'),
+              if (charge > 0) _buildDetailRow('Commission', '₹${charge.toStringAsFixed(2)}'),
+              _buildDetailRow('Payment Mode', g('paymentmode')),
+              _buildDetailRow('Status', g('status').toUpperCase(), valueColor: statusColor),
+              _buildDetailRow('Provider Ref ID', g('providerrefid')),
+              _buildDetailRow('Bank Ref No', g('bankrefno')),
+              _buildDetailRow('Date & Time', _formatDate(tx['created_at'])),
+
+              const SizedBox(height: 16),
+              CustomPaint(
+                size: const Size(double.infinity, 1),
+                painter: DashedLinePainterPayout(
+                  color: Colors.white.withOpacity(0.12),
+                  dashWidth: 8,
+                  dashSpace: 6,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── Beneficiary Details ────────────────────
+              _buildDetailRow('Beneficiary', g('beneficiaryname')),
+              _buildDetailRow('Account', g('beneficiaryaccountnumber')),
+              _buildDetailRow('IFSC Code', g('beneficiaryifsc')),
+
+              const SizedBox(height: 20),
+
+              // ── Footer ──────────────────────────────────
+              Text(
+                'Thank you for using Neofyn Bharath',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: Colors.white60,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Powered by Neofyn Bharath',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: Colors.white38,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Generated on ${_formatDate(DateTime.now().toString())}',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: Colors.white24,
+                ),
+              ),
             ],
-          ]),
+          ),
         ),
 
-        // ── Receipt Button (Success) ─────────────────────
+        const SizedBox(height: 16),
+
+        // ── Action Buttons ──────────────────────────────
         if (isSuccess) ...[
-          const SizedBox(height: 16),
           Container(
-            width: double.infinity, height: 50,
+            width: double.infinity,
+            height: 50,
             decoration: BoxDecoration(
               gradient: const LinearGradient(colors: [primary, primaryLight]),
               borderRadius: BorderRadius.circular(12),
@@ -244,55 +503,41 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             ),
           ),
+          const SizedBox(height: 12),
         ],
 
-        const SizedBox(height: 16),
-
-        // ── Transaction Details Card ────────────────────
-        _buildCard('Transaction Details', [
-          _row('Transaction ID', g('id')),
-          _row('Reference ID', g('merchantrefid')),
-          _row('Amount', '₹${amount.toStringAsFixed(2)}'),
-          if (charge > 0) _row('Commission', '₹${charge.toStringAsFixed(2)}'),
-          _row('Payment Mode', g('paymentmode')),
-          _row('Status', g('status').toUpperCase(), valueColor: statusColor),
-          _row('Provider Ref ID', g('providerrefid')),
-          _row('Bank Ref No', g('bankrefno')),
-          _row('Date & Time', _formatDate(tx['created_at'])),
-        ]),
-        const SizedBox(height: 12),
-
-        // ── Beneficiary Details Card ────────────────────
-        _buildCard('Beneficiary Details', [
-          _row('Name', g('beneficiaryname')),
-          _row('Account Number', g('beneficiaryaccountnumber')),
-          _row('IFSC Code', g('beneficiaryifsc')),
-        ]),
-        const SizedBox(height: 20),
-
-        // ── Actions ─────────────────────────────────────
         if (isProcessing)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: OutlinedButton.icon(
-              onPressed: _manualRefresh,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Check Status Now'),
-              style: OutlinedButton.styleFrom(foregroundColor: warning, side: const BorderSide(color: warning), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+          OutlinedButton.icon(
+            onPressed: _manualRefresh,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Check Status Now'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: warning,
+              side: const BorderSide(color: warning),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
           ),
+
+        const SizedBox(height: 8),
+
         OutlinedButton.icon(
           onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
           icon: const Icon(Icons.home_rounded, size: 18),
           label: const Text('Go to Home'),
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: BorderSide(color: Colors.white.withOpacity(0.2)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white70,
+            side: BorderSide(color: Colors.white.withOpacity(0.2)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
         ),
         const SizedBox(height: 16),
       ]),
     );
   }
 
-  // ── Compact chip for header ───────────────────────────
+  // ─── Compact chip for header ───────────────────────────
   Widget _compactChip(String label, double value, Color color) {
     return Expanded(
       child: Column(children: [
@@ -303,7 +548,7 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
     );
   }
 
-  // ── Compact balance row ───────────────────────────────
+  // ─── Compact balance row ───────────────────────────────
   Widget _compactBalance(String label, double value, Color color) {
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
@@ -313,26 +558,51 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
     ]);
   }
 
-  Widget _buildCard(String title, List<Widget> children) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white.withOpacity(0.05))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-        const SizedBox(height: 12),
-        ...children,
-      ]),
-    );
-  }
+  // ─── Detail Row (like receipt_screen) ───────────────────
+  Widget _buildDetailRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    TextStyle? valueStyle,
+  }) {
+    if (value.isEmpty || value == 'N/A' || value == 'null') {
+      return const SizedBox.shrink();
+    }
 
-  Widget _row(String label, String value, {Color? valueColor}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-        Expanded(child: Text(value.isNotEmpty ? value : 'N/A', textAlign: TextAlign.right, style: TextStyle(color: valueColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
-      ]),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: Colors.white60,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: valueStyle ??
+                  GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor ?? Colors.white,
+                  ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -345,4 +615,231 @@ class _PayoutStatusScreenState extends State<PayoutStatusScreen> {
       return dateTime.toString();
     }
   }
+
+  // ─── SHARE RECEIPT ──────────────────────────────────────
+  Future<void> _shareReceipt(BuildContext context) async {
+    try {
+      final pdf = await _generatePDF();
+      final directory = await getApplicationDocumentsDirectory();
+      final receiptDir = Directory('${directory.path}/Payout_Receipts');
+      if (!await receiptDir.exists()) {
+        await receiptDir.create(recursive: true);
+      }
+      final fileName = 'Payout_Receipt_${widget.merchantRefId}.pdf';
+      final file = File('${receiptDir.path}/$fileName');
+      await file.writeAsBytes(await pdf.save());
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Payout Transaction Receipt - ${_transaction?['merchantrefid'] ?? ''}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Share error: $e'),
+            backgroundColor: error,
+          ),
+        );
+      }
+    }
+  }
+
+  // ─── PDF GENERATION ──────────────────────────────────────
+  Future<pw.Document> _generatePDF() async {
+    final pdf = pw.Document();
+    final tx = _transaction!;
+    String g(String k, {String d = ''}) => tx[k]?.toString() ?? d;
+    final isSuccess = g('status').toLowerCase() == 'success';
+
+    // Load logo
+    Uint8List? logoBytes;
+    try {
+      final logoData = await rootBundle.load('assets/images/logo_white.png');
+      logoBytes = logoData.buffer.asUint8List();
+    } catch (e) {
+      // Logo not found
+    }
+
+    final amount = double.tryParse(g('amount')) ?? 0;
+    final charge = double.tryParse(g('payout_charge')) ?? 0;
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(10),
+        build: (pw.Context context) {
+          final widgets = <pw.Widget>[
+            // Logo and Header
+            if (logoBytes != null)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Image(
+                    pw.MemoryImage(logoBytes),
+                    height: 30,
+                    width: 30,
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Text(
+                    'Neofyn Bharath',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              )
+            else
+              pw.Text(
+                'Neofyn Bharath',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                textAlign: pw.TextAlign.center,
+              ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'Payout Transfer',
+              style: const pw.TextStyle(fontSize: 10),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              g('status').toUpperCase(),
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: isSuccess ? PdfColors.green : PdfColors.red,
+              ),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            pw.SizedBox(height: 8),
+
+            // Amount
+            pw.Text(
+              '₹${amount.toStringAsFixed(2)}',
+              style: pw.TextStyle(
+                fontSize: 20,
+                fontWeight: pw.FontWeight.bold,
+                color: isSuccess ? PdfColors.green : PdfColors.red,
+              ),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.SizedBox(height: 8),
+
+            // Transaction Details
+            _pdfRow('Transaction ID', g('id')),
+            _pdfRow('Reference ID', g('merchantrefid')),
+            _pdfRow('Amount', '₹${amount.toStringAsFixed(2)}'),
+            if (charge > 0) _pdfRow('Commission', '₹${charge.toStringAsFixed(2)}'),
+            _pdfRow('Payment Mode', g('paymentmode')),
+            _pdfRow('Status', g('status').toUpperCase()),
+            _pdfRow('Provider Ref ID', g('providerrefid')),
+            _pdfRow('Bank Ref No', g('bankrefno')),
+            _pdfRow('Date & Time', _formatDate(tx['created_at'])),
+
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            pw.SizedBox(height: 8),
+
+            // Beneficiary Details
+            _pdfRow('Beneficiary', g('beneficiaryname')),
+            _pdfRow('Account', g('beneficiaryaccountnumber')),
+            _pdfRow('IFSC Code', g('beneficiaryifsc')),
+
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            pw.SizedBox(height: 8),
+
+            // Footer
+            pw.Text(
+              'Thank you for using Neofyn Bharath',
+              style: const pw.TextStyle(fontSize: 10),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'Powered by Neofyn Bharath',
+              style: const pw.TextStyle(fontSize: 8),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.Text(
+              'Generated: ${_formatDate(DateTime.now().toString())}',
+              style: const pw.TextStyle(fontSize: 8),
+              textAlign: pw.TextAlign.center,
+            ),
+          ];
+
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: widgets,
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  pw.Widget _pdfRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Expanded(
+            flex: 2,
+            child: pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
+          ),
+          pw.Expanded(
+            flex: 3,
+            child: pw.Text(
+              value,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── DASHED LINE PAINTER FOR PAYOUT ──────────────────────
+class DashedLinePainterPayout extends CustomPainter {
+  final Color color;
+  final double dashWidth;
+  final double dashSpace;
+
+  const DashedLinePainterPayout({
+    this.color = Colors.white,
+    this.dashWidth = 5.0,
+    this.dashSpace = 3.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    double startX = 0;
+
+    while (startX < size.width) {
+      canvas.drawLine(
+        Offset(startX, 0),
+        Offset(startX + dashWidth, 0),
+        paint,
+      );
+      startX += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

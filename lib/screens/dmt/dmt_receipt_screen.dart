@@ -369,61 +369,61 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF008169), Color(0xFF1AA88A)],
-                ),
-                borderRadius: BorderRadius.circular(10),
+Widget _buildHeader() {
+  return Column(
+    children: [
+      // ========== SIMPLE BIG LOGO ==========
+      Image.asset(
+        'assets/images/logo_white.png',
+        height: 80,
+        width: 80,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF008169), Color(0xFF1AA88A)],
               ),
-              child: const Icon(
-                Iconsax.money_send,
-                color: Colors.white,
-                size: 20,
-              ),
+              borderRadius: BorderRadius.circular(16),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  receipt.merchantName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                Text(
-                  'Digital Money Transfer',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    color: const Color(0xFF1AA88A),
-                  ),
-                ),
-              ],
+            child: const Icon(
+              Iconsax.money_send,
+              color: Colors.white,
+              size: 30,
             ),
-          ],
+          );
+        },
+      ),
+      // const SizedBox(height: 12),
+      
+      Text(
+        receipt.merchantName,
+        style: GoogleFonts.poppins(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
         ),
-        const SizedBox(height: 12),
-        Text(
-          '${receipt.formattedDateShort} | ${receipt.formattedTime}',
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            color: Colors.white54,
-          ),
+      ),
+      Text(
+        'Digital Money Transfer',
+        style: GoogleFonts.poppins(
+          fontSize: 11,
+          color: const Color(0xFF1AA88A),
         ),
-      ],
-    );
-  }
+      ),
+      const SizedBox(height: 8),
+      Text(
+        '${receipt.formattedDateShort} | ${receipt.formattedTime}',
+        style: GoogleFonts.poppins(
+          fontSize: 11,
+          color: Colors.white54,
+        ),
+      ),
+    ],
+  );
+}
 
   Widget _buildSectionTitle(String title) {
     return Padding(
@@ -661,6 +661,16 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
     final pdf = pw.Document();
     final sc = receipt.statusColor;
 
+
+ // Load logo for PDF
+  Uint8List? logoBytes;
+  try {
+    final logoData = await rootBundle.load('assets/images/logo_white.png');
+    logoBytes = logoData.buffer.asUint8List();
+  } catch (e) {
+    // Logo not found, will use text fallback
+  }
+
     // Convert Color to PdfColor
     PdfColor _toPdfColor(Color color) {
       return PdfColor.fromInt(color.value);
@@ -672,14 +682,22 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
     final fontSemiBold = await PdfGoogleFonts.poppinsSemiBold();
 
     pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (context) => [
-          // Header
-          pw.Center(
-            child: pw.Column(
-              children: [
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(20),
+      build: (context) => [
+        // Header with Logo
+        pw.Center(
+          child: pw.Column(
+            children: [
+              // ========== LOGO IN PDF ==========
+              if (logoBytes != null)
+                pw.Image(
+                  pw.MemoryImage(logoBytes),
+                  height: 60,
+                  width: 60,
+                )
+              else
                 pw.Container(
                   width: 50,
                   height: 50,
@@ -699,32 +717,32 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                     ),
                   ),
                 ),
-                pw.SizedBox(height: 10),
-                pw.Text(
-                  receipt.merchantName,
-                  style: pw.TextStyle(
-                    fontSize: 18,
-                    fontWeight: pw.FontWeight.bold,
-                    font: fontBold,
-                  ),
+              pw.SizedBox(height: 10),
+              pw.Text(
+                receipt.merchantName,
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                  font: fontBold,
                 ),
-                pw.Text(
-                  'Digital Money Transfer',
-                  style: pw.TextStyle(
-                    fontSize: 10,
-                    color: _toPdfColor(const Color(0xFF1AA88A)),
-                    font: font,
-                  ),
+              ),
+              pw.Text(
+                'Digital Money Transfer',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  color: _toPdfColor(const Color(0xFF1AA88A)),
+                  font: font,
                 ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  '${receipt.formattedDateShort} | ${receipt.formattedTime}',
-                  style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font),
-                ),
-              ],
-            ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Text(
+                '${receipt.formattedDateShort} | ${receipt.formattedTime}',
+                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font),
+              ),
+            ],
           ),
-          pw.SizedBox(height: 20),
+        ),
+        pw.SizedBox(height: 20),
 
           // Status Section
           pw.Container(
