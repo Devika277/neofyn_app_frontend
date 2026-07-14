@@ -262,6 +262,113 @@ class ApiService {
     }
   }
 
+  // In your API service
+
+
+
+
+// ─── Fetch Mini Statement by Transaction ID ──────────────────
+Future<Map<String, dynamic>> fetchMiniStatementByTransactionId(String transactionId) async {
+  try {
+    final headers = await _getAuthHeaders();
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/aeps/mini-statement/$transactionId');
+    
+    debugPrint('┌──────────────────────────────────────────');
+    debugPrint('│ 🔍 Fetching mini statement by transaction ID');
+    debugPrint('│ 📍 URL: $url');
+    debugPrint('│ 📌 Transaction ID: $transactionId');
+    debugPrint('└──────────────────────────────────────────');
+
+    final response = await LoggedHttpClient.get(
+      url,
+      headers: headers,
+    ).timeout(const Duration(seconds: 15));
+
+    debugPrint('┌──────────────────────────────────────────');
+    debugPrint('│ 📥 Response');
+    debugPrint('│ 📊 Status: ${response.statusCode}');
+    debugPrint('│ 📦 Body: ${response.body}');
+    debugPrint('└──────────────────────────────────────────');
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      if (data['success'] == true && data['data'] != null) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to fetch mini statement');
+    } else {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+  } catch (e) {
+    debugPrint('❌ Error fetching mini statement: $e');
+    rethrow;
+  }
+}
+// ─── Mini Statement Details ──────────────────────────────────
+Future<Map<String, dynamic>> fetchMiniStatementDetails(String rrn, String userId) async {
+  try {
+    final headers = await _getAuthHeaders();
+    
+    // The endpoint might be different - check your API docs
+    // Option 1: Fetch by RRN
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/aeps/mini-statement/$rrn');
+    
+    // Option 2: If the above doesn't work, try with query parameter
+    // final url = Uri.parse('${ApiConfig.baseUrl}/api/aeps/mini-statement?rrn=$rrn');
+    
+    debugPrint('┌──────────────────────────────────────────');
+    debugPrint('│ 🔍 [Mini Statement] Fetching details');
+    debugPrint('│ 📍 URL: $url');
+    debugPrint('│ 📌 RRN: $rrn');
+    debugPrint('│ 👤 UserID: $userId');
+    debugPrint('└──────────────────────────────────────────');
+
+    final response = await LoggedHttpClient.get(
+      url,
+      headers: headers,
+    ).timeout(const Duration(seconds: 15));
+
+    debugPrint('┌──────────────────────────────────────────');
+    debugPrint('│ 📥 [Mini Statement] Response');
+    debugPrint('│ 📊 Status: ${response.statusCode}');
+    debugPrint('│ 📦 Body: ${response.body}');
+    debugPrint('└──────────────────────────────────────────');
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      
+      // Check if the response contains transaction list
+      if (data['success'] == true || data['status'] != null) {
+        // The transaction list might be in different places
+        // Try multiple possible locations
+        if (data['data'] != null && data['data'] is Map<String, dynamic>) {
+          final innerData = data['data'] as Map<String, dynamic>;
+          if (innerData.containsKey('transactionList')) {
+            return innerData;
+          }
+          if (innerData.containsKey('transactions')) {
+            return innerData;
+          }
+          if (innerData.containsKey('mini_statement')) {
+            return innerData;
+          }
+          return innerData;
+        }
+        return data;
+      }
+      throw Exception(data['message'] ?? 'Failed to fetch mini statement details');
+    } else {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+  } catch (e) {
+    debugPrint('❌ [Mini Statement] Error: $e');
+    rethrow;
+  }
+}
+
+
+
+
   // ─── ✅ FIXED: Get AEPS History with Authorization ─────────
   /*Future<Map<String, dynamic>> getAepsHistory({
     int limit = 20,

@@ -1000,158 +1000,203 @@ class _AepsHistoryScreenState extends State<AepsHistoryScreen> {
     );
   }
 
-  void _generateReceipt(Map<String, dynamic> tx) {
-    try {
-      debugPrint('📄 Creating receipt from transaction: ${json.encode(tx)}');
+Future<void> _generateReceipt(Map<String, dynamic> tx) async {
+  try {
+    debugPrint('📄 Creating receipt from transaction: ${json.encode(tx)}');
 
-      // Get transaction type
-      String transactionType = (tx['txn_type'] ?? tx['transactionType'] ?? '').toString();
-      transactionType = _normalizeType(transactionType);
+    // Get transaction type
+    String transactionType = (tx['txn_type'] ?? tx['transactionType'] ?? '').toString();
+    transactionType = _normalizeType(transactionType);
 
-      // Get status
-      final npciCode = (tx['npci_code'] ?? '').toString();
-      final isSuccess = npciCode == '00' || npciCode == '000';
-      final statusMessage = (tx['npci_message'] ?? tx['status'] ?? '').toString();
+    // Get transaction ID and RRN
+    final transactionId = tx['id']?.toString() ?? '';
+    final rrn = tx['rrn']?.toString() ?? '';
 
-      // Get amount
-      final amount = tx['amount']?.toString() ?? '0';
-      final displayAmount = (amount == '0' || amount == 'null' || amount.isEmpty) ? '0.00' : amount;
-
-      // Get available balance
-      final availableBalance = tx['available_balance']?.toString() ?? '';
-
-      // Get Aadhaar
-      final aadhaarLast4 = tx['aadhaar_last4']?.toString() ?? '';
-      final maskedAadhaar = aadhaarLast4.isNotEmpty ? 'XXXX-XXXX-$aadhaarLast4' : 'XXXX-XXXX-XXXX';
-
-      // Get bank details
-      final bankIIN = tx['bank_iin']?.toString() ?? '';
-      final bankName = tx['bank_name']?.toString() ?? 'Not Available';
-
-      // Get RRN
-      final rrn = tx['rrn']?.toString() ?? '';
-
-      // Get merchant details
-      final merchantRefId = tx['merchant_ref_id']?.toString() ??
-          tx['merchantRefId']?.toString() ?? rrn;
-      final merchantId = tx['merchant_id']?.toString() ??
-          tx['merchantId']?.toString() ?? 'N/A';
-
-      // Get date/time
-      final txnDateTime = tx['created_at']?.toString() ??
-          tx['createdAt']?.toString() ?? DateTime.now().toIso8601String();
-
-      // Get device info
-      final deviceUsed = tx['device_used']?.toString() ?? 'Not Available';
-      final provider = tx['provider']?.toString() ?? 'VimoPay';
-
-      // Get mobile number
-      final mobileNumber = tx['mobile_no']?.toString() ??
-          tx['mobileNumber']?.toString() ??
-          tx['mobile']?.toString() ?? '';
-
-      // Get NPCI details
-      final npciMessage = tx['npci_message']?.toString() ?? '';
-
-      // Get mini statement data if available
-      final miniStatement = tx['mini_statement'];
-      final transactionList = tx['transaction_list'];
-
-      // Build receipt data
-      final Map<String, dynamic> receiptData = {
-        'data': {
-          // Status
-          'status': isSuccess ? 'SUCCESS' : 'FAILED',
-          'successStatus': isSuccess.toString(),
-          'npciCode': npciCode,
-          'npciMessage': npciMessage,
-          'statusDescription': npciMessage.isNotEmpty ? npciMessage : statusMessage,
-
-          // Transaction identifiers
-          'txnRefId': rrn,
-          'merchantRefId': merchantRefId,
-          'merchantId': merchantId,
-          'rrn': rrn,
-
-          // Amount details
-          'transactionAmount': displayAmount,
-          'amount': displayAmount,
-          'availableBalance': availableBalance,
-
-          // Customer details
-          'aadhaarNo': maskedAadhaar,
-          'aadhaarNumber': aadhaarLast4,
-          'aadhaar_last4': aadhaarLast4,
-
-          // Bank details
-          'bankIIN': bankIIN,
-          'bankName': bankName,
-          'bank_name': bankName,
-          'bank_iin': bankIIN,
-
-          // Date and time
-          'txnDateTime': txnDateTime,
-          'created_at': txnDateTime,
-
-          // Device and provider
-          'deviceUsed': deviceUsed,
-          'device_used': deviceUsed,
-          'provider': provider,
-          'pipe': tx['pipe']?.toString() ?? '1',
-
-          // Mobile
-          'mobileNumber': mobileNumber,
-
-          // Transaction type
-          'txn_type': transactionType,
-          'transactionType': transactionType,
-
-          // Mini statement data
-          'transactionList': transactionList != null ? json.encode(transactionList) : '',
-          'mini_statement': miniStatement != null ? json.encode(miniStatement) : '',
-
-          'udf1': tx['udf1']?.toString() ?? '',
-          'udf2': tx['udf2']?.toString() ?? '',
-          'udf3': tx['udf3']?.toString() ?? '',
+    // ✅ FETCH MINI STATEMENT DATA USING TRANSACTION ID
+    List<MiniStatementEntry> miniStatementEntries = [];
+    
+    if (transactionType == 'MS' && transactionId.isNotEmpty) {
+      try {
+        debugPrint('📄 Fetching mini statement for transaction ID: $transactionId');
+        final apiService = ApiService();
+        final miniData = await apiService.fetchMiniStatementByTransactionId(transactionId);
+        
+        debugPrint('📄 Mini data received: ${miniData.keys}');
+        
+        // Extract transaction list
+        dynamic transactionList = miniData['transaction_list'] ?? [];
+        
+        if (transactionList is String && transactionList.isNotEmpty) {
+          try {
+            transactionList = jsonDecode(transactionList);
+          } catch (e) {
+            debugPrint('❌ Error parsing transaction_list string: $e');
+            transactionList = [];
+          }
         }
-      };
-
-      debugPrint('📄 Processed receipt data:');
-      debugPrint('  Type: $transactionType');
-      debugPrint('  Amount: $displayAmount');
-      debugPrint('  RRN: $rrn');
-      debugPrint('  Status: ${isSuccess ? "SUCCESS" : "FAILED"}');
-      debugPrint('  Bank: $bankName');
-      debugPrint('  Aadhaar: $maskedAadhaar');
-
-      final receipt = ReceiptModel.fromApiResponse(
-        receiptData,
-        transactionType: transactionType,
-        merchantId: merchantId,
-        mobileNumber: mobileNumber,
-      );
-
-      debugPrint('📄 Receipt model created successfully');
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ReceiptScreen(receipt: receipt),
-        ),
-      );
-    } catch (e, stackTrace) {
-      debugPrint('❌ Receipt error: $e');
-      debugPrint('❌ Stack trace: $stackTrace');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error creating receipt: ${e.toString()}'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+        
+        if (transactionList is List && transactionList.isNotEmpty) {
+          for (var item in transactionList) {
+            if (item is Map<String, dynamic>) {
+              final entry = MiniStatementEntry(
+                date: item['date']?.toString() ?? '',
+                txnType: item['txnType']?.toString() ?? 'Dr',
+                amount: item['amount']?.toString() ?? '0',
+                narration: item['narration']?.toString() ?? '',
+              );
+              miniStatementEntries.add(entry);
+            }
+          }
+          debugPrint('✅ Parsed ${miniStatementEntries.length} entries from mini statement API');
+        } else {
+          debugPrint('⚠️ No transaction list found in mini statement data');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Failed to fetch mini statement: $e');
+        // Try to get from the transaction data as fallback
+        dynamic fallbackData = tx['mini_statement'] ?? tx['transaction_list'] ?? tx['transactionList'];
+        if (fallbackData is String && fallbackData.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(fallbackData);
+            if (parsed is List) {
+              for (var item in parsed) {
+                if (item is Map<String, dynamic>) {
+                  final entry = MiniStatementEntry(
+                    date: item['date']?.toString() ?? '',
+                    txnType: item['txnType']?.toString() ?? 'Dr',
+                    amount: item['amount']?.toString() ?? '0',
+                    narration: item['narration']?.toString() ?? '',
+                  );
+                  miniStatementEntries.add(entry);
+                }
+              }
+              debugPrint('✅ Parsed ${miniStatementEntries.length} entries from fallback data');
+            }
+          } catch (e2) {
+            debugPrint('❌ Error parsing fallback data: $e2');
+          }
+        }
+      }
     }
+
+    // Get status and other details
+    final npciCode = (tx['npci_code'] ?? '').toString();
+    final isSuccess = npciCode == '00' || npciCode == '000';
+    final statusMessage = (tx['npci_message'] ?? tx['status'] ?? '').toString();
+
+    // Get amount
+    final amount = tx['amount']?.toString() ?? '0';
+    final displayAmount = (amount == '0' || amount == 'null' || amount.isEmpty) ? '0.00' : amount;
+
+    // Get available balance
+    final availableBalance = tx['available_balance']?.toString() ?? '';
+
+    // Get Aadhaar
+    final aadhaarLast4 = tx['aadhaar_last4']?.toString() ?? '';
+    final maskedAadhaar = aadhaarLast4.isNotEmpty ? 'XXXX-XXXX-$aadhaarLast4' : 'XXXX-XXXX-XXXX';
+
+    // Get bank details
+    final bankIIN = tx['bank_iin']?.toString() ?? '';
+    final bankName = tx['bank_name']?.toString() ?? 'Not Available';
+
+    // Get merchant details
+    final merchantRefId = tx['merchant_ref_id']?.toString() ??
+        tx['merchantRefId']?.toString() ?? rrn;
+    final merchantId = tx['merchant_id']?.toString() ??
+        tx['merchantId']?.toString() ?? 'N/A';
+
+    // Get date/time
+    final txnDateTime = tx['created_at']?.toString() ??
+        tx['createdAt']?.toString() ?? DateTime.now().toIso8601String();
+
+    // Get device info
+    final deviceUsed = tx['device_used']?.toString() ?? 'Not Available';
+    final provider = tx['provider']?.toString() ?? 'VimoPay';
+
+    // Get mobile number
+    final mobileNumber = tx['mobile_no']?.toString() ??
+        tx['mobileNumber']?.toString() ??
+        tx['mobile']?.toString() ?? '';
+
+    // Get NPCI details
+    final npciMessage = tx['npci_message']?.toString() ?? '';
+
+    // Build receipt data
+    final Map<String, dynamic> receiptData = {
+      'data': {
+        'status': isSuccess ? 'SUCCESS' : 'FAILED',
+        'successStatus': isSuccess.toString(),
+        'npciCode': npciCode,
+        'npciMessage': npciMessage,
+        'statusDescription': npciMessage.isNotEmpty ? npciMessage : statusMessage,
+        'txnRefId': rrn,
+        'merchantRefId': merchantRefId,
+        'merchantId': merchantId,
+        'rrn': rrn,
+        'transactionAmount': displayAmount,
+        'amount': displayAmount,
+        'availableBalance': availableBalance,
+        'aadhaarNo': maskedAadhaar,
+        'aadhaarNumber': aadhaarLast4,
+        'aadhaar_last4': aadhaarLast4,
+        'bankIIN': bankIIN,
+        'bankName': bankName,
+        'bank_name': bankName,
+        'bank_iin': bankIIN,
+        'txnDateTime': txnDateTime,
+        'created_at': txnDateTime,
+        'deviceUsed': deviceUsed,
+        'device_used': deviceUsed,
+        'provider': provider,
+        'pipe': tx['pipe']?.toString() ?? '1',
+        'mobileNumber': mobileNumber,
+        'txn_type': transactionType,
+        'transactionType': transactionType,
+        // ✅ Pass the parsed mini statement entries
+        'transactionList': miniStatementEntries.map((e) => e.toJson()).toList(),
+        'udf1': tx['udf1']?.toString() ?? '',
+        'udf2': tx['udf2']?.toString() ?? '',
+        'udf3': tx['udf3']?.toString() ?? '',
+      }
+    };
+
+    debugPrint('📄 Processed receipt data:');
+    debugPrint('  Type: $transactionType');
+    debugPrint('  Amount: $displayAmount');
+    debugPrint('  RRN: $rrn');
+    debugPrint('  Status: ${isSuccess ? "SUCCESS" : "FAILED"}');
+    debugPrint('  Bank: $bankName');
+    debugPrint('  Aadhaar: $maskedAadhaar');
+    debugPrint('  Mini Statement Entries: ${miniStatementEntries.length}');
+
+    final receipt = ReceiptModel.fromApiResponse(
+      receiptData,
+      transactionType: transactionType,
+      merchantId: merchantId,
+      mobileNumber: mobileNumber,
+    );
+
+    debugPrint('📄 Receipt model created successfully');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReceiptScreen(receipt: receipt),
+      ),
+    );
+  } catch (e, stackTrace) {
+    debugPrint('❌ Receipt error: $e');
+    debugPrint('❌ Stack trace: $stackTrace');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error creating receipt: ${e.toString()}'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
+}
 
   String _getTypeLabel(String t) {
     switch (_normalizeType(t)) {
