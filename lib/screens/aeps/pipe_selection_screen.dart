@@ -4,6 +4,7 @@ import 'package:my_app/layout/UserHomeScreen.dart';
 import 'package:my_app/screens/aeps/two_factor_auth_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/aeps_provider.dart';
+import 'aeps_dashboard_screen.dart';
 import 'aeps_wrapper_screen.dart';
 import 'merchant_registration_screen.dart';
 import 'ekyc_screen.dart';
@@ -126,7 +127,6 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
     }
   }
 
-  // ✅ NEW: Navigate based on pipe status + 2FA status
   Future<void> _navigateBasedOnStatus(String pipe, Map<String, dynamic>? status) async {
     final provider = context.read<AepsProvider>();
     provider.setActivePipe(pipe);
@@ -156,7 +156,6 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
 
     final regStatus = status['registrationStatus'] ?? '';
 
-    // ── Case 2: Registration incomplete states ──
     switch (regStatus) {
       case 'otp_pending':
         final needsRefresh = await Navigator.push<bool>(
@@ -189,7 +188,6 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
         return;
 
       case 'active':
-      // ── Case 3: Active but 2FA NOT done today → 2FA Screen ──
         if (!is2FADone) {
           debugPrint('🔴 Pipe $pipe: Active but 2FA NOT done today → Navigating to 2FA');
           final needsRefresh = await Navigator.push<bool>(
@@ -203,17 +201,38 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
               ),
             ),
           );
-          if (needsRefresh == true && mounted) _loadAllData();
+
+          if (needsRefresh == true && mounted) {
+            await _loadAllData();
+            await Future.delayed(const Duration(milliseconds: 100));
+
+            final updated2FAStatus = pipe2FAStatus[pipe] ?? false;
+            debugPrint('🔄 Updated 2FA status for pipe $pipe: $updated2FAStatus');
+
+            if (updated2FAStatus) {
+              debugPrint('🟢 Pipe $pipe: 2FA completed → Navigating to Dashboard');
+              if (mounted) {
+                // ✅ FIXED: Navigate directly to Dashboard, not Wrapper
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => AepsDashboardScreen(pipe: pipe)),
+                );
+                if (mounted) _loadAllData();
+              }
+              return;
+            } else {
+              debugPrint('⚠️ Pipe $pipe: 2FA still not done after refresh');
+            }
+          }
           return;
         }
 
-        // ── Case 4: Active + 2FA done → Transaction Screen ──
-        debugPrint('🟢 Pipe $pipe: Active + 2FA done → Navigating to AEPS');
+        // ✅ FIXED: Navigate directly to Dashboard, not Wrapper
+        debugPrint('🟢 Pipe $pipe: Active + 2FA done → Navigating to Dashboard');
         await Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const AepsWrapperScreen()),
+          MaterialPageRoute(builder: (_) => AepsDashboardScreen(pipe: pipe)),
         );
-        // Refresh on return
         if (mounted) _loadAllData();
         return;
 

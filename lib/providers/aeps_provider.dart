@@ -521,7 +521,6 @@ class AepsProvider extends ChangeNotifier {
   // ----------------------------------------------------------------------
   // ✅ FIXED: Merchant Registration - Use the pipe from the request
   // ----------------------------------------------------------------------
-  // In AepsProvider, replace registerMerchant response handling:
   Future<bool> registerMerchant(MerchantRegistrationRequest request) async {
     _isLoading = true;
     _errorMessage = null;
@@ -558,45 +557,52 @@ class AepsProvider extends ChangeNotifier {
         emailId: request.emailId,
       );
 
-      final response = await _aepsService.registerMerchant(regRequest);
+      try {
+        final response = await _aepsService.registerMerchant(regRequest);
 
-      final merchantId = response.merchantId ?? '';
-      final merchantRefId = response.merchantRefId ?? '';
-      final status = response.status;
-      final statusDescription = response.statusDescription;
-      final txnRefId = response.txnRefId ?? '';
+        final merchantId = response.merchantId ?? '';
+        final merchantRefId = response.merchantRefId ?? '';
+        final status = response.status;
+        final statusDescription = response.statusDescription;
 
-      print('📥 Registration Response:');
-      print('   status: $status (type: ${status.runtimeType})');
-      print('   statusDescription: $statusDescription (type: ${statusDescription.runtimeType})');
-      print('   merchantId: $merchantId (type: ${merchantId.runtimeType})');
-      print('   merchantRefId: $merchantRefId (type: ${merchantRefId.runtimeType})');
+        print('📥 Registration Response:');
+        print('   status: $status');
+        print('   merchantId: $merchantId');
+        print('   statusDescription: $statusDescription');
 
-      final lowerDesc = statusDescription.toLowerCase();
+        final lowerDesc = statusDescription.toLowerCase();
 
-      // ✅ CHECK: Success can be indicated by status='000' OR by message containing 'success'
-      final isSuccess = status == '000' ||
-          merchantId.isNotEmpty ||
-          lowerDesc.contains('registered successfully') ||
-          lowerDesc.contains('otp verification pending');
+        // Success check
+        final isSuccess = status == '000' ||
+            merchantId.isNotEmpty ||
+            lowerDesc.contains('registered successfully') ||
+            lowerDesc.contains('otp verification pending');
 
-      // Case 1: EKYC/2FA required
-      if (status == '003' && lowerDesc.contains('ekyc')) {
-        _errorMessage = statusDescription;
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
+        // EKYC/2FA case
+        if (status == '003' || lowerDesc.contains('ekyc') || lowerDesc.contains('2fa')) {
+          if (merchantId.isNotEmpty) {
+            _merchantId = merchantId;
+            _merchantRefId = merchantRefId;
+            _mobileNo = request.mobileNo;
+            _aadhaarNo = request.aadhaarNo;
+            _pipe = requestPipe;
 
-      // Case 2: Already registered for another pipe
-      if (!isSuccess && lowerDesc.contains('already registered for pipe')) {
-        final pipeMatch = RegExp(r'pipe\s*(\d+)', caseSensitive: false)
-            .firstMatch(statusDescription);
-        if (pipeMatch != null) {
-          _existingPipeNumber = pipeMatch.group(1);
+            await _authService.saveMerchantData(
+              merchantId: merchantId,
+              merchantRefId: merchantRefId,
+              mobileNo: request.mobileNo,
+              aadhaarNo: request.aadhaarNo,
+            );
+
+            _errorMessage = 'Merchant already exists. EKYC/2FA required.';
+            print('⚠️ EKYC/2FA required - Merchant ID: $merchantId');
+            _isLoading = false;
+            notifyListeners();
+            return false; // Return false to show contact support popup
+          }
         }
 
-        if (merchantId.isNotEmpty) {
+        if (isSuccess && merchantId.isNotEmpty) {
           _merchantId = merchantId;
           _merchantRefId = merchantRefId;
           _mobileNo = request.mobileNo;
@@ -609,58 +615,68 @@ class AepsProvider extends ChangeNotifier {
             mobileNo: request.mobileNo,
             aadhaarNo: request.aadhaarNo,
           );
+
+          print('✅ New merchant saved. ID: $merchantId');
+          _isLoading = false;
+          notifyListeners();
+          return true;
         }
 
-        print('✅ Existing merchant (different pipe). ID: $merchantId');
+        _errorMessage = statusDescription.isNotEmpty ? statusDescription : 'Registration failed';
         _isLoading = false;
         notifyListeners();
-        return true;
-      }
+        return false;
 
-      // Case 3: Success (new registration)
-      if (isSuccess && merchantId.isNotEmpty) {
-        _merchantId = merchantId;
-        _merchantRefId = merchantRefId;
-        _mobileNo = request.mobileNo;
-        _aadhaarNo = request.aadhaarNo;
-        _pipe = requestPipe;
+      } catch (e) {
+        // ✅ CATCH: Handle 500 errors that might contain EKYC info
+        final errorStr = e.toString();
+        print('❌ Service error: $errorStr');
 
-        await _authService.saveMerchantData(
-          merchantId: merchantId,
-          merchantRefId: merchantRefId,
-          mobileNo: request.mobileNo,
-          aadhaarNo: request.aadhaarNo,
-        );
+        final lowerError = errorStr.toLowerCase();
 
-        print('✅ New merchant saved. ID: $merchantId');
+        // ✅ Check if this is an EKYC/2FA "already exist" error from 500 response
+        if (lowerError.contains('merchant_exists_ekyc') ||
+            (lowerError.contains('ekyc') && lowerError.contains('merchant')) ||
+            (lowerError.contains('2fa') && lowerError.contains('merchant')) ||
+            lowerError.contains('already exist with same mobile')) {
+
+          // Try to find the existing merchant for this pipe
+          final existingMerchantId = await _findExistingMerchant(requestPipe);
+
+          if (existingMerchantId != null) {
+            _merchantId = existingMerchantId;
+            _merchantRefId = 'NEO_${_userId}_${DateTime.now().millisecondsSinceEpoch}';
+            _errorMessage = 'Merchant already exists. EKYC/2FA required.';
+
+            print('⚠️ EKYC/2FA required for existing merchant: $existingMerchantId');
+            _isLoading = false;
+            notifyListeners();
+            return false; // Return false to show contact support popup
+          }
+        }
+
+        _errorMessage = errorStr;
         _isLoading = false;
         notifyListeners();
-        return true;
+        return false;
       }
-
-      // Case 4: All other failures
-      _errorMessage = statusDescription.isNotEmpty ? statusDescription : 'Registration failed';
-      print('❌ Registration failed: $_errorMessage');
-      _isLoading = false;
-      notifyListeners();
-      return false;
 
     } catch (e, stackTrace) {
       print('❌ Registration error: $e');
-      print('❌ Stack trace: $stackTrace');
-      print('❌ Error type: ${e.runtimeType}');
-
-      String errorStr;
-      if (e is TypeError) {
-        errorStr = 'Data processing error. Please try again.';
-      } else {
-        errorStr = e.toString();
-      }
-
-      _errorMessage = errorStr;
+      _errorMessage = e.toString();
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+// ✅ Helper: Find existing merchant for a pipe
+  Future<String?> _findExistingMerchant(String pipe) async {
+    try {
+      final statusData = await fetchPipeStatus(pipe);
+      return statusData?['merchantId']?.toString();
+    } catch (e) {
+      return null;
     }
   }
 
@@ -975,7 +991,6 @@ class AepsProvider extends ChangeNotifier {
 
       debugPrint('┌──────────────────────────────────────────');
       debugPrint('│ 🔍 [2FA] Checking 2FA Status');
-      debugPrint('│ 📍 URL: $url');
       debugPrint('│ 👤 UserID: $userId');
       debugPrint('└──────────────────────────────────────────');
 
@@ -991,33 +1006,48 @@ class AepsProvider extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        debugPrint('│ 📥 [2FA] Raw response: ${jsonEncode(data)}');
 
-        if (data['success'] == true && data['data'] != null) {
-          final pipesData = data['data']['pipes'];
+        // ✅ Handle double-wrapped response
+        var pipesData;
 
-          if (pipesData != null && pipesData is Map<String, dynamic>) {
-            pipesData.forEach((pipe, status) {
-              if (_pipes2FAStatus.containsKey(pipe)) {
-                _pipes2FAStatus[pipe] = {
-                  'merchant_id': status['merchant_id'],
-                  'last_2fa_at': status['last_2fa_at'],
-                  '2fa_done_today': status['2fa_done_today'] ?? false,
-                };
-              }
-            });
-          }
+        // Try direct path first: data.data.pipes
+        if (data['data'] != null && data['data']['pipes'] != null) {
+          pipesData = data['data']['pipes'];
+        }
+        // Try double-wrapped: data.data.data.pipes
+        else if (data['data'] != null &&
+            data['data']['data'] != null &&
+            data['data']['data']['pipes'] != null) {
+          pipesData = data['data']['data']['pipes'];
+          debugPrint('│ ⚠️ [2FA] Detected double-wrapped response');
+        }
 
-          _any2FADoneToday = data['data']['any_2fa_done_today'] ?? false;
-
-          debugPrint('│ ✅ [2FA] Status updated:');
-          _pipes2FAStatus.forEach((pipe, status) {
-            debugPrint('│    Pipe $pipe: 2FA Done = ${status['2fa_done_today']}');
+        if (pipesData != null && pipesData is Map<String, dynamic>) {
+          pipesData.forEach((pipe, status) {
+            if (_pipes2FAStatus.containsKey(pipe)) {
+              final pipeStatus = status as Map<String, dynamic>;
+              _pipes2FAStatus[pipe] = {
+                'merchant_id': pipeStatus['merchant_id'],
+                'last_2fa_at': pipeStatus['last_2fa_at'],
+                '2fa_done_today': pipeStatus['is2FADoneToday'] ?? false,
+              };
+            }
           });
 
-          notifyListeners();
+          // Get any2FADoneToday from either level
+          _any2FADoneToday =
+              data['data']?['any2FADoneToday'] ??
+                  data['data']?['data']?['any2FADoneToday'] ??
+                  false;
         }
-      } else {
-        debugPrint('│ ⚠️ [2FA] Failed: ${response.statusCode}');
+
+        debugPrint('│ ✅ [2FA] Status updated:');
+        _pipes2FAStatus.forEach((pipe, status) {
+          debugPrint('│    Pipe $pipe: 2FA Done = ${status['2fa_done_today']}');
+        });
+
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('│ ❌ [2FA] Error: $e');

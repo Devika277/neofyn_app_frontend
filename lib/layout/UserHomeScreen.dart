@@ -215,7 +215,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         setState(() => _isAEPSOnboarded = isOnboarded);
       }
     } catch (e) {
-      debugPrint('❌ [AEPS] Status check error: $e');
+      debugPrint('❌ [BBPS] Status check error: $e');
     } finally {
       if (mounted) setState(() => _isCheckingAEPS = false);
     }
@@ -254,7 +254,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Please complete the AEPS merchant onboarding first to access your profile.',
+              'Please complete the BBPS & AEPS merchant onboarding first to access your profile.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white60, fontSize: 14),
             ),

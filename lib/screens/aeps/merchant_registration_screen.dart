@@ -773,12 +773,10 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         final errorMsg = (provider.errorMessage ?? 'Registration failed');
         final lowerMsg = errorMsg.toLowerCase();
 
-        // Check if it's "already registered" - treat as success (GREEN)
+        // Already registered - treat as success (GREEN)
         if (lowerMsg.contains('already registered for pipe') ||
-            lowerMsg.contains('already exist') ||
-            lowerMsg.contains('already registered')) {
-
-          print('⚠️ Already registered - treating as success');
+            lowerMsg.contains('already registered') ||
+            (lowerMsg.contains('already exist') && !lowerMsg.contains('ekyc') && !lowerMsg.contains('2fa'))) {
 
           _merchantId = provider.merchantId;
           _merchantRefId = provider.merchantRefId;
@@ -797,8 +795,8 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
             }
           });
 
-        } else if (lowerMsg.contains('ekyc')) {
-          // EKYC needed - Contact support (YELLOW popup)
+        } else if (lowerMsg.contains('ekyc') || lowerMsg.contains('2fa')) {
+          // EKYC/2FA needed - Contact support (YELLOW)
           setState(() {
             _isSubmitting = false;
             _isRegistrationComplete = false;
@@ -806,7 +804,7 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
           _showContactSupportPopup(errorMsg);
 
         } else {
-          // Real error - show RED
+          // Real error - RED
           setState(() {
             _isSubmitting = false;
             _isRegistrationComplete = false;
