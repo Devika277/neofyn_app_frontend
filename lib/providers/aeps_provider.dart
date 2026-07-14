@@ -560,11 +560,10 @@ class AepsProvider extends ChangeNotifier {
 
       final response = await _aepsService.registerMerchant(regRequest);
 
-      // ✅ ALL FIELDS WITH NULL SAFETY
       final merchantId = response.merchantId ?? '';
       final merchantRefId = response.merchantRefId ?? '';
-      final status = response.status;  // Already safe from your fix (defaults to '999')
-      final statusDescription = response.statusDescription;  // Already safe
+      final status = response.status;
+      final statusDescription = response.statusDescription;
       final txnRefId = response.txnRefId ?? '';
 
       print('📥 Registration Response:');
@@ -573,10 +572,15 @@ class AepsProvider extends ChangeNotifier {
       print('   merchantId: $merchantId (type: ${merchantId.runtimeType})');
       print('   merchantRefId: $merchantRefId (type: ${merchantRefId.runtimeType})');
 
-      // ✅ SAFE: Check if description contains 'ekyc'
       final lowerDesc = statusDescription.toLowerCase();
 
-      // Case 1: EKYC/2FA required - Contact Support
+      // ✅ CHECK: Success can be indicated by status='000' OR by message containing 'success'
+      final isSuccess = status == '000' ||
+          merchantId.isNotEmpty ||
+          lowerDesc.contains('registered successfully') ||
+          lowerDesc.contains('otp verification pending');
+
+      // Case 1: EKYC/2FA required
       if (status == '003' && lowerDesc.contains('ekyc')) {
         _errorMessage = statusDescription;
         _isLoading = false;
@@ -585,7 +589,7 @@ class AepsProvider extends ChangeNotifier {
       }
 
       // Case 2: Already registered for another pipe
-      if (status != '000' && lowerDesc.contains('already registered for pipe')) {
+      if (!isSuccess && lowerDesc.contains('already registered for pipe')) {
         final pipeMatch = RegExp(r'pipe\s*(\d+)', caseSensitive: false)
             .firstMatch(statusDescription);
         if (pipeMatch != null) {
@@ -613,8 +617,8 @@ class AepsProvider extends ChangeNotifier {
         return true;
       }
 
-      // Case 3: New registration success
-      if (status == '000' && merchantId.isNotEmpty) {
+      // Case 3: Success (new registration)
+      if (isSuccess && merchantId.isNotEmpty) {
         _merchantId = merchantId;
         _merchantRefId = merchantRefId;
         _mobileNo = request.mobileNo;
@@ -646,7 +650,6 @@ class AepsProvider extends ChangeNotifier {
       print('❌ Stack trace: $stackTrace');
       print('❌ Error type: ${e.runtimeType}');
 
-      // ✅ SAFE: Convert error to string
       String errorStr;
       if (e is TypeError) {
         errorStr = 'Data processing error. Please try again.';

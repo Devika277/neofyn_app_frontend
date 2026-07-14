@@ -162,8 +162,25 @@ class RegisterMerchantResponse {
     this.merchantRefId,
     this.pipe,
   });
+  factory RegisterMerchantResponse.fromJson(Map<String, dynamic> json) {
+    // ✅ UNWRAP: Check if response is wrapped in 'data' key
+    final data = json['data'] as Map<String, dynamic>?;
+    final d = data ?? json;  // Use data if present, otherwise use root json
 
-  factory RegisterMerchantResponse.fromJson(Map<String, dynamic> json) =>
+    return RegisterMerchantResponse(
+      status: (d['status'] as String?) ?? '999',
+      merchantStatus: d['merchantStatus'] as String?,
+      statusDescription: (d['statusDescription'] as String?) ??
+          (d['message'] as String?) ??
+          (json['message'] as String?) ??  // Also check root level
+          'Unknown status',
+      merchantId: d['merchantId'] as String?,
+      txnRefId: d['txnRefId'] as String?,
+      merchantRefId: d['merchantRefId'] as String?,
+      pipe: d['pipe'] as String?,
+    );
+  }
+  /*factory RegisterMerchantResponse.fromJson(Map<String, dynamic> json) =>
       RegisterMerchantResponse(
         status: (json['status'] as String?) ?? '999',
         merchantStatus: json['merchantStatus'] as String?,
@@ -175,7 +192,7 @@ class RegisterMerchantResponse {
         txnRefId: json['txnRefId'] as String?,
         merchantRefId: json['merchantRefId'] as String?,
         pipe: json['pipe'] as String?,
-      );
+      );*/
 }
 
 class Bank {
@@ -1072,18 +1089,20 @@ class AepsService {
     try {
       final response = await request;
 
-      // ✅ ADD THIS: Log the full response
       print('📦 Raw response data type: ${response.data.runtimeType}');
       print('📦 Raw response data: ${response.data}');
 
-      // ✅ Check if response.data is null or empty
       if (response.data == null) {
         throw Exception('Server returned empty response');
       }
 
+      // ✅ If response has 'data' key, log it
+      if (response.data is Map && (response.data as Map).containsKey('data')) {
+        print('📦 Nested data: ${(response.data as Map)['data']}');
+      }
+
       return fromJson(response.data);
     } on DioException catch (e) {
-      // ✅ Better error handling
       print('❌ Dio error: ${e.type}');
       print('❌ Response status: ${e.response?.statusCode}');
       print('❌ Response data: ${e.response?.data}');
@@ -1092,8 +1111,11 @@ class AepsService {
       String message;
 
       if (responseData is Map) {
+        // ✅ Check nested data for error messages too
+        final data = responseData['data'];
         message = (responseData['message'] as String?) ??
             (responseData['statusDescription'] as String?) ??
+            (data is Map ? data['statusDescription'] as String? : null) ??
             (responseData['error'] as String?) ??
             'Request failed';
       } else {
@@ -1106,6 +1128,7 @@ class AepsService {
       rethrow;
     }
   }
+
   /*Future<T> _handleResponse<T>(Future<Response> request, T Function(dynamic) fromJson) async {
     try {
       final response = await request;
