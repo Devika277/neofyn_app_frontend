@@ -14,6 +14,7 @@ import 'change_tpin_screen.dart' show ChangeTpinScreen;
 import 'login_screen.dart';
 import 'set_mpin_screen.dart';
 import 'set_tpin_screen.dart';
+import 'reset_password.dart';
 import '../../widgets/fund_requests_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -525,6 +526,13 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadProfile();
   }
 
+  void _navigateToResetPassword() {
+  Navigator.push(
+    context, 
+    MaterialPageRoute(builder: (_) => const ResetPasswordScreen())
+  );
+}
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -593,6 +601,13 @@ class _ProfilePageState extends State<ProfilePage> {
             onTap: _navigateToTpin,
           );
         }),
+        SizedBox(height: _spacing * 0.5),
+        _buildMenuItem( // ← ADD THIS
+          icon: Icons.password_rounded, 
+          title: 'Change Password', 
+          subtitle: 'Update your account password', 
+          onTap: _navigateToResetPassword
+        ),
         SizedBox(height: _spacing * 0.5),
         _buildSectionHeader('Transactions'),
         SizedBox(height: _spacing),

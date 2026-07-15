@@ -174,4 +174,37 @@ class AuthService {
     final data = jsonDecode(response.body);
     return data['valid'] == true;
   }
+
+// ========== RESET PASSWORD METHOD ==========
+
+/// Reset password (requires current password, new password, and confirmation)
+Future<void> resetPassword({
+  required String currentPassword,
+  required String newPassword,
+  required String confirmPassword,
+}) async {
+  final url = Uri.parse('$_baseUrl/api/auth/reset-password');
+  final headers = await _getAuthHeaders();
+
+  final response = await LoggedHttpClient.post(
+    url,
+    headers: headers,
+    body: jsonEncode({
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+      'confirmPassword': confirmPassword,
+    }),
+  );
+
+  if (response.statusCode != 200) {
+    throw _parseError(response);
+  }
+
+  // Optional: If the API returns a new token, save it
+  final data = jsonDecode(response.body);
+  final newToken = data['accessToken'] as String?;
+  if (newToken != null) {
+    await saveAccessToken(newToken);
+  }
+}  
 }
