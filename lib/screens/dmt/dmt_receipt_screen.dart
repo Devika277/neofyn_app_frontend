@@ -1,7 +1,5 @@
-// lib/screens/dmt_receipt_screen.dart
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
@@ -20,7 +18,6 @@ class DmtReceiptModel {
   final String transactionId;
   final String utrNumber;
   final String amount;
-  final String commission;
   final String status;
   final String transferMode;
   final String remitterName;
@@ -34,15 +31,18 @@ class DmtReceiptModel {
   final String failureReason;
   final DateTime transactionDate;
   final String merchantName;
-  final String retailerId;
+  final String outletName;
+  final String senderName;
+  final String senderMobile;
+  final String shopAddress;
+  final String shopPhone;
 
   DmtReceiptModel({
     required this.transactionId,
     required this.utrNumber,
     required this.amount,
-    this.commission = '',
     required this.status,
-    this.transferMode = '',
+    this.transferMode = 'IMPS',
     required this.remitterName,
     this.remitterMobile = '',
     required this.beneficiaryName,
@@ -53,13 +53,17 @@ class DmtReceiptModel {
     this.remark = '',
     this.failureReason = '',
     required this.transactionDate,
-    this.merchantName = 'NEOFYN Bharath',
-    this.retailerId = '',
+    this.merchantName = 'Spay India',
+    this.outletName = '',
+    this.senderName = '',
+    this.senderMobile = '',
+    this.shopAddress = '',
+    this.shopPhone = '',
   });
 
-  String get formattedDate => DateFormat('dd MMM yyyy, hh:mm a').format(transactionDate);
-  String get formattedDateShort => DateFormat('dd/MM/yyyy').format(transactionDate);
-  String get formattedTime => DateFormat('hh:mm:ss a').format(transactionDate);
+  String get formattedDate => DateFormat('dd-MM-yyyy hh:mm a').format(transactionDate);
+  String get formattedDateShort => DateFormat('dd-MM-yyyy').format(transactionDate);
+  String get formattedTime => DateFormat('hh:mm a').format(transactionDate);
   String get fileNameDate => DateFormat('yyyyMMdd_HHmmss').format(transactionDate);
 
   bool get isSuccess => status.toLowerCase() == 'success' || status.toLowerCase() == 'completed';
@@ -108,7 +112,7 @@ class DmtReceiptModel {
   }
 
   String get statusSubtitle {
-    if (isSuccess) return 'Sent Successfully';
+    if (isSuccess) return 'Amount Sent Successfully';
     if (isFailed) return 'Transaction could not be completed';
     if (isProcessing) return 'Please wait while we process your transaction';
     if (isOnHold) return 'Please contact customer support';
@@ -135,36 +139,28 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E0A),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
-          'DMT Receipt',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-            color: Colors.white,
-          ),
+          'Payment Confirmation',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18, color: const Color(0xFF1E293B)),
         ),
         centerTitle: true,
-        backgroundColor: const Color(0xFF0A0E0A),
+        backgroundColor: const Color(0xFFF8FAFC),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left, color: Colors.white),
+          icon: const Icon(Iconsax.arrow_left, color: Color(0xFF1E293B)),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
             icon: _isSharing
-                ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70)
-            )
-                : const Icon(Iconsax.share, color: Colors.white70, size: 20),
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF64748B)))
+                : const Icon(Iconsax.share, color: Color(0xFF64748B), size: 20),
             onPressed: _isSharing ? null : () => _shareReceipt(context),
           ),
           IconButton(
-            icon: const Icon(Iconsax.copy, color: Colors.white70, size: 20),
+            icon: const Icon(Iconsax.copy, color: Color(0xFF64748B), size: 20),
             onPressed: () => _copyReceiptDetails(context),
           ),
         ],
@@ -191,11 +187,19 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
     final sc = receipt.statusColor;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1F1A),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A342A)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade200, width: 1),
       ),
       child: Column(
         children: [
@@ -204,92 +208,55 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
             height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: sc.withOpacity(0.1),
-              border: Border.all(color: sc, width: 2),
+              color: sc.withOpacity(0.12),
+              border: Border.all(color: sc, width: 2.5),
             ),
             child: receipt.isProcessing
                 ? Padding(
-              padding: const EdgeInsets.all(16),
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(sc),
-              ),
+              padding: const EdgeInsets.all(18),
+              child: CircularProgressIndicator(strokeWidth: 3, valueColor: AlwaysStoppedAnimation<Color>(sc)),
             )
-                : Icon(
-              receipt.statusIcon,
-              color: sc,
-              size: 36,
-            ),
+                : Icon(receipt.statusIcon, color: sc, size: 36),
           ),
           const SizedBox(height: 16),
           Text(
             receipt.statusTitle,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
+            style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
           ),
           const SizedBox(height: 8),
           Text(
             '₹${receipt.amount}',
-            style: GoogleFonts.poppins(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: sc,
-            ),
+            style: GoogleFonts.poppins(fontSize: 36, fontWeight: FontWeight.w800, color: sc, letterSpacing: 1),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             receipt.statusSubtitle,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.white54,
-            ),
+            style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF64748B)),
             textAlign: TextAlign.center,
           ),
           if (receipt.statusMessage.isNotEmpty &&
-              (receipt.isFailed || receipt.isProcessing || receipt.isOnHold ||
-                  (receipt.isSuccess && receipt.failureReason.isNotEmpty))) ...[
+              (receipt.isFailed || receipt.isProcessing || receipt.isOnHold || (receipt.isSuccess && receipt.failureReason.isNotEmpty))) ...[
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: sc.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
+                color: sc.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: sc.withOpacity(0.2)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    receipt.isFailed ? Iconsax.warning_2 : Iconsax.info_circle,
-                    size: 16,
-                    color: sc,
-                  ),
+                  Icon(receipt.isFailed ? Iconsax.warning_2 : Iconsax.info_circle, size: 18, color: sc),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          receipt.statusLabel,
-                          style: GoogleFonts.poppins(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: sc.withOpacity(0.7),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          receipt.statusMessage,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: sc,
-                          ),
-                        ),
+                        Text(receipt.statusLabel, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: sc.withOpacity(0.8))),
+                        const SizedBox(height: 3),
+                        Text(receipt.statusMessage, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: sc)),
                       ],
                     ),
                   ),
@@ -305,163 +272,217 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
   Widget _buildReceiptCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1F1A),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A342A)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade200, width: 1),
       ),
       child: Column(
         children: [
           _buildHeader(),
-          const Divider(color: Color(0xFF2A342A), height: 24),
-          _buildSectionTitle('Transaction Details'),
-          _buildDetailRow('Transaction ID', receipt.transactionId, showCopy: true),
-          if (receipt.utrNumber.isNotEmpty && receipt.utrNumber != 'N/A')
-            _buildDetailRow('UTR Number', receipt.utrNumber, showCopy: true, isHighlight: true),
-          _buildDetailRow('Transfer Mode', receipt.transferMode),
-          _buildDetailRow('Date', receipt.formattedDate),
-          _buildDetailRow('Status', receipt.status.toUpperCase(),
-              valueColor: receipt.statusColor, isHighlight: true),
-          if (receipt.remark.isNotEmpty)
-            _buildDetailRow('Remark', receipt.remark),
-          const Divider(color: Color(0xFF2A342A), height: 24),
-          _buildSectionTitle('Remitter Details'),
-          _buildDetailRow('Name', receipt.remitterName),
-          if (receipt.remitterMobile.isNotEmpty)
-            _buildDetailRow('Mobile', receipt.remitterMobile),
-          const Divider(color: Color(0xFF2A342A), height: 24),
-          _buildSectionTitle('Beneficiary Details'),
-          _buildDetailRow('Name', receipt.beneficiaryName),
-          _buildDetailRow('Account Number', _maskAccount(receipt.accountNumber), showCopy: true),
-          _buildDetailRow('Bank', receipt.bankName),
-          if (receipt.ifscCode.isNotEmpty)
-            _buildDetailRow('IFSC Code', receipt.ifscCode, showCopy: true),
-          if (receipt.beneficiaryMobile.isNotEmpty)
-            _buildDetailRow('Mobile', receipt.beneficiaryMobile),
-          const Divider(color: Color(0xFF2A342A), height: 24),
-          _buildSectionTitle('Amount Details'),
-          _buildDetailRow('Transfer Amount', '₹${receipt.amount}', isHighlight: true),
-          if (receipt.commission.isNotEmpty && receipt.commission != 'null')
-            _buildDetailRow('Commission', '₹${receipt.commission}'),
-          if (receipt.isFailed && receipt.failureReason.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildDetailRow(
-              'Failure Reason',
-              receipt.failureReason,
-              valueColor: const Color(0xFFEF4444),
-              isHighlight: true,
-            ),
+          const SizedBox(height: 20),
+          _buildDivider(),
+          const SizedBox(height: 16),
+          if (receipt.outletName.isNotEmpty || receipt.shopAddress.isNotEmpty || receipt.shopPhone.isNotEmpty) ...[
+            if (receipt.outletName.isNotEmpty) _buildOutletRow('Outlet Name', receipt.outletName),
+            if (receipt.shopAddress.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _buildOutletRow('Shop Address', receipt.shopAddress),
+            ],
+            if (receipt.shopPhone.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _buildOutletRow('Shop Phone', receipt.shopPhone),
+            ],
+            const SizedBox(height: 14),
+            _buildDivider(),
+            const SizedBox(height: 16),
           ],
-          if (receipt.isSuccess && receipt.failureReason.isNotEmpty &&
-              receipt.failureReason.toLowerCase() != 'transaction successful') ...[
-            const SizedBox(height: 8),
-            _buildDetailRow(
-              'Status Message',
-              receipt.failureReason,
-              valueColor: const Color(0xFF10B981),
-            ),
+          if (receipt.senderName.isNotEmpty) ...[
+            _buildSenderRow('Sender Name', receipt.senderName),
+            const SizedBox(height: 10),
+            _buildSenderRow('Sender Mobile', receipt.senderMobile),
+            const SizedBox(height: 14),
+            _buildDivider(),
+            const SizedBox(height: 16),
           ],
-          const Divider(color: Color(0xFF2A342A), height: 24),
+          _buildSectionHeader('Beneficiary'),
+          const SizedBox(height: 10),
+          _buildTable([
+            _buildTableRow('Name', receipt.beneficiaryName, isBold: true),
+            _buildTableRow('Bank Name', receipt.bankName),
+            _buildTableRow('Account No', receipt.accountNumber, showCopy: true, isHighlight: true),
+            if (receipt.beneficiaryMobile.isNotEmpty) _buildTableRow('Mobile No', receipt.beneficiaryMobile),
+          ]),
+          const SizedBox(height: 16),
+          _buildDivider(),
+          const SizedBox(height: 16),
+          _buildSectionHeader('Transaction Summary'),
+          const SizedBox(height: 10),
+          _buildTransactionSummaryTable(),
+          const SizedBox(height: 12),
+          _buildTotalRow(),
+          const SizedBox(height: 10),
+          _buildAmountInWords(),
+          const SizedBox(height: 20),
+          _buildDivider(),
+          const SizedBox(height: 16),
           _buildFooter(),
         ],
       ),
     );
   }
 
-Widget _buildHeader() {
-  return Column(
-    children: [
-      // ========== SIMPLE BIG LOGO ==========
-      Image.asset(
-        'assets/images/logo_white.png',
-        height: 80,
-        width: 80,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF008169), Color(0xFF1AA88A)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Iconsax.money_send,
-              color: Colors.white,
-              size: 30,
-            ),
-          );
-        },
-      ),
-      // const SizedBox(height: 12),
-      
-      Text(
-        receipt.merchantName,
-        style: GoogleFonts.poppins(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF008169), Color(0xFF1AA88A)]),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Icon(Iconsax.money_send, color: Colors.white, size: 32),
         ),
-      ),
-      Text(
-        'Digital Money Transfer',
-        style: GoogleFonts.poppins(
-          fontSize: 11,
-          color: const Color(0xFF1AA88A),
+        const SizedBox(height: 12),
+        Text(
+          receipt.merchantName,
+          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B), letterSpacing: 0.5),
         ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        '${receipt.formattedDateShort} | ${receipt.formattedTime}',
-        style: GoogleFonts.poppins(
-          fontSize: 11,
-          color: Colors.white54,
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1AA88A).withOpacity(0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1AA88A).withOpacity(0.2)),
+          ),
+          child: Text(
+            'Payment Confirmation',
+            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1AA88A)),
+          ),
         ),
-      ),
-    ],
-  );
-}
+        const SizedBox(height: 10),
+        Text(
+          '${receipt.formattedDateShort}  ${receipt.formattedTime}',
+          style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF94A3B8)),
+        ),
+      ],
+    );
+  }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF1AA88A),
-            ),
+  Widget _buildSectionHeader(String title) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1AA88A),
+            borderRadius: BorderRadius.circular(2),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(height: 1, color: const Color(0xFF2A342A)),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      height: 1,
+      color: Colors.grey.shade200,
+    );
+  }
+
+  Widget _buildOutletRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
           ),
-        ],
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSenderRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: const Color(0xFF1E293B)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTable(List<Widget> rows) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200, width: 1),
+      ),
+      child: Column(
+        children: rows.asMap().entries.map((entry) {
+          final isLast = entry.key == rows.length - 1;
+          return Column(
+            children: [
+              entry.value,
+              if (!isLast) const Divider(color: Color(0xFFE2E8F0), height: 0.5, thickness: 0.5),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget _buildDetailRow(String label, String value,
-      {Color? valueColor, bool showCopy = false, bool isHighlight = false}) {
+  Widget _buildTableRow(String label, String value, {Color? valueColor, bool showCopy = false, bool isHighlight = false, bool isBold = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 130,
+            width: 100,
             child: Text(
               label,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.white54,
-              ),
+              style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
             ),
           ),
           Expanded(
@@ -473,9 +494,9 @@ Widget _buildHeader() {
                     value,
                     textAlign: TextAlign.right,
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: isHighlight ? FontWeight.w600 : FontWeight.w500,
-                      color: valueColor ?? Colors.white,
+                      fontSize: isHighlight ? 13 : 12,
+                      fontWeight: isBold ? FontWeight.w700 : (isHighlight ? FontWeight.w600 : FontWeight.w500),
+                      color: valueColor ?? const Color(0xFF1E293B),
                     ),
                   ),
                 ),
@@ -485,11 +506,22 @@ Widget _buildHeader() {
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: value));
                       HapticFeedback.lightImpact();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('$label copied', style: const TextStyle(fontSize: 12)),
+                          backgroundColor: const Color(0xFF10B981),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
                     },
-                    child: Icon(
-                      Iconsax.copy,
-                      size: 14,
-                      color: Colors.white30,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Iconsax.copy, size: 12, color: Color(0xFF64748B)),
                     ),
                   ),
                 ],
@@ -501,49 +533,205 @@ Widget _buildHeader() {
     );
   }
 
+  Widget _buildTransactionSummaryTable() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200, width: 1),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1AA88A).withOpacity(0.06),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'TID/Type/UTR',
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1AA88A)),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    'Amount',
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1AA88A)),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    'Status',
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1AA88A)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        receipt.transactionId,
+                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${receipt.transferMode} / ${receipt.utrNumber}',
+                        style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    '₹${receipt.amount}',
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: receipt.statusColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: receipt.statusColor.withOpacity(0.2)),
+                      ),
+                      child: Text(
+                        receipt.status.toUpperCase(),
+                        style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, color: receipt.statusColor),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalRow() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1AA88A).withOpacity(0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF1AA88A).withOpacity(0.15)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Total Amount',
+            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+          ),
+          Text(
+            '₹${receipt.amount}',
+            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF1AA88A)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAmountInWords() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Text(
+            'Amount (In Words) : ',
+            style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+          ),
+          Expanded(
+            child: Text(
+              _numberToWords(int.parse(receipt.amount)),
+              style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _numberToWords(int number) {
+    if (number == 0) return 'Zero';
+    final units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    final teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    final tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    String convert(int n) {
+      if (n < 10) return units[n];
+      if (n < 20) return teens[n - 10];
+      if (n < 100) {
+        final t = tens[n ~/ 10];
+        final u = units[n % 10];
+        return u.isEmpty ? t : '$t $u';
+      }
+      if (n < 1000) {
+        final h = units[n ~/ 100];
+        final rest = n % 100;
+        return rest == 0 ? '$h Hundred' : '$h Hundred ${convert(rest)}';
+      }
+      if (n < 100000) {
+        final t = n ~/ 1000;
+        final rest = n % 1000;
+        return rest == 0 ? '${convert(t)} Thousand' : '${convert(t)} Thousand ${convert(rest)}';
+      }
+      if (n < 10000000) {
+        final l = n ~/ 100000;
+        final rest = n % 100000;
+        return rest == 0 ? '${convert(l)} Lakh' : '${convert(l)} Lakh ${convert(rest)}';
+      }
+      return 'Number too large';
+    }
+    return '${convert(number)} Only';
+  }
+
   Widget _buildFooter() {
-    final sc = receipt.statusColor;
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: sc.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: sc),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                receipt.statusIcon,
-                size: 14,
-                color: sc,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                receipt.isSuccess
-                    ? 'Verified Transaction'
-                    : receipt.isFailed
-                    ? 'Failed Transaction'
-                    : receipt.isProcessing
-                    ? 'Transaction Processing'
-                    : receipt.isOnHold
-                    ? 'Transaction On Hold'
-                    : 'Status: ${receipt.status.toUpperCase()}',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: sc,
-                ),
-              ),
-            ],
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Iconsax.verify, size: 14, color: receipt.statusColor),
+            const SizedBox(width: 6),
+            Text(
+              'This is a computer generated receipt',
+              style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF94A3B8)),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         Text(
-          'This is a computer generated receipt',
-          style: GoogleFonts.poppins(fontSize: 10, color: Colors.white30),
+          '© 2022 Spay India - All Rights Reserved',
+          style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'This is a system generated Receipt. Hence no seal or signature required.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(fontSize: 9, color: const Color(0xFFCBD5E1)),
         ),
       ],
     );
@@ -557,24 +745,19 @@ Widget _buildHeader() {
           child: ElevatedButton.icon(
             onPressed: _isDownloading ? null : () => _downloadReceipt(context),
             icon: _isDownloading
-                ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            )
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Iconsax.document_download, size: 18),
             label: Text(_isDownloading ? 'Downloading...' : 'Download Receipt'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF008169),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
@@ -582,34 +765,29 @@ Widget _buildHeader() {
             icon: const Icon(Iconsax.close_circle, size: 18),
             label: const Text('Close'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white70,
-              side: const BorderSide(color: Color(0xFF2A342A)),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              foregroundColor: const Color(0xFF64748B),
+              side: BorderSide(color: Colors.grey.shade300),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        // Folder path info
+        const SizedBox(height: 14),
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
           ),
           child: Row(
             children: [
-              const Icon(Iconsax.folder_2, color: Colors.white38, size: 16),
-              const SizedBox(width: 8),
+              Icon(Iconsax.folder_2, color: const Color(0xFF94A3B8), size: 14),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Receipts saved to:\nInternal Storage/Documents/NEOFYN Bharath/DMT/',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    color: Colors.white38,
-                  ),
+                  'Receipts saved to:\nInternal Storage/Documents/Spay India/DMT/',
+                  style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
                 ),
               ),
             ],
@@ -619,221 +797,273 @@ Widget _buildHeader() {
     );
   }
 
-  String _maskAccount(String account) {
-    if (account.length <= 4) return account;
-    return '${'*' * (account.length - 4)}${account.substring(account.length - 4)}';
-  }
-
-  // Get the DMT folder path
   Future<Directory> _getDmtFolderPath() async {
-    Directory? directory;
-
     if (Platform.isAndroid) {
-      // For Android 10 and below, use external storage
-      // For Android 11+, use app-specific directory or media store
-      directory = Directory('/storage/emulated/0/Documents/NEOFYN Bharath/DMT');
-
-      // Check if we can access it, if not fallback to app directory
-      if (!await directory.exists()) {
+      final paths = [
+        '/storage/emulated/0/Documents/Spay India/DMT',
+        '/storage/emulated/0/Download/Spay India/DMT',
+      ];
+      for (final path in paths) {
         try {
-          await directory.create(recursive: true);
+          final directory = Directory(path);
+          if (!await directory.exists()) {
+            await directory.create(recursive: true);
+          }
+          final testFile = File('${directory.path}/.write_test');
+          await testFile.writeAsString('test');
+          await testFile.delete();
+          debugPrint('✅ Using: $path');
+          return directory;
         } catch (e) {
-          // Fallback to app documents directory
-          final appDir = await getApplicationDocumentsDirectory();
-          directory = Directory('${appDir.path}/NEOFYN Bharath/DMT');
+          debugPrint('⚠️ Cannot use $path: $e');
         }
       }
-    } else {
-      // For iOS
-      final appDir = await getApplicationDocumentsDirectory();
-      directory = Directory('${appDir.path}/NEOFYN Bharath/DMT');
     }
-
+    final appDir = await getApplicationDocumentsDirectory();
+    final directory = Directory('${appDir.path}/Spay India/DMT');
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
-
+    debugPrint('📁 Using app directory: ${directory.path}');
     return directory;
   }
 
-  // Generate PDF receipt
+  // REPLACE the entire _generatePdf() function with this:
+
+  // REPLACE the _generatePdf() function with this corrected version:
+
   Future<File> _generatePdf() async {
     final pdf = pw.Document();
     final sc = receipt.statusColor;
 
+    Uint8List? logoBytes;
+    try {
+      final logoData = await rootBundle.load('assets/images/logo_white.png');
+      logoBytes = logoData.buffer.asUint8List();
+    } catch (e) {}
 
- // Load logo for PDF
-  Uint8List? logoBytes;
-  try {
-    final logoData = await rootBundle.load('assets/images/logo_white.png');
-    logoBytes = logoData.buffer.asUint8List();
-  } catch (e) {
-    // Logo not found, will use text fallback
-  }
+    PdfColor _toPdfColor(Color color) => PdfColor.fromInt(color.value);
 
-    // Convert Color to PdfColor
-    PdfColor _toPdfColor(Color color) {
-      return PdfColor.fromInt(color.value);
-    }
-
-    // Load a font that supports all characters
     final font = await PdfGoogleFonts.poppinsRegular();
     final fontBold = await PdfGoogleFonts.poppinsBold();
     final fontSemiBold = await PdfGoogleFonts.poppinsSemiBold();
 
     pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(20),
-      build: (context) => [
-        // Header with Logo
-        pw.Center(
-          child: pw.Column(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(30),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // ========== LOGO IN PDF ==========
-              if (logoBytes != null)
-                pw.Image(
-                  pw.MemoryImage(logoBytes),
-                  height: 60,
-                  width: 60,
-                )
-              else
-                pw.Container(
-                  width: 50,
-                  height: 50,
-                  decoration: pw.BoxDecoration(
-                    color: _toPdfColor(const Color(0xFF008169)),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
-                  ),
-                  child: pw.Center(
-                    child: pw.Text(
-                      'NB',
-                      style: pw.TextStyle(
-                        fontSize: 20,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.white,
-                        font: fontBold,
+              // ── HEADER ──
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    pw.Container(
+                      width: 60,
+                      height: 60,
+                      decoration: pw.BoxDecoration(
+                        color: _toPdfColor(const Color(0xFF008169)),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(14)),
+                      ),
+                      child: pw.Center(
+                        child: pw.Text('SI', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.white, font: fontBold)),
                       ),
                     ),
-                  ),
-                ),
-              pw.SizedBox(height: 10),
-              pw.Text(
-                receipt.merchantName,
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                  font: fontBold,
+                    pw.SizedBox(height: 8),
+                    pw.Text(receipt.merchantName, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, font: fontBold)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('Payment Confirmation', style: pw.TextStyle(fontSize: 11, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontSemiBold)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('${receipt.formattedDateShort}  ${receipt.formattedTime}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font)),
+                  ],
                 ),
               ),
-              pw.Text(
-                'Digital Money Transfer',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: _toPdfColor(const Color(0xFF1AA88A)),
-                  font: font,
+              pw.SizedBox(height: 16),
+
+              // ── OUTLET NAME (if exists) ──
+              if (receipt.outletName.isNotEmpty) ...[
+                pw.Row(
+                  children: [
+                    pw.SizedBox(width: 100, child: pw.Text('Outlet Name :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                    pw.Expanded(child: pw.Text(receipt.outletName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                  ],
+                ),
+                pw.SizedBox(height: 4),
+              ],
+
+              // ── SENDER NAME ──
+              pw.Row(
+                children: [
+                  pw.SizedBox(width: 100, child: pw.Text('Sender Name :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                  pw.Expanded(child: pw.Text(receipt.senderName.isNotEmpty ? receipt.senderName : receipt.remitterName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+
+              // ── BENEFICIARY ──
+              pw.Row(
+                children: [
+                  pw.SizedBox(width: 100, child: pw.Text('Beneficiary :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                  pw.Expanded(child: pw.Text(receipt.beneficiaryName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+
+              // ── BANK NAME ──
+              pw.Row(
+                children: [
+                  pw.SizedBox(width: 100, child: pw.Text('Bank Name :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                  pw.Expanded(child: pw.Text(receipt.bankName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+
+              // ── MOBILE NO ──
+              if (receipt.beneficiaryMobile.isNotEmpty) ...[
+                pw.Row(
+                  children: [
+                    pw.SizedBox(width: 100, child: pw.Text('Mobile No :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                    pw.Expanded(child: pw.Text(receipt.beneficiaryMobile, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                  ],
+                ),
+                pw.SizedBox(height: 4),
+              ],
+
+              // ── SENDER MOBILE ──
+              if (receipt.senderMobile.isNotEmpty) ...[
+                pw.Row(
+                  children: [
+                    pw.SizedBox(width: 100, child: pw.Text('Sender Mobile :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                    pw.Expanded(child: pw.Text(receipt.senderMobile, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                  ],
+                ),
+                pw.SizedBox(height: 4),
+              ],
+
+              // ── ACCOUNT NO ──
+              pw.Row(
+                children: [
+                  pw.SizedBox(width: 100, child: pw.Text('Account No :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                  pw.Expanded(child: pw.Text(receipt.accountNumber, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+
+              // ── DATE & TIME ──
+              pw.Row(
+                children: [
+                  pw.SizedBox(width: 100, child: pw.Text('Date & Time :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
+                  pw.Expanded(child: pw.Text(receipt.formattedDate, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold))),
+                ],
+              ),
+              pw.SizedBox(height: 16),
+
+              // ── DIVIDER ──
+              pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+              pw.SizedBox(height: 10),
+
+              // ── TRANSACTION SUMMARY HEADER ──
+              pw.Text('Transaction Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, font: fontBold)),
+              pw.SizedBox(height: 8),
+
+              // ── TABLE HEADER ──
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: _toPdfColor(const Color(0xFF1AA88A).withOpacity(0.08)),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(flex: 3, child: pw.Text('TID/Type/UTR', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
+                    pw.Expanded(flex: 1, child: pw.Text('Amount', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
+                    pw.Expanded(flex: 1, child: pw.Text('Status', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
+                  ],
+                ),
+              ),
+
+              // ── TABLE ROW ──
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(receipt.transactionId, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontBold)),
+                          pw.Text('${receipt.transferMode} / ${receipt.utrNumber}', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, font: font)),
+                        ],
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 1,
+                      child: pw.Text('₹${receipt.amount}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: fontBold)),
+                    ),
+                    pw.Expanded(
+                      flex: 1,
+                      child: pw.Container(
+                        alignment: pw.Alignment.centerRight,
+                        child: pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: pw.BoxDecoration(
+                            color: _toPdfColor(receipt.statusColor.withOpacity(0.12)),
+                            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                            border: pw.Border.all(color: _toPdfColor(receipt.statusColor.withOpacity(0.2)), width: 0.5),
+                          ),
+                          child: pw.Text(
+                            receipt.status.toUpperCase(),
+                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: _toPdfColor(receipt.statusColor), font: fontBold),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               pw.SizedBox(height: 8),
-              pw.Text(
-                '${receipt.formattedDateShort} | ${receipt.formattedTime}',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font),
+
+              // ── TOTAL AMOUNT ──
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: _toPdfColor(const Color(0xFF1AA88A).withOpacity(0.06)),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  border: pw.Border.all(color: _toPdfColor(const Color(0xFF1AA88A).withOpacity(0.15)), width: 0.5),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Total Amount : ₹${receipt.amount}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: fontBold)),
+                  ],
+                ),
               ),
+              pw.SizedBox(height: 4),
+
+              // ── AMOUNT IN WORDS ──
+              pw.Row(
+                children: [
+                  pw.Text('Amount (In Words) : ', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600, font: font)),
+                  pw.Expanded(child: pw.Text(_numberToWords(int.parse(receipt.amount)), style: pw.TextStyle(fontSize: 9, font: fontSemiBold))),
+                ],
+              ),
+              pw.SizedBox(height: 16),
+
+              // ── DIVIDER ──
+              pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+              pw.SizedBox(height: 8),
+
+              // ── FOOTER ──
+              pw.Center(child: pw.Text('© 2022 All Rights Reserved', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500, font: font))),
+              pw.SizedBox(height: 2),
+              pw.Center(child: pw.Text('This is a system generated Receipt. Hence no seal or signature required.', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey500, font: font))),
             ],
-          ),
-        ),
-        pw.SizedBox(height: 20),
-
-          // Status Section
-          pw.Container(
-            padding: const pw.EdgeInsets.all(16),
-            decoration: pw.BoxDecoration(
-              color: _toPdfColor(sc.withOpacity(0.1)),
-              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-              border: pw.Border.all(color: _toPdfColor(sc), width: 1),
-            ),
-            child: pw.Column(
-              children: [
-                pw.Text(
-                  receipt.statusTitle,
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _toPdfColor(sc),
-                    font: fontBold,
-                  ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  '₹${receipt.amount}',
-                  style: pw.TextStyle(
-                    fontSize: 28,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _toPdfColor(sc),
-                    font: fontBold,
-                  ),
-                ),
-                if (receipt.statusMessage.isNotEmpty)
-                  pw.Text(
-                    receipt.statusMessage,
-                    style: pw.TextStyle(fontSize: 10, color: _toPdfColor(sc), font: font),
-                  ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 20),
-
-          // Transaction Details
-          _buildPdfSection('Transaction Details', fontBold, fontSemiBold, font),
-          _buildPdfRow('Transaction ID', receipt.transactionId, fontSemiBold, font),
-          if (receipt.utrNumber.isNotEmpty)
-            _buildPdfRow('UTR Number', receipt.utrNumber, fontSemiBold, font),
-          _buildPdfRow('Transfer Mode', receipt.transferMode, fontSemiBold, font),
-          _buildPdfRow('Date', receipt.formattedDate, fontSemiBold, font),
-          _buildPdfRow('Status', receipt.status.toUpperCase(), fontSemiBold, font),
-          if (receipt.remark.isNotEmpty)
-            _buildPdfRow('Remark', receipt.remark, fontSemiBold, font),
-          pw.SizedBox(height: 10),
-
-          // Remitter Details
-          _buildPdfSection('Remitter Details', fontBold, fontSemiBold, font),
-          _buildPdfRow('Name', receipt.remitterName, fontSemiBold, font),
-          if (receipt.remitterMobile.isNotEmpty)
-            _buildPdfRow('Mobile', receipt.remitterMobile, fontSemiBold, font),
-          pw.SizedBox(height: 10),
-
-          // Beneficiary Details
-          _buildPdfSection('Beneficiary Details', fontBold, fontSemiBold, font),
-          _buildPdfRow('Name', receipt.beneficiaryName, fontSemiBold, font),
-          _buildPdfRow('Account Number', _maskAccount(receipt.accountNumber), fontSemiBold, font),
-          _buildPdfRow('Bank', receipt.bankName, fontSemiBold, font),
-          if (receipt.ifscCode.isNotEmpty)
-            _buildPdfRow('IFSC Code', receipt.ifscCode, fontSemiBold, font),
-          if (receipt.beneficiaryMobile.isNotEmpty)
-            _buildPdfRow('Mobile', receipt.beneficiaryMobile, fontSemiBold, font),
-          pw.SizedBox(height: 10),
-
-          // Amount Details
-          _buildPdfSection('Amount Details', fontBold, fontSemiBold, font),
-          _buildPdfRow('Transfer Amount', '₹${receipt.amount}', fontSemiBold, font),
-          if (receipt.commission.isNotEmpty && receipt.commission != 'null')
-            _buildPdfRow('Commission', '₹${receipt.commission}', fontSemiBold, font),
-          pw.SizedBox(height: 20),
-
-          // Footer
-          pw.Center(
-            child: pw.Text(
-              'This is a computer generated receipt',
-              style: pw.TextStyle(fontSize: 9, color: PdfColors.grey500, font: font),
-            ),
-          ),
-          pw.Center(
-            child: pw.Text(
-              'Generated by ${receipt.merchantName}',
-              style: pw.TextStyle(fontSize: 9, color: PdfColors.grey500, font: font),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
 
@@ -844,95 +1074,31 @@ Widget _buildHeader() {
     return file;
   }
 
-  pw.Widget _buildPdfSection(String title, pw.Font fontBold, pw.Font fontSemiBold, pw.Font font) {
+  pw.Widget _pdfVerticalRow(String label, String value, pw.Font font, pw.Font fontBold, {PdfColor? valueColor}) {
     return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Row(
-          children: [
-            pw.Text(
-              title,
-              style: pw.TextStyle(
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-                color: _toPdfColor(const Color(0xFF1AA88A)),
-                font: fontBold,
-              ),
-            ),
-            pw.Expanded(
-              child: pw.Container(
-                height: 1,
-                color: PdfColors.grey300,
-                margin: const pw.EdgeInsets.only(left: 8),
-              ),
-            ),
-          ],
-        ),
-        pw.SizedBox(height: 6),
+        pw.Text(label, style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font)),
+        pw.SizedBox(height: 2),
+        pw.Text(value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: valueColor ?? PdfColors.black, font: fontBold)),
       ],
     );
   }
 
-  PdfColor _toPdfColor(Color color) {
-    return PdfColor.fromInt(color.value);
-  }
-
-  pw.Widget _buildPdfRow(String label, String value, pw.Font fontSemiBold, pw.Font font) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 3),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(
-            label,
-            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font),
-          ),
-          pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fontSemiBold),
-          ),
-        ],
-      ),
+  pw.Widget _pdfSectionTitle(String title, pw.Font fontBold, PdfColor Function(Color) toPdfColor) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.green700, width: 1.5))),
+      child: pw.Text(title, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: toPdfColor(const Color(0xFF1AA88A)), font: fontBold)),
     );
   }
 
-  // Download receipt as PDF
+  PdfColor _toPdfColor(Color color) => PdfColor.fromInt(color.value);
+
   Future<void> _downloadReceipt(BuildContext context) async {
     setState(() => _isDownloading = true);
-
     try {
-      // Request storage permission for Android
-      if (Platform.isAndroid) {
-        final status = await Permission.storage.request();
-        if (!status.isGranted) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Row(
-                  children: [
-                    Icon(Iconsax.warning_2, color: Color(0xFFF59E0B), size: 20),
-                    SizedBox(width: 8),
-                    Expanded(child: Text('Storage permission is required to download receipt')),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF1A1F1A),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                action: SnackBarAction(
-                  label: 'Settings',
-                  textColor: Color(0xFF1AA88A),
-                  onPressed: () => openAppSettings(),
-                ),
-              ),
-            );
-          }
-          setState(() => _isDownloading = false);
-          return;
-        }
-      }
-
-      // Generate PDF
       final file = await _generatePdf();
-
       setState(() => _isDownloading = false);
 
       if (mounted) {
@@ -942,74 +1108,46 @@ Widget _buildHeader() {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Icon(Iconsax.tick_circle, color: Color(0xFF10B981), size: 20),
-                    const SizedBox(width: 8),
-                    const Text('Receipt downloaded successfully'),
-                  ],
-                ),
+                const Row(children: [
+                  Icon(Iconsax.tick_circle, color: Color(0xFF10B981), size: 20),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Receipt downloaded successfully')),
+                ]),
                 const SizedBox(height: 4),
-                Text(
-                  'Saved to: Documents/NEOFYN Bharath/DMT/',
-                  style: GoogleFonts.poppins(fontSize: 10, color: Colors.white54),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '📁 ${file.path}',
+                    style: GoogleFonts.poppins(fontSize: 9, color: Colors.white70),
+                  ),
                 ),
               ],
             ),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'Open',
               textColor: const Color(0xFF1AA88A),
-              onPressed: () async {
-                try {
-                  final result = await OpenFile.open(file.path);
-                  if (result.type != ResultType.done) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Could not open file. Please check your file manager.'),
-                          backgroundColor: const Color(0xFF1A1F1A),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      );
-                    }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error opening file: $e'),
-                        backgroundColor: const Color(0xFF1A1F1A),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    );
-                  }
-                }
-              },
+              onPressed: () => OpenFile.open(file.path),
             ),
           ),
         );
       }
     } catch (e) {
       setState(() => _isDownloading = false);
+      debugPrint('❌ Download error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
-              children: [
-                const Icon(Iconsax.close_circle, color: Color(0xFFEF4444), size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Failed to download receipt: $e')),
-              ],
-            ),
+            content: Text('Failed: $e'),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -1018,35 +1156,32 @@ Widget _buildHeader() {
 
   void _copyReceiptDetails(BuildContext context) {
     final details = '''
-Transaction Receipt
--------------------
-Status: ${receipt.statusTitle}
-Amount: ₹${receipt.amount}
-Transaction ID: ${receipt.transactionId}
-UTR Number: ${receipt.utrNumber}
-Date: ${receipt.formattedDate}
-Transfer Mode: ${receipt.transferMode}
-Remitter: ${receipt.remitterName}
-Beneficiary: ${receipt.beneficiaryName}
-Account: ${_maskAccount(receipt.accountNumber)}
-Bank: ${receipt.bankName}
-${receipt.ifscCode.isNotEmpty ? 'IFSC: ${receipt.ifscCode}' : ''}
-${receipt.statusMessage.isNotEmpty ? '\n${receipt.statusLabel}: ${receipt.statusMessage}' : ''}
--------------------
-${receipt.merchantName}
-''';
+╔══════════════════════════════════╗
+║     ${receipt.merchantName}     ║
+║     Payment Confirmation        ║
+╚══════════════════════════════════╝
 
+${receipt.outletName.isNotEmpty ? 'Outlet Name: ${receipt.outletName}\n' : ''}${receipt.shopAddress.isNotEmpty ? 'Shop Address: ${receipt.shopAddress}\n' : ''}${receipt.shopPhone.isNotEmpty ? 'Shop Phone: ${receipt.shopPhone}\n' : ''}${receipt.senderName.isNotEmpty ? 'Sender Name: ${receipt.senderName}\n' : ''}${receipt.senderMobile.isNotEmpty ? 'Sender Mobile: ${receipt.senderMobile}\n' : ''}
+Beneficiary: ${receipt.beneficiaryName}
+Bank Name: ${receipt.bankName}
+Account No: ${receipt.accountNumber}
+${receipt.beneficiaryMobile.isNotEmpty ? 'Mobile No: ${receipt.beneficiaryMobile}\n' : ''}
+Transaction ID: ${receipt.transactionId}
+${receipt.utrNumber.isNotEmpty ? 'UTR Number: ${receipt.utrNumber}\n' : ''}Transfer Mode: ${receipt.transferMode}
+Date & Time: ${receipt.formattedDate}
+Status: ${receipt.status.toUpperCase()}
+Amount: ₹${receipt.amount}
+Amount (In Words): ${_numberToWords(int.parse(receipt.amount))}
+${receipt.statusMessage.isNotEmpty ? '\n${receipt.statusLabel}: ${receipt.statusMessage}' : ''}
+────────────────────────────────────
+Generated by ${receipt.merchantName}
+This is a system generated Receipt
+''';
     Clipboard.setData(ClipboardData(text: details));
     HapticFeedback.mediumImpact();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            const Icon(Iconsax.tick_circle, color: Color(0xFF10B981), size: 20),
-            const SizedBox(width: 8),
-            const Text('Receipt details copied to clipboard'),
-          ],
-        ),
+        content: const Row(children: [Icon(Iconsax.tick_circle, color: Color(0xFF10B981), size: 20), SizedBox(width: 8), Text('Receipt copied')]),
         backgroundColor: const Color(0xFF1A1F1A),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1056,22 +1191,13 @@ ${receipt.merchantName}
 
   Future<void> _shareReceipt(BuildContext context) async {
     setState(() => _isSharing = true);
-
     try {
       final file = await _generatePdf();
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'DMT Transaction Receipt - ${receipt.transactionId}',
-      );
+      await Share.shareXFiles([XFile(file.path)], text: 'DMT Transaction Receipt - ${receipt.transactionId}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to share: $e'),
-            backgroundColor: const Color(0xFF1A1F1A),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+          SnackBar(content: Text('Failed to share: $e'), backgroundColor: const Color(0xFF1A1F1A)),
         );
       }
     } finally {

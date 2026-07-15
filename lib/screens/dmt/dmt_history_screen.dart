@@ -247,8 +247,77 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
       _applyFilters();
     }
   }
+// In _showReceipt method of _DmtHistoryScreenState, replace with this:
 
+  // ✅ REPLACE your _showReceipt method with this:
   void _showReceipt(Map<String, dynamic> tx) {
+    try {
+      debugPrint('═══════════════════════════════════════');
+      debugPrint('📋 DMT TRANSACTION FULL DATA:');
+      debugPrint('═══════════════════════════════════════');
+      tx.forEach((key, value) {
+        debugPrint('   $key = $value (${value.runtimeType})');
+      });
+      debugPrint('═══════════════════════════════════════');
+
+      final dateStr = tx['created_at'];
+      DateTime date;
+      try {
+        date = DateTime.parse(dateStr.toString()).toLocal();
+      } catch (e) {
+        date = DateTime.now();
+      }
+
+      // ✅ FIX: Use the correct API field names: business_name and phone
+      final businessName = tx['business_name']?.toString() ?? '';
+      final phone = tx['phone']?.toString() ?? '';
+
+      debugPrint('🏪 Business Name: "$businessName"');
+      debugPrint('📞 Phone: "$phone"');
+
+      final receipt = DmtReceiptModel(
+        transactionId: tx['iyda_txn_id']?.toString() ?? tx['id']?.toString() ?? 'N/A',
+        utrNumber: tx['utr_number']?.toString() ?? '',
+        amount: tx['amount']?.toString() ?? '0',
+        status: tx['status']?.toString() ?? 'PENDING',
+        transferMode: tx['transfer_mode']?.toString() ?? 'IMPS',
+        remitterName: tx['remitter_name']?.toString() ?? 'N/A',
+        remitterMobile: tx['remitter_mobile']?.toString() ?? '',
+        beneficiaryName: tx['beneficiary_name']?.toString() ?? 'N/A',
+        accountNumber: tx['account_number']?.toString() ?? 'N/A',
+        bankName: tx['bank_name']?.toString() ?? 'N/A',
+        ifscCode: tx['ifsc_code']?.toString() ?? '',
+        beneficiaryMobile: tx['beneficiary_mobile']?.toString() ?? '',
+        remark: tx['remark']?.toString() ?? '',
+        failureReason: tx['failure_reason']?.toString() ?? '',
+        transactionDate: date,
+        merchantName: 'Neofyn Bharath',
+        outletName: businessName,    // ✅ business_name from API
+        shopAddress: businessName,   // ✅ Same as business name
+        shopPhone: phone,            // ✅ phone from API
+      );
+
+      debugPrint('✅ Receipt Created - Shop: "${receipt.outletName}", Phone: "${receipt.shopPhone}"');
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DmtReceiptScreen(receipt: receipt)),
+      );
+    } catch (e) {
+      debugPrint('❌ Error showing receipt: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Error loading receipt'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
+  /*void _showReceipt(Map<String, dynamic> tx) {
     try {
       final dateStr = tx['created_at'];
       DateTime date;
@@ -262,7 +331,7 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
         transactionId: tx['iyda_txn_id']?.toString() ?? tx['id']?.toString() ?? 'N/A',
         utrNumber: tx['utr_number']?.toString() ?? '',
         amount: tx['amount']?.toString() ?? '0',
-        commission: tx['commission_amount']?.toString() ?? '',
+        // commission: tx['commission_amount']?.toString() ?? '',
         status: tx['status']?.toString() ?? 'PENDING',
         transferMode: tx['transfer_mode']?.toString() ?? 'IMPS',
         remitterName: tx['remitter_name']?.toString() ?? 'N/A',
@@ -276,7 +345,7 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
         failureReason: tx['failure_reason']?.toString() ?? '',
         transactionDate: date,
         merchantName: 'NEOFYN Bharath',
-        retailerId: _userId,
+        // retailerId: _userId,
       );
 
       Navigator.push(
@@ -294,7 +363,7 @@ class _DmtHistoryScreenState extends State<DmtHistoryScreen> {
         ),
       );
     }
-  }
+  }*/
 
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));

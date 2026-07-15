@@ -458,7 +458,7 @@ class ApiService {
   // ───────────────────────────────────────────────────────────────
 //  DMT - Get Transaction History
 // ───────────────────────────────────────────────────────────────
-  Future<List<Map<String, dynamic>>> getDmtHistory({
+  /*Future<List<Map<String, dynamic>>> getDmtHistory({
     String? userId,
     int limit = 50,
     int offset = 0,
@@ -521,6 +521,147 @@ class ApiService {
       return [];
     } catch (e) {
       print('❌ [DMT] History error: $e');
+      return [];
+    }
+  }*/
+  // Replace your getDmtHistory method in api_service.dart with this:
+
+  Future<List<Map<String, dynamic>>> getDmtHistory({
+    String? userId,
+    int limit = 50,
+    int offset = 0,
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
+
+      if (userId != null) queryParams['userId'] = userId;
+      if (status != null) queryParams['status'] = status;
+      if (fromDate != null) queryParams['from'] = fromDate;
+      if (toDate != null) queryParams['to'] = toDate;
+
+      final uri = Uri.parse('$baseUrl/api/dmt/history')
+          .replace(queryParameters: queryParams);
+
+      print('┌──────────────────────────────────────────');
+      print('│ 🔍 [DMT] Fetching History');
+      print('│ 📍 URL: $uri');
+      print('└──────────────────────────────────────────');
+
+      final response = await LoggedHttpClient.get(
+        uri,
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      // ✅ FULL RAW RESPONSE LOGGING - NO TRUNCATION
+      print('═══════════════════════════════════════════');
+      print('📦 [DMT] FULL RAW RESPONSE');
+      print('═══════════════════════════════════════════');
+      print('📊 Status Code: ${response.statusCode}');
+      print('📏 Body Length: ${response.body.length} characters');
+      print('───────────────────────────────────────────');
+      print(response.body);  // ✅ FULL response body, no truncation
+      print('═══════════════════════════════════════════');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // ✅ Log the parsed JSON structure
+        print('🔑 [DMT] Top-level keys: ${data is Map ? data.keys.join(', ') : 'LIST'}');
+
+        List<dynamic> list = [];
+
+        if (data is List) {
+          list = data;
+          print('📋 [DMT] Response is a List with ${list.length} items');
+        } else if (data is Map) {
+          // Log ALL top-level keys and their types
+          print('📋 [DMT] Response structure:');
+          data.forEach((key, value) {
+            if (value is List) {
+              print('   $key: List[${value.length}]');
+            } else if (value is Map) {
+              print('   $key: Map{${value.keys.join(', ')}}');
+            } else {
+              final strVal = value?.toString() ?? 'null';
+              print('   $key: $strVal (${value.runtimeType})');
+            }
+          });
+
+          if (data['transactions'] is List) {
+            list = data['transactions'];
+            print('✅ Found transactions list with ${list.length} items');
+          } else if (data['data'] is List) {
+            list = data['data'];
+            print('✅ Found data list with ${list.length} items');
+          } else if (data['history'] is List) {
+            list = data['history'];
+            print('✅ Found history list with ${list.length} items');
+          } else {
+            print('⚠️ No recognized transaction list found in response');
+          }
+
+          // Log first transaction keys if available
+          if (list.isNotEmpty) {
+            final firstItem = list[0];
+            if (firstItem is Map) {
+              print('🔑 [DMT] First transaction keys:');
+              firstItem.keys.forEach((key) {
+                final value = firstItem[key];
+                final type = value?.runtimeType ?? 'Null';
+                final preview = value?.toString() ?? 'null';
+                print('   • $key ($type): $preview');
+              });
+            }
+          }
+        }
+
+        final result = list.map((e) => Map<String, dynamic>.from(e)).toList();
+
+        // ✅ Final summary
+        print('✅ [DMT] Returning ${result.length} transactions');
+        if (result.isNotEmpty) {
+          print('🔑 [DMT] Available fields: ${result[0].keys.join(', ')}');
+
+          // Check for any address-related fields
+          final addressKeys = result[0].keys.where((k) =>
+          k.contains('address') ||
+              k.contains('shop') ||
+              k.contains('outlet') ||
+              k.contains('store') ||
+              k.contains('location') ||
+              k.contains('city') ||
+              k.contains('state') ||
+              k.contains('pincode') ||
+              k.contains('zip')
+          ).toList();
+
+          if (addressKeys.isEmpty) {
+            print('⚠️ [DMT] NO address-related fields found in transaction data!');
+            print('💡 [DMT] Available fields: ${result[0].keys.join(', ')}');
+          } else {
+            print('📍 [DMT] Address-related fields found: ${addressKeys.join(', ')}');
+            addressKeys.forEach((k) {
+              print('   $k = ${result[0][k]}');
+            });
+          }
+        }
+        print('═══════════════════════════════════════════');
+
+        return result;
+      }
+      return [];
+    } catch (e) {
+      print('❌ [DMT] History error: $e');
+      print('═══════════════════════════════════════════');
       return [];
     }
   }
