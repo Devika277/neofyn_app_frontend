@@ -507,6 +507,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     })));
   }
 
+
+
   // ─────────────────────────────────────────────────────────────────────────
   //  SUPPORT POPUP METHODS
   // ─────────────────────────────────────────────────────────────────────────
@@ -777,6 +779,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 //  HOME DASHBOARD WITH BANNER SLIDER
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  HOME DASHBOARD WITH BANNER SLIDER
+// ─────────────────────────────────────────────────────────────────────────────
 class HomeDashboard extends StatelessWidget {
   final VoidCallback onLogout;
   final void Function(String) onServiceTap;
@@ -785,10 +790,88 @@ class HomeDashboard extends StatelessWidget {
   final VoidCallback onSupportTap;
 
   const HomeDashboard({
-    super.key, required this.onLogout,
-    required this.onServiceTap, this.isBBPSOnboarded = false,
-    this.isCheckingBBPS = false, required this.onSupportTap,
+    super.key, 
+    required this.onLogout,
+    required this.onServiceTap, 
+    this.isBBPSOnboarded = false,
+    this.isCheckingBBPS = false, 
+    required this.onSupportTap,
   });
+
+  // ─── Helper methods inside HomeDashboard ───
+  
+  void _showComingSoonDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [AppColors.warning, Color(0xFFFF8F00)],
+                ),
+              ),
+              child: const Icon(Icons.construction_rounded, color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Coming Soon!',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'This feature is under development and will be available soon.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white60, fontSize: 14, height: 1.5),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _launchInsuranceUrl(BuildContext context) async {
+    const String insuranceUrl = 'https://myneofin.insurance.coverfox.com/login';
+    try {
+      final Uri uri = Uri.parse(insuranceUrl);
+      if (await canLaunchUrl(uri)) {
+        HapticFeedback.mediumImpact();
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showToast(context, 'Could not open insurance page');
+      }
+    } catch (e) {
+      _showToast(context, 'Error opening link');
+    }
+  }
+
+  void _showToast(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(color: Colors.white)),
+      backgroundColor: AppColors.error,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+      duration: const Duration(seconds: 2),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -807,7 +890,7 @@ class HomeDashboard extends StatelessWidget {
               const SizedBox(height: 20),
               const BannerSlider(),
               const SizedBox(height: 24),
-              _buildServicesGrid(),
+              _buildServicesGrid(context), // ← Pass context
               const SizedBox(height: 24),
               _buildQuickActions(),
             ]),
@@ -933,12 +1016,16 @@ class HomeDashboard extends StatelessWidget {
     ]);
   }
 
-  Widget _buildServicesGrid() {
+  // ─── UPDATED SERVICES GRID ───
+  Widget _buildServicesGrid(BuildContext context) {
     final services = [
       {'name': 'AEPS', 'icon': Icons.fingerprint},
       {'name': 'DMT', 'icon': Icons.swap_horiz},
       {'name': 'Recharge', 'icon': Icons.phone_android},
       {'name': 'Bills', 'icon': Icons.description},
+      {'name': 'Insurance', 'icon': Icons.shield_rounded, 'isComingSoon': false},
+      {'name': 'MATM', 'icon': Icons.atm_rounded, 'isComingSoon': true},
+      {'name': 'Credit Card', 'icon': Icons.credit_card_rounded, 'isComingSoon': true},
     ];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -971,21 +1058,41 @@ class HomeDashboard extends StatelessWidget {
       GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 0.9),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, 
+          mainAxisSpacing: 8, 
+          crossAxisSpacing: 8, 
+          childAspectRatio: 0.9
+        ),
         itemCount: services.length,
         itemBuilder: (_, i) {
           final s = services[i];
           final isLocked = !isBBPSOnboarded && s['name'] != 'Bills';
+          final isComingSoon = s['isComingSoon'] == true;
+
           return GestureDetector(
-            onTap: () => onServiceTap(s['name'] as String),
+            onTap: () {
+              if (isComingSoon) {
+                _showComingSoonDialog(context); // ← Call method with context
+                return;
+              }
+              if (s['name'] == 'Insurance') {
+                _launchInsuranceUrl(context); // ← Call method with context
+                return;
+              }
+              onServiceTap(s['name'] as String);
+            },
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Container(
-                width: 52, height: 52,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isLocked ? AppColors.warning.withOpacity(0.5) : AppColors.border,
+                    color: isLocked || isComingSoon
+                        ? AppColors.warning.withOpacity(0.5)
+                        : AppColors.border,
                     width: 0.5,
                   ),
                 ),
@@ -993,16 +1100,34 @@ class HomeDashboard extends StatelessWidget {
                   children: [
                     Center(
                       child: Icon(
-                        isLocked ? Icons.lock_rounded : s['icon'] as IconData,
-                        color: isLocked ? AppColors.warning.withOpacity(0.5) : AppColors.accent,
+                        isLocked || isComingSoon
+                            ? (isComingSoon ? Icons.construction_rounded : Icons.lock_rounded)
+                            : s['icon'] as IconData,
+                        color: isLocked || isComingSoon
+                            ? AppColors.warning.withOpacity(0.5)
+                            : AppColors.accent,
                         size: 24,
                       ),
                     ),
-                    if (isLocked)
+                    if (isLocked || isComingSoon)
                       Positioned(
                         top: 4,
                         right: 4,
-                        child: Icon(Icons.lock_rounded, color: AppColors.warning.withOpacity(0.7), size: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isComingSoon ? 'SOON' : 'LOCKED',
+                            style: TextStyle(
+                              color: AppColors.warning,
+                              fontSize: 6,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -1012,10 +1137,21 @@ class HomeDashboard extends StatelessWidget {
                 s['name'] as String,
                 style: TextStyle(
                   fontSize: 11,
-                  color: isLocked ? AppColors.textHint.withOpacity(0.5) : AppColors.textHint,
+                  color: isLocked || isComingSoon
+                      ? AppColors.textHint.withOpacity(0.5)
+                      : AppColors.textHint,
                 ),
                 textAlign: TextAlign.center,
               ),
+              if (isComingSoon)
+                Text(
+                  'Coming Soon',
+                  style: TextStyle(
+                    fontSize: 8,
+                    color: AppColors.warning.withOpacity(0.5),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
             ]),
           );
         },
