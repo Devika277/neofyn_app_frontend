@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import '../../services/morpho_native_service.dart';  // ← ADD THIS LINE
 
 class BiometricService {
   static const String _rdServicePath = '/rd/info';
@@ -31,9 +32,9 @@ class BiometricService {
     ),
     'morpho': DeviceConfig(
       name: 'Morpho MSO 1300',
-      portRange: [11100, 11101, 11102, 11103],
+      portRange: [11101, 11102, 11103],  // ← REMOVED 11100 (Mantra's port)
       defaultPort: 11101,
-      protocols: ['http', 'https'],
+      protocols: ['http'],
       responseContains: 'Morpho',
       compactXml: true,
       skipCustOpts: true,
@@ -55,6 +56,17 @@ class BiometricService {
     _cachedBaseUrl = null;
     _cachedProtocol = null;
     _deviceConnected = true;
+
+    // ─── Initialize Morpho native plugin ───
+    if (Platform.isAndroid) {
+      try {
+        final result = await MorphoNativeService.initialize();
+        print('📱 Morpho native init: $result');
+      } catch (e) {
+        print('⚠️ Morpho native init skipped: $e');
+      }
+    }
+
     print('✅ Biometric Service initialized');
   }
 
@@ -227,6 +239,17 @@ class BiometricService {
     try {
       print('🔍 Checking $deviceType...');
 
+      // ─── MORPHO: Use native plugin ───
+      if (deviceType == 'morpho') {
+        final result = await MorphoNativeService.checkDevice();
+        final installed = result['rdServiceInstalled'] == true;
+        _deviceConnected = installed;
+        print(installed ? '✅ Morpho RD Service found' : '❌ Morpho RD Service not found');
+        return installed;
+      }
+      // ─── END MORPHO ───
+
+      // ─── MANTRA / STARTEK: HTTP scanning (UNCHANGED) ───
       final baseUrl = await findRdServiceUrl(
         deviceType: deviceType,
         forceRediscovery: true,
@@ -256,6 +279,28 @@ class BiometricService {
     bool skipWadh = false,
     String? deviceType = 'mantra',
   }) async {
+
+    // ─── MORPHO: Use native plugin ───
+    if (deviceType == 'morpho') {
+      print('📱 Morpho native capture starting...');
+
+      // Open RD Service app first
+      await MorphoNativeService.openRDService();
+      await Future.delayed(Duration(seconds: 2));
+
+      // Capture
+      final result = await MorphoNativeService.captureFingerprint();
+
+      if (result['success'] == true && result['pidData'] != null && result['pidData'].toString().isNotEmpty) {
+        print('✅ Morpho native capture successful');
+        return result['pidData'].toString();
+      } else {
+        throw Exception(result['error'] ?? 'Morpho capture failed');
+      }
+    }
+    // ─── END MORPHO ───
+
+    // ─── MANTRA / STARTEK: HTTP capture (UNCHANGED) ───
     Exception? lastError;
     final config = _deviceConfigs[deviceType] ?? _deviceConfigs['mantra']!;
     final is2FA = skipWadh;
@@ -289,10 +334,8 @@ class BiometricService {
           print('   ⚠️ Scanner may not be ready, attempting capture anyway...');
         }
 
-        // wadh must be empty for 2FA
         final actualWadh = is2FA ? '' : (wadh ?? '');
 
-        // Build XML
         final String xml = _buildPidOptionsXml(
           clientKey,
           wadh: actualWadh,

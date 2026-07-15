@@ -8,6 +8,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.UUID
+import com.example.my_app.morpho.MorphoPlugin
 
 class MainActivity : FlutterActivity() {
 
@@ -62,6 +63,9 @@ class MainActivity : FlutterActivity() {
         usbChannel.setMethodCallHandler(usbHelper)
         usbHelper?.setChannel(usbChannel)
         usbHelper?.registerReceiver()
+
+        // ─── MORPHO PLUGIN ─────────────────────────────────
+        flutterEngine.plugins.add(MorphoPlugin())
     }
 
     // ─── EXISTING MATM METHODS ──────────────────────────────────────────
