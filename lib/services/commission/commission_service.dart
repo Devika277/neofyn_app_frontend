@@ -1,5 +1,7 @@
 // services/commission/commission_service.dart
 
+import 'dart:convert';
+
 import '../../services/bbps/api_service.dart';
 
 class CommissionService {
@@ -45,7 +47,11 @@ class CommissionService {
       );
 
       print('✅ Commission history fetched successfully');
-      
+      const encoder = JsonEncoder.withIndent('  ');
+
+      print('================ RAW HISTORY RESPONSE ================');
+      print(encoder.convert(response));
+      print('=====================================================');
       if (response['success'] == true && response['data'] != null) {
         final List<dynamic> rawData = response['data'];
         final List<Map<String, dynamic>> mappedData = rawData.map((item) {

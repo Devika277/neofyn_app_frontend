@@ -31,8 +31,8 @@ android {
         applicationId = "com.example.my_app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.3"
 //        versionCode = flutter.versionCode
 //        versionName = flutter.versionName
 

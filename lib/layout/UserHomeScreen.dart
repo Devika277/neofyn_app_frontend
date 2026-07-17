@@ -29,6 +29,7 @@ import '../screens/bbps/onboarding_page.dart';
 import '../screens/bbps/bill_payment_page.dart';
 import '../screens/recharge/recharge_screen.dart';
 import '../screens/commission/commission_history_screen.dart';
+import '../services/permission_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BRAND COLORS - Cohesive Green & Dark Theme
@@ -103,7 +104,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
     if (mounted) {
       setState(() => _isInitialLoading = false);
-
+      _checkAndRequestPermissions();
       // Show BBPS required popup if not onboarded after initial load
       if (!_isBBPSOnboarded) {
         // Small delay to ensure UI is built before showing dialog
@@ -115,7 +116,432 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       }
     }
   }
+  Future<void> _checkAndRequestPermissions() async {
+    // Small delay to let UI build
+    await Future.delayed(const Duration(milliseconds: 800));
 
+    if (!mounted) return;
+
+    final statuses = await PermissionService.checkAllPermissions();
+    final deniedPermissions = PermissionService.getDeniedPermissionsList(statuses);
+
+    if (deniedPermissions.isNotEmpty) {
+      _showPermissionDialog(deniedPermissions);
+    }
+  }
+
+  void _showPermissionDialog(List<Map<String, String>> deniedPermissions) {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User MUST interact
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Warning Icon
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Colors.orange.shade700, Colors.orange.shade400],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.security_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Title
+              const Text(
+                'Permissions Required',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 8),
+
+              // Subtitle
+              Text(
+                '${deniedPermissions.length} permission${deniedPermissions.length > 1 ? 's' : ''} needed for full functionality',
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 20),
+
+              // Permission List
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: deniedPermissions.length,
+                  itemBuilder: (context, index) {
+                    final perm = deniedPermissions[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  perm['name'] ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  perm['description'] ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Warning message
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: Colors.red, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Without these permissions, some features may not work properly.',
+                        style: TextStyle(color: Colors.red, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        // Show reminder later
+                        if (mounted) {
+                          _showToast(
+                            'You can grant permissions later from Settings',
+                            isError: false,
+                          );
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        ),
+                      ),
+                      child: const Text(
+                        'Skip',
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _handlePermissionRequest();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Grant Permissions',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePermissionRequest() async {
+    // Show loading
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Requesting permissions...',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Request all permissions
+    final allGranted = await PermissionService.requestAllPermissions();
+
+    // Close loading dialog
+    if (mounted) {
+      Navigator.pop(context);
+
+      if (allGranted) {
+        // All permissions granted
+        _showSuccessDialog();
+      } else {
+        // Some permissions denied - show settings option
+        _showSettingsDialog();
+      }
+    }
+  }
+
+  void _showSuccessDialog() {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.success.withOpacity(0.2),
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.success,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'All Set! 🎉',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'All permissions granted. You can now use all features.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSettingsDialog() {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.orange.withOpacity(0.2),
+                ),
+                child: const Icon(
+                  Icons.settings_rounded,
+                  color: Colors.orange,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Permissions Incomplete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Some permissions were denied. Please grant them from Settings for full app functionality.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        PermissionService.openSettings();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Open Settings',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text(
+                      'Continue Anyway',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   void _showBBPSRequiredOnStartup() {
     showDialog(
       context: context,
