@@ -22,6 +22,26 @@ class ApiConfig {
   // static const String payoutBalance = '/api/payout/balance';
 
 
+  // ========== CARDPAY ENDPOINTS ==========
+  static const String cardPayBase = '/api/cardpay';
+  static const String cardPayInitiate = '$cardPayBase/initiate';
+  static const String cardPayStates = '$cardPayBase/states';
+  static const String cardPayStatus = '$cardPayBase/status';
+  static const String cardPayReceipt = '$cardPayBase/receipt';
+  static const String cardPayWalletBalance = '$cardPayBase/wallet/balance';
+  static const String cardPayWalletLedger = '$cardPayBase/wallet/ledger';
+  static const String cardPayMoveToMain = '$cardPayBase/move-to-main';
+  static const String cardPayBalance = '$cardPayBase/balance';
+  static const String cardPayHistory = '$cardPayBase/history';
+  static const String cardPayCallback = '$cardPayBase/callback';
+  
+  // CardPay Admin Endpoints
+  static const String cardPayAdminDashboard = '$cardPayBase/admin/dashboard';
+  static const String cardPayAdminTransactions = '$cardPayBase/admin/transactions';
+  static const String cardPayAdminExport = '$cardPayBase/admin/export';
+  static const String cardPayAdminUsersBalances = '$cardPayBase/admin/users/balances';
+  static const String cardPayAdminLedger = '$cardPayBase/admin/ledger';
+  static const String cardPayAdminConfig = '$cardPayBase/admin/config';
 
   // Headers
   static const String contentType = 'application/json';
