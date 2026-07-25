@@ -64,11 +64,12 @@ class AepsProvider extends ChangeNotifier {
   String? _last2FADate;
   static const String _keyLast2FADate = 'last_2fa_date';
 
-  // ✅ NEW: 2FA Status per pipe
+  // ✅ FIXED: Added Pipe 4
   Map<String, Map<String, dynamic>> _pipes2FAStatus = {
     '1': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
     '2': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
     '3': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+    '4': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
   };
   bool _any2FADoneToday = false;
 
@@ -188,11 +189,12 @@ class AepsProvider extends ChangeNotifier {
     _pipe = null;
     _last2FADate = null;
     _is2FAVerifiedToday = false;
-    // ✅ NEW: Reset 2FA per-pipe status
+    // ✅ FIXED: Added Pipe 4
     _pipes2FAStatus = {
       '1': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
       '2': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
       '3': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
+      '4': {'merchant_id': null, 'last_2fa_at': null, '2fa_done_today': false},
     };
     _any2FADoneToday = false;
     SharedPreferences.getInstance().then((prefs) {
@@ -679,119 +681,6 @@ class AepsProvider extends ChangeNotifier {
       return null;
     }
   }
-
-  /*Future<bool> registerMerchant(MerchantRegistrationRequest request) async {
-    _isLoading = true;
-    _errorMessage = null;
-    _existingPipeNumber = null;
-    notifyListeners();
-
-    try {
-      final requestPipe = request.pipe.isNotEmpty ? request.pipe : (_pipe ?? '1');
-      print('🔑 Registering merchant with pipe: $requestPipe');
-
-      final regRequest = aeps.RegisterMerchantRequest(
-        stateCode: request.merchantState,
-        districtCode: request.merchantDistrict,
-        shopAddress: request.shopAddress,
-        shopPincode: request.shopPinCode,
-        bankAccount: request.bankAccountNumber,
-        bankIfsc: request.bankIfscCode,
-        bankNameCode: request.bankName,
-        pipe: requestPipe,
-        merchantRefId: '',
-        ipAddress: _ipAddress ?? '127.0.0.1',
-        lat: request.lat.toString(),
-        long: request.long.toString(),
-        firstName: request.firstName,
-        lastName: request.lastName,
-        middleName: request.middleName,
-        dob: request.dob,
-        merchantPhoneNumber: request.mobileNo,
-        merchantAddress1: request.merchantAddress1,
-        merchantAddress2: request.merchantAddress2,
-        merchantPan: request.panNo,
-        shopPan: request.shopPan,
-        aadhaarNo: request.aadhaarNo,
-        pidData: null,
-        emailId: request.emailId,
-      );
-      print('📤 Sending registration request with pipe: ${regRequest.pipe}');
-
-      final response = await _aepsService.registerMerchant(regRequest);
-
-      // ✅ ADD NULL SAFETY FOR ALL RESPONSE FIELDS
-      final merchantId = response.merchantId?.toString() ?? '';
-      final merchantRefId = response.merchantRefId?.toString() ?? '';
-      final status = response.status?.toString() ?? '';
-      final statusDescription = response.statusDescription?.toString() ?? '';
-      final txnRefId = response.txnRefId?.toString() ?? '';
-
-      print('📥 Registration Response:');
-      print('   merchantId: $merchantId');
-      print('   merchantRefId: $merchantRefId');
-      print('   status: $status');
-      print('   statusDescription: $statusDescription');
-      print('   txnRefId: $txnRefId');
-
-      // ✅ Handle case where merchant already exists (status 003)
-      if (status == '003' || statusDescription.toLowerCase().contains('already exist')) {
-        _errorMessage = statusDescription.isNotEmpty
-            ? statusDescription
-            : 'Merchant already registered with this mobile number';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-
-      // ✅ Success case
-      if (merchantId.isNotEmpty) {
-        _merchantId = merchantId;
-        _merchantRefId = merchantRefId;
-        _mobileNo = request.mobileNo;
-        _aadhaarNo = request.aadhaarNo;
-        _pipe = requestPipe;
-
-        // Persist merchant data
-        await _authService.saveMerchantData(
-          merchantId: _merchantId!,
-          merchantRefId: _merchantRefId!,
-          mobileNo: _mobileNo!,
-          aadhaarNo: _aadhaarNo,
-        );
-
-        DebugLogger.log('✅ Merchant saved. ID: $_merchantId, Pipe: $_pipe');
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        // ✅ Handle failure with proper message
-        _errorMessage = statusDescription.isNotEmpty
-            ? statusDescription
-            : 'Registration failed: No merchant ID returned';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      // ✅ Handle 409 Conflict - extract existing pipe info
-      final errorStr = e.toString();
-      print('❌ Registration error: $errorStr');
-
-      // Try to extract existing pipe from error message
-      final pipeMatch = RegExp(r'pipe\s*(\d+)', caseSensitive: false)
-          .firstMatch(errorStr);
-      if (pipeMatch != null) {
-        _existingPipeNumber = pipeMatch.group(1);
-        print('⚠️ Existing pipe found: $_existingPipeNumber');
-      }
-
-      _errorMessage = errorStr;
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }*/
 
   Future<bool> sendOtp(String merchantId, String mobileNo, {String? pipe}) async {
     _isLoading = true;

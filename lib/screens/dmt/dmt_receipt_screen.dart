@@ -53,7 +53,7 @@ class DmtReceiptModel {
     this.remark = '',
     this.failureReason = '',
     required this.transactionDate,
-    this.merchantName = 'Spay India',
+    this.merchantName = 'NEOFYN Bharath',
     this.outletName = '',
     this.senderName = '',
     this.senderMobile = '',
@@ -724,7 +724,7 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          '© 2022 Spay India - All Rights Reserved',
+          '© 2025 NEOFYN Bharath - All Rights Reserved',
           style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
         ),
         const SizedBox(height: 4),
@@ -773,76 +773,149 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              Icon(Iconsax.folder_2, color: const Color(0xFF94A3B8), size: 14),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Receipts saved to:\nInternal Storage/Documents/Spay India/DMT/',
-                  style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
-                ),
+        FutureBuilder<Directory>(
+          future: _getDmtFolderPath(),
+          builder: (context, snapshot) {
+            String pathDisplay = 'App Storage/NEOFYN/DMT/';
+
+            if (snapshot.hasData) {
+              String fullPath = snapshot.data!.path;
+              if (fullPath.contains('/storage/emulated/0/')) {
+                pathDisplay = fullPath.replaceAll('/storage/emulated/0/', 'Internal Storage/');
+              } else if (fullPath.contains('/Android/data/')) {
+                pathDisplay = 'App Storage/NEOFYN/DMT/';
+              } else {
+                pathDisplay = fullPath;
+              }
+            }
+
+            return Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
               ),
-            ],
-          ),
+              child: Row(
+                children: [
+                  const Icon(Iconsax.folder_2, color: Color(0xFF94A3B8), size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Receipts saved to:\n$pathDisplay',
+                      style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
   }
 
+  Future<List<Directory>?> getExternalCacheDirectories() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final extDir = await getExternalStorageDirectory();
+      if (extDir != null) return [extDir];
+    } catch (e) {
+      debugPrint('External cache error: $e');
+    }
+    return null;
+  }
+
   Future<Directory> _getDmtFolderPath() async {
+    Directory? directory;
+
     if (Platform.isAndroid) {
-      final paths = [
-        '/storage/emulated/0/Documents/Spay India/DMT',
-        '/storage/emulated/0/Download/Spay India/DMT',
-      ];
-      for (final path in paths) {
-        try {
-          final directory = Directory(path);
-          if (!await directory.exists()) {
+      bool hasManageStorage = false;
+      try {
+        hasManageStorage = await Permission.manageExternalStorage.isGranted;
+      } catch (e) {
+        hasManageStorage = false;
+      }
+
+      if (hasManageStorage) {
+        final publicPaths = [
+          '/storage/emulated/0/Documents/NEOFYN/DMT',
+          '/storage/emulated/0/Download/NEOFYN/DMT',
+        ];
+
+        for (final path in publicPaths) {
+          try {
+            final dir = Directory(path);
+            if (!await dir.exists()) {
+              await dir.create(recursive: true);
+            }
+            final testFile = File('${dir.path}/.write_test');
+            await testFile.writeAsString('test');
+            await testFile.delete();
+            debugPrint('✅ Using public directory: $path');
+            return dir;
+          } catch (e) {
+            debugPrint('⚠️ Cannot use public path $path: $e');
+          }
+        }
+      }
+
+      try {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          directory = Directory('${extDir.path}/NEOFYN/DMT');
+          if (!await directory!.exists()) {
             await directory.create(recursive: true);
           }
           final testFile = File('${directory.path}/.write_test');
           await testFile.writeAsString('test');
           await testFile.delete();
-          debugPrint('✅ Using: $path');
+          debugPrint('✅ Using external storage directory: ${directory.path}');
           return directory;
-        } catch (e) {
-          debugPrint('⚠️ Cannot use $path: $e');
         }
+      } catch (e) {
+        debugPrint('⚠️ External storage failed: $e');
+      }
+
+      try {
+        final externalDirs = await getExternalCacheDirectories();
+        if (externalDirs != null && externalDirs.isNotEmpty) {
+          final parentDir = externalDirs.first.parent;
+          directory = Directory('$parentDir/NEOFYN/DMT');
+          if (!await directory!.exists()) {
+            await directory.create(recursive: true);
+          }
+          debugPrint('✅ Using app external storage: ${directory.path}');
+          return directory;
+        }
+      } catch (e) {
+        debugPrint('⚠️ App external storage failed: $e');
       }
     }
-    final appDir = await getApplicationDocumentsDirectory();
-    final directory = Directory('${appDir.path}/Spay India/DMT');
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      directory = Directory('${appDir.path}/NEOFYN/DMT');
+      if (!await directory!.exists()) {
+        await directory.create(recursive: true);
+      }
+      debugPrint('📁 Using app internal storage: ${directory.path}');
+    } catch (e) {
+      directory = Directory('${Directory.systemTemp.path}/NEOFYN/DMT');
+      if (!await directory!.exists()) {
+        await directory.create(recursive: true);
+      }
+      debugPrint('⚠️ Using temp directory: ${directory.path}');
     }
-    debugPrint('📁 Using app directory: ${directory.path}');
+
     return directory;
   }
-
-  // REPLACE the entire _generatePdf() function with this:
-
-  // REPLACE the _generatePdf() function with this corrected version:
 
   Future<File> _generatePdf() async {
     final pdf = pw.Document();
     final sc = receipt.statusColor;
 
-    Uint8List? logoBytes;
-    try {
-      final logoData = await rootBundle.load('assets/images/logo_white.png');
-      logoBytes = logoData.buffer.asUint8List();
-    } catch (e) {}
-
-    PdfColor _toPdfColor(Color color) => PdfColor.fromInt(color.value);
+    PdfColor toPdfColor(Color color) => PdfColor.fromInt(color.value);
 
     final font = await PdfGoogleFonts.poppinsRegular();
     final fontBold = await PdfGoogleFonts.poppinsBold();
@@ -856,7 +929,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // ── HEADER ──
               pw.Center(
                 child: pw.Column(
                   children: [
@@ -864,17 +936,17 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                       width: 60,
                       height: 60,
                       decoration: pw.BoxDecoration(
-                        color: _toPdfColor(const Color(0xFF008169)),
+                        color: toPdfColor(const Color(0xFF008169)),
                         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(14)),
                       ),
                       child: pw.Center(
-                        child: pw.Text('SI', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.white, font: fontBold)),
+                        child: pw.Text('NB', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.white, font: fontBold)),
                       ),
                     ),
                     pw.SizedBox(height: 8),
                     pw.Text(receipt.merchantName, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, font: fontBold)),
                     pw.SizedBox(height: 2),
-                    pw.Text('Payment Confirmation', style: pw.TextStyle(fontSize: 11, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontSemiBold)),
+                    pw.Text('Payment Confirmation', style: pw.TextStyle(fontSize: 11, color: toPdfColor(const Color(0xFF1AA88A)), font: fontSemiBold)),
                     pw.SizedBox(height: 4),
                     pw.Text('${receipt.formattedDateShort}  ${receipt.formattedTime}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font)),
                   ],
@@ -882,7 +954,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 16),
 
-              // ── OUTLET NAME (if exists) ──
               if (receipt.outletName.isNotEmpty) ...[
                 pw.Row(
                   children: [
@@ -893,7 +964,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                 pw.SizedBox(height: 4),
               ],
 
-              // ── SENDER NAME ──
               pw.Row(
                 children: [
                   pw.SizedBox(width: 100, child: pw.Text('Sender Name :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
@@ -902,7 +972,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 4),
 
-              // ── BENEFICIARY ──
               pw.Row(
                 children: [
                   pw.SizedBox(width: 100, child: pw.Text('Beneficiary :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
@@ -911,7 +980,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 4),
 
-              // ── BANK NAME ──
               pw.Row(
                 children: [
                   pw.SizedBox(width: 100, child: pw.Text('Bank Name :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
@@ -920,7 +988,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 4),
 
-              // ── MOBILE NO ──
               if (receipt.beneficiaryMobile.isNotEmpty) ...[
                 pw.Row(
                   children: [
@@ -931,7 +998,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                 pw.SizedBox(height: 4),
               ],
 
-              // ── SENDER MOBILE ──
               if (receipt.senderMobile.isNotEmpty) ...[
                 pw.Row(
                   children: [
@@ -942,7 +1008,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                 pw.SizedBox(height: 4),
               ],
 
-              // ── ACCOUNT NO ──
               pw.Row(
                 children: [
                   pw.SizedBox(width: 100, child: pw.Text('Account No :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
@@ -951,7 +1016,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 4),
 
-              // ── DATE & TIME ──
               pw.Row(
                 children: [
                   pw.SizedBox(width: 100, child: pw.Text('Date & Time :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font))),
@@ -960,31 +1024,27 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 16),
 
-              // ── DIVIDER ──
               pw.Divider(color: PdfColors.grey300, thickness: 0.5),
               pw.SizedBox(height: 10),
 
-              // ── TRANSACTION SUMMARY HEADER ──
               pw.Text('Transaction Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, font: fontBold)),
               pw.SizedBox(height: 8),
 
-              // ── TABLE HEADER ──
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: pw.BoxDecoration(
-                  color: _toPdfColor(const Color(0xFF1AA88A).withOpacity(0.08)),
+                  color: toPdfColor(const Color(0xFF1AA88A).withOpacity(0.08)),
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                 ),
                 child: pw.Row(
                   children: [
-                    pw.Expanded(flex: 3, child: pw.Text('TID/Type/UTR', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
-                    pw.Expanded(flex: 1, child: pw.Text('Amount', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
-                    pw.Expanded(flex: 1, child: pw.Text('Status', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
+                    pw.Expanded(flex: 3, child: pw.Text('TID/Type/UTR', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
+                    pw.Expanded(flex: 1, child: pw.Text('Amount', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
+                    pw.Expanded(flex: 1, child: pw.Text('Status', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: toPdfColor(const Color(0xFF1AA88A)), font: fontBold))),
                   ],
                 ),
               ),
 
-              // ── TABLE ROW ──
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: pw.Row(
@@ -1011,13 +1071,13 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                         child: pw.Container(
                           padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: pw.BoxDecoration(
-                            color: _toPdfColor(receipt.statusColor.withOpacity(0.12)),
+                            color: toPdfColor(receipt.statusColor.withOpacity(0.12)),
                             borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
-                            border: pw.Border.all(color: _toPdfColor(receipt.statusColor.withOpacity(0.2)), width: 0.5),
+                            border: pw.Border.all(color: toPdfColor(receipt.statusColor.withOpacity(0.2)), width: 0.5),
                           ),
                           child: pw.Text(
                             receipt.status.toUpperCase(),
-                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: _toPdfColor(receipt.statusColor), font: fontBold),
+                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: toPdfColor(receipt.statusColor), font: fontBold),
                           ),
                         ),
                       ),
@@ -1027,13 +1087,12 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 8),
 
-              // ── TOTAL AMOUNT ──
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: pw.BoxDecoration(
-                  color: _toPdfColor(const Color(0xFF1AA88A).withOpacity(0.06)),
+                  color: toPdfColor(const Color(0xFF1AA88A).withOpacity(0.06)),
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                  border: pw.Border.all(color: _toPdfColor(const Color(0xFF1AA88A).withOpacity(0.15)), width: 0.5),
+                  border: pw.Border.all(color: toPdfColor(const Color(0xFF1AA88A).withOpacity(0.15)), width: 0.5),
                 ),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1044,7 +1103,6 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 4),
 
-              // ── AMOUNT IN WORDS ──
               pw.Row(
                 children: [
                   pw.Text('Amount (In Words) : ', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600, font: font)),
@@ -1053,12 +1111,10 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
               ),
               pw.SizedBox(height: 16),
 
-              // ── DIVIDER ──
               pw.Divider(color: PdfColors.grey300, thickness: 0.5),
               pw.SizedBox(height: 8),
 
-              // ── FOOTER ──
-              pw.Center(child: pw.Text('© 2022 All Rights Reserved', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500, font: font))),
+              pw.Center(child: pw.Text('© 2025 NEOFYN Bharath - All Rights Reserved', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500, font: font))),
               pw.SizedBox(height: 2),
               pw.Center(child: pw.Text('This is a system generated Receipt. Hence no seal or signature required.', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey500, font: font))),
             ],
@@ -1074,34 +1130,32 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
     return file;
   }
 
-  pw.Widget _pdfVerticalRow(String label, String value, pw.Font font, pw.Font fontBold, {PdfColor? valueColor}) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(label, style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: font)),
-        pw.SizedBox(height: 2),
-        pw.Text(value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: valueColor ?? PdfColors.black, font: fontBold)),
-      ],
-    );
-  }
-
-  pw.Widget _pdfSectionTitle(String title, pw.Font fontBold, PdfColor Function(Color) toPdfColor) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.only(bottom: 4),
-      decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.green700, width: 1.5))),
-      child: pw.Text(title, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: toPdfColor(const Color(0xFF1AA88A)), font: fontBold)),
-    );
-  }
-
-  PdfColor _toPdfColor(Color color) => PdfColor.fromInt(color.value);
-
   Future<void> _downloadReceipt(BuildContext context) async {
     setState(() => _isDownloading = true);
+
     try {
+      if (Platform.isAndroid) {
+        try {
+          final status = await Permission.manageExternalStorage.status;
+          if (!status.isGranted) {
+            await Permission.manageExternalStorage.request();
+          }
+        } catch (e) {
+          debugPrint('Permission request skipped: $e');
+        }
+      }
+
       final file = await _generatePdf();
       setState(() => _isDownloading = false);
 
       if (mounted) {
+        String displayPath = file.path;
+        if (displayPath.contains('/storage/emulated/0/')) {
+          displayPath = displayPath.replaceAll('/storage/emulated/0/', 'Internal Storage/');
+        } else if (displayPath.contains('/data/data/')) {
+          displayPath = 'App Storage/DMT Receipts';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Column(
@@ -1121,7 +1175,7 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '📁 ${file.path}',
+                    '📁 $displayPath',
                     style: GoogleFonts.poppins(fontSize: 9, color: Colors.white70),
                   ),
                 ),
@@ -1134,7 +1188,18 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
             action: SnackBarAction(
               label: 'Open',
               textColor: const Color(0xFF1AA88A),
-              onPressed: () => OpenFile.open(file.path),
+              onPressed: () {
+                try {
+                  OpenFile.open(file.path);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Cannot open file: $e'),
+                      backgroundColor: const Color(0xFF1A1F1A),
+                    ),
+                  );
+                }
+              },
             ),
           ),
         );
@@ -1145,9 +1210,15 @@ class _DmtReceiptScreenState extends State<DmtReceiptScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed: $e'),
+            content: Row(children: [
+              const Icon(Iconsax.close_circle, color: Color(0xFFEF4444), size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Download failed')),
+            ]),
             backgroundColor: const Color(0xFF1A1F1A),
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 4),
           ),
         );
       }

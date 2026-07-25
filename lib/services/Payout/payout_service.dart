@@ -140,19 +140,23 @@ class PayoutService {
         body: json.encode(body),
       );
 
+      final data = json.decode(response.body);
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
         if (data['status'] == 'success') return data;
-        throw Exception(data['message'] ?? 'Failed');
+        // Handle case where status is not success even with 200
+        throw Exception(data['message'] ?? 'Failed to add beneficiary');
       } else if (response.statusCode == 401) {
         await _storage.delete(key: 'jwt_token');
-        throw Exception('Session expired');
+        throw Exception('Session expired. Please login again.');
       } else {
-        throw Exception('Failed: ${response.statusCode}');
+        // Handle all other error status codes (400, 500, etc.)
+        final errorMessage = data['message'] ?? 'Failed to add beneficiary';
+        throw Exception(errorMessage);
       }
     } catch (e) {
       print('Save beneficiary error: $e');
-      rethrow;
+      rethrow; // Re-throw so UI layer can handle it properly
     }
   }
 

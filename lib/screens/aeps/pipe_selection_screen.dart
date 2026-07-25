@@ -31,7 +31,7 @@ class PipeSelectionScreen extends StatefulWidget {
 
 class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
   // final List<String> pipes = ['1', '2', '3'];
-  final List<String> pipes = ['1', '2'];
+  final List<String> pipes = ['1', '2','4'];
   Map<String, Map<String, dynamic>?> pipeStatus = {};
   Map<String, bool> pipe2FAStatus = {}; // ✅ 2FA status per pipe
   bool isLoading = true;
@@ -101,6 +101,7 @@ class _PipeSelectionScreenState extends State<PipeSelectionScreen> {
             '1': provider.is2FADoneForPipe('1'),
             '2': provider.is2FADoneForPipe('2'),
             '3': provider.is2FADoneForPipe('3'),
+            '4': provider.is2FADoneForPipe('4'),
           };
         });
       }

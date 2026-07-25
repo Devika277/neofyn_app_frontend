@@ -1,13 +1,56 @@
 // lib/screens/recharge/recharge_history_screen.dart
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/Recharges/recharge_service.dart';
+
+class RechargeReceiptModel {
+  final String transactionId;
+  final String operatorName;
+  final String mobileNumber;
+  final String amount;
+  final String status;
+  final String rechargeType;
+  final String operatorRefId;
+  final DateTime transactionDate;
+
+  RechargeReceiptModel({
+    required this.transactionId,
+    required this.operatorName,
+    required this.mobileNumber,
+    required this.amount,
+    required this.status,
+    required this.rechargeType,
+    this.operatorRefId = '',
+    required this.transactionDate,
+  });
+
+  String get formattedDate => DateFormat('dd-MM-yyyy hh:mm a').format(transactionDate);
+  String get formattedDateShort => DateFormat('dd-MM-yyyy').format(transactionDate);
+  String get formattedTime => DateFormat('hh:mm a').format(transactionDate);
+  String get fileNameDate => DateFormat('yyyyMMdd_HHmmss').format(transactionDate);
+
+  String get typeLabel {
+    switch (rechargeType.toUpperCase()) {
+      case 'PREPAID': return 'Prepaid Recharge';
+      case 'POSTPAID': return 'Postpaid Bill Payment';
+      case 'DTH': return 'DTH Recharge';
+      case 'DATACARD': return 'Data Card Recharge';
+      default: return 'Recharge';
+    }
+  }
+}
 
 class RechargeHistoryScreen extends StatefulWidget {
   const RechargeHistoryScreen({Key? key}) : super(key: key);
@@ -65,7 +108,6 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
     super.dispose();
   }
 
-  // Helper: Safe string conversion
   String _safeStr(dynamic value) => value?.toString() ?? 'N/A';
 
   Future<void> _loadUserId() async {
@@ -86,12 +128,7 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('accessToken') ?? prefs.getString('token') ?? '';
 
-      final response = await RechargeService.getRechargeHistory(
-        userId: _userId,
-        token: token,
-      );
-
-      debugPrint('📦 [Recharge] Response: ${jsonEncode(response)}');
+      final response = await RechargeService.getRechargeHistory(userId: _userId, token: token);
 
       if (response['success'] == true) {
         List<dynamic> rawList = [];
@@ -104,18 +141,14 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
         }
 
         final list = rawList.map((e) => Map<String, dynamic>.from(e)).toList();
-        debugPrint('✅ [Recharge] Found ${list.length} transactions');
-
         if (mounted) {
           setState(() { _allTransactions = list; _isLoading = false; });
           _applyFilters();
         }
       } else {
-        debugPrint('❌ [Recharge] API failed: ${response['message']}');
         if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
-      debugPrint('❌ [Recharge] History error: $e');
       if (mounted) setState(() => _isLoading = false);
     } finally {
       _isFetching = false;
@@ -124,19 +157,14 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
 
   void _applyFilters() {
     final filtered = _allTransactions.where((tx) {
-      // Type filter
       if (_selectedType != 'ALL') {
         final type = _safeStr(tx['recharge_type'] ?? tx['type']).toUpperCase();
         if (type != _selectedType) return false;
       }
-
-      // Status filter
       if (_selectedStatus != 'ALL') {
         final status = _safeStr(tx['status']).toLowerCase();
         if (status != _selectedStatus) return false;
       }
-
-      // Search filter
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         final mobile = _safeStr(tx['number'] ?? tx['mobile'] ?? tx['mobile_number']).toLowerCase();
@@ -144,8 +172,6 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
         final operator = _safeStr(tx['operator'] ?? tx['operator_name']).toLowerCase();
         if (!mobile.contains(q) && !txnId.contains(q) && !operator.contains(q)) return false;
       }
-
-      // Date filter
       if (_selectedDateFilter != 'ALL') {
         final txDate = _parseDate(tx['created_at'] ?? tx['createdAt'] ?? tx['date']);
         if (txDate == null) return false;
@@ -163,7 +189,6 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
       }
       return true;
     }).toList();
-
     if (mounted) setState(() => _filteredTransactions = filtered);
   }
 
@@ -453,7 +478,6 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
 
   void _downloadReceipt(Map<String, dynamic> tx) {
     HapticFeedback.mediumImpact();
-
     final receiptData = {
       'type': _safeStr(tx['recharge_type'] ?? tx['type']),
       'operator': _safeStr(tx['operator'] ?? tx['operator_name']),
@@ -464,7 +488,6 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
       'date': _fmtLong(tx['created_at'] ?? tx['createdAt'] ?? DateTime.now().toString()),
       'recharge_type': _safeStr(tx['recharge_type'] ?? tx['type']),
     };
-
     _showReceiptDialog(receiptData);
   }
 
@@ -472,7 +495,7 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Color(0xFF1A1F1A),
+        backgroundColor: const Color(0xFF1A1F1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -490,7 +513,7 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Color(0xFF008169).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: const Color(0xFF008169).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
               child: const Text('Neofyn Bharat', style: TextStyle(color: Color(0xFF008169), fontSize: 14, fontWeight: FontWeight.w700)),
             ),
           ],
@@ -498,16 +521,53 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close', style: TextStyle(color: Colors.white54))),
           ElevatedButton.icon(
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Receipt saved!', style: GoogleFonts.poppins(color: Colors.white)), backgroundColor: Color(0xFF008169), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), margin: const EdgeInsets.all(16)),
-              );
+            onPressed: () async {
               Navigator.pop(ctx);
+              HapticFeedback.lightImpact();
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Row(children: [const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)), const SizedBox(width: 12), Text('Saving receipt...', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13))]), backgroundColor: const Color(0xFF1A1F1A), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1)),
+              );
+
+              try {
+                DateTime txDate;
+                try { txDate = DateTime.parse((data['date'] ?? DateTime.now().toString()).toString()).toLocal(); } catch (_) { txDate = DateTime.now(); }
+
+                final model = RechargeReceiptModel(
+                  transactionId: data['txn_id'] ?? 'N/A',
+                  operatorName: data['operator'] ?? 'N/A',
+                  mobileNumber: data['mobile'] ?? 'N/A',
+                  amount: data['amount'] ?? '0',
+                  status: data['status'] ?? 'success',
+                  rechargeType: data['recharge_type'] ?? data['type'] ?? 'PREPAID',
+                  operatorRefId: data['operator_ref_id'] ?? '',
+                  transactionDate: txDate,
+                );
+
+                final file = await _generateRechargePdf(model);
+
+                if (mounted) {
+                  String displayPath = file.path;
+                  if (displayPath.contains('/storage/emulated/0/')) displayPath = displayPath.replaceAll('/storage/emulated/0/', 'Internal Storage/');
+
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Row(children: [Icon(Iconsax.tick_circle, color: Color(0xFF10B981), size: 20), SizedBox(width: 8), Expanded(child: Text('Receipt saved!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)))]),
+                      const SizedBox(height: 6),
+                      Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Row(children: [const Icon(Iconsax.folder_2, color: Colors.white70, size: 14), const SizedBox(width: 8), Expanded(child: Text(displayPath, style: GoogleFonts.poppins(fontSize: 10, color: Colors.white70), maxLines: 2, overflow: TextOverflow.ellipsis))])),
+                    ]),
+                    backgroundColor: const Color(0xFF1A1F1A), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), margin: const EdgeInsets.all(16), duration: const Duration(seconds: 5),
+                    action: SnackBarAction(label: 'OPEN', textColor: const Color(0xFF1AA88A), onPressed: () { try { OpenFile.open(file.path); } catch (_) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No app found to open PDF'), backgroundColor: Colors.red)); } }),
+                  ));
+                }
+              } catch (e) {
+                if (mounted) { ScaffoldMessenger.of(context).clearSnackBars(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Row(children: [const Icon(Iconsax.close_circle, color: Color(0xFFEF4444), size: 20), const SizedBox(width: 8), Expanded(child: Text('Failed: $e', style: const TextStyle(color: Colors.white)))]), backgroundColor: const Color(0xFF1A1F1A), behavior: SnackBarBehavior.floating)); }
+              }
             },
             icon: const Icon(Iconsax.document_download, size: 16),
             label: const Text('Save Receipt'),
-            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF008169), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008169), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
           ),
         ],
       ),
@@ -524,13 +584,71 @@ class _RechargeHistoryScreenState extends State<RechargeHistoryScreen> {
     );
   }
 
-  String _fmt(dynamic d) {
-    if (d == null) return '';
-    try { return DateFormat('dd MMM, HH:mm').format(DateTime.parse(d.toString()).toLocal()); } catch (_) { return ''; }
+  String _fmt(dynamic d) { if (d == null) return ''; try { return DateFormat('dd MMM, HH:mm').format(DateTime.parse(d.toString()).toLocal()); } catch (_) { return ''; } }
+  String _fmtLong(dynamic d) { if (d == null) return 'N/A'; try { return DateFormat('dd MMM yyyy, HH:mm:ss').format(DateTime.parse(d.toString()).toLocal()); } catch (_) { return d.toString(); } }
+
+  // ─────────────────────────────────────────────────────────────
+  Future<Directory> _getRechargeFolderPath() async {
+    Directory? directory;
+    if (Platform.isAndroid) {
+      final paths = ['/storage/emulated/0/Documents/NEOFYN/Recharge', '/storage/emulated/0/Download/NEOFYN/Recharge'];
+      for (final path in paths) {
+        try { final dir = Directory(path); if (!await dir.exists()) await dir.create(recursive: true); return dir; } catch (_) {}
+      }
+      try { final extDir = await getExternalStorageDirectory(); if (extDir != null) { directory = Directory('${extDir.path}/NEOFYN/Recharge'); if (!await directory!.exists()) await directory.create(recursive: true); return directory; } } catch (_) {}
+    }
+    final appDir = await getApplicationDocumentsDirectory();
+    directory = Directory('${appDir.path}/NEOFYN/Recharge');
+    if (!await directory!.exists()) await directory.create(recursive: true);
+    return directory;
   }
 
-  String _fmtLong(dynamic d) {
-    if (d == null) return 'N/A';
-    try { return DateFormat('dd MMM yyyy, HH:mm:ss').format(DateTime.parse(d.toString()).toLocal()); } catch (_) { return d.toString(); }
+  Future<File> _generateRechargePdf(RechargeReceiptModel r) async {
+    final pdf = pw.Document();
+    PdfColor pc(Color c) => PdfColor.fromInt(c.value);
+    final f = await PdfGoogleFonts.poppinsRegular();
+    final fb = await PdfGoogleFonts.poppinsBold();
+
+    pdf.addPage(pw.Page(pageFormat: PdfPageFormat.a4, margin: const pw.EdgeInsets.all(30), build: (ctx) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      pw.Center(child: pw.Column(children: [
+        pw.Container(width: 60, height: 60, decoration: pw.BoxDecoration(color: pc(const Color(0xFF008169)), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(14))), child: pw.Center(child: pw.Text('NB', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.white, font: fb)))),
+        pw.SizedBox(height: 8),
+        pw.Text('NEOFYN BHARATH', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, font: fb)),
+        pw.SizedBox(height: 4),
+        pw.Text(r.typeLabel, style: pw.TextStyle(fontSize: 11, color: pc(const Color(0xFF1AA88A)), font: fb)),
+        pw.SizedBox(height: 2),
+        pw.Text('${r.formattedDateShort}  ${r.formattedTime}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: f)),
+      ])),
+      pw.SizedBox(height: 16),
+      _pdfRow(f, fb, 'Operator', r.operatorName),
+      _pdfRow(f, fb, 'Mobile Number', r.mobileNumber),
+      _pdfRow(f, fb, 'Amount', '₹${r.amount}', vc: pc(const Color(0xFF10B981))),
+      _pdfRow(f, fb, 'Recharge Type', r.typeLabel),
+      _pdfRow(f, fb, 'Transaction ID', r.transactionId),
+      if (r.operatorRefId.isNotEmpty) _pdfRow(f, fb, 'Operator Ref ID', r.operatorRefId),
+      _pdfRow(f, fb, 'Date & Time', r.formattedDate),
+      _pdfRow(f, fb, 'Status', 'SUCCESS', vc: pc(const Color(0xFF10B981))),
+      pw.SizedBox(height: 10),
+      pw.Container(padding: const pw.EdgeInsets.all(8), decoration: pw.BoxDecoration(color: pc(const Color(0xFF1AA88A).withOpacity(0.06)), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)), border: pw.Border.all(color: pc(const Color(0xFF1AA88A).withOpacity(0.15)), width: 0.5)), child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('Total Amount : ₹${r.amount}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: fb))])),
+      pw.SizedBox(height: 20), pw.Divider(),
+      pw.Center(child: pw.Text('© 2025 NEOFYN Bharath - All Rights Reserved', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500, font: f))),
+      pw.SizedBox(height: 2),
+      pw.Center(child: pw.Text('System generated receipt - No signature required', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey500, font: f))),
+    ])));
+
+    final dir = await _getRechargeFolderPath();
+    final file = File('${dir.path}/Recharge_Receipt_${r.transactionId}_${r.fileNameDate}.pdf');
+    await file.writeAsBytes(await pdf.save());
+    return file;
+  }
+
+  pw.Widget _pdfRow(pw.Font f, pw.Font fb, String label, String value, {PdfColor? vc}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.SizedBox(width: 110, child: pw.Text('$label :', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600, font: f))),
+        pw.Expanded(child: pw.Text(value, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, font: fb, color: vc ?? PdfColors.black))),
+      ]),
+    );
   }
 }

@@ -277,6 +277,8 @@ class _LoginScreenState extends State<LoginScreen> {
               'tpin',
               data['user']?['tpin'] ?? false,  // ✅ false is a bool
             );
+            await prefs.setString('role', data['user']?['role'] ?? '');
+            debugPrint('💾 Role saved: ${data['user']?['role']}');
             final aeps = Provider.of<AepsProvider>(context, listen: false);
             aeps.setAuthDetails(
               token: finalToken,
