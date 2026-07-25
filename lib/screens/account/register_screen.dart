@@ -569,8 +569,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: _buildTextField(
                 _lastNameCtrl,
                 'Last Name',
-                'Doe',
-                validator: validateName,
+                'Doe (optional)',
+                // validator: validateName,
               ),
             ),
           ],

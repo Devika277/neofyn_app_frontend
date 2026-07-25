@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app/screens/account/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../screens/account/create_account_screen.dart';
+import '../screens/account/my_network_screen.dart';
 import '../screens/dmt1/dmt_home_screen.dart';
 import '../screens/account/Profile_screen.dart';
 import '../screens/history/history_dashboard_screen.dart';
@@ -65,6 +67,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   String _name = '';
   String _phone = '';
   String _userId = '';
+  String _role = '';
   bool _isBBPSOnboarded = false;
   bool _isCheckingBBPS = false;
   bool _isAEPSOnboarded = false;
@@ -92,6 +95,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       _name = name;
       _phone = prefs.getString('phone') ?? '';
       _userId = uid.isNotEmpty ? uid : 'PN8472193';
+      _role = prefs.getString('role') ?? '';
       _isInitialLoading = true;
     });
 
@@ -1098,6 +1102,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   isBBPSOnboarded: _isBBPSOnboarded,
                   isCheckingBBPS: _isCheckingBBPS,
                   onSupportTap: _showSupportPopup,
+                  userRole: _role,    // ✅ ADD
+                  userId: _userId,
                 ),
                 ServicesFullPage(
                   onServiceTap: _onServiceTap,
@@ -1214,6 +1220,8 @@ class HomeDashboard extends StatelessWidget {
   final bool isBBPSOnboarded;
   final bool isCheckingBBPS;
   final VoidCallback onSupportTap;
+  final String? userRole;
+  final String userId;
 
   const HomeDashboard({
     super.key, 
@@ -1222,6 +1230,8 @@ class HomeDashboard extends StatelessWidget {
     this.isBBPSOnboarded = false,
     this.isCheckingBBPS = false, 
     required this.onSupportTap,
+    this.userRole,
+    this.userId = '',
   });
 
   // ─── Helper methods inside HomeDashboard ───
@@ -1310,7 +1320,7 @@ class HomeDashboard extends StatelessWidget {
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _buildHeader(wp),
+              _buildHeader(wp,context),
               const SizedBox(height: 24),
               _buildBalanceCard(wp, context),
               const SizedBox(height: 20),
@@ -1325,9 +1335,139 @@ class HomeDashboard extends StatelessWidget {
       },
     );
   }
-
-  Widget _buildHeader(WalletProvider wp) {
+  Widget _buildHeader(WalletProvider wp,BuildContext context) {
     final initial = (wp.userName ?? 'M')[0].toUpperCase();
+    final isEmployee = userRole == 'employee';
+
+    return Row(children: [
+      // Avatar with green dot for employee
+      Stack(
+        children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [AppColors.primary, AppColors.accent]),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(
+              child: Text(
+                initial,
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          if (isEmployee)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: AppColors.success,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.bg, width: 2),
+                ),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Good Morning 👋', style: TextStyle(fontSize: 11, color: AppColors.textHint)),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Text(
+                wp.userName ?? 'Merchant',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+              ),
+              if (isEmployee) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'EMPLOYEE',
+                    style: TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ]),
+      ),
+      // BBPS indicators
+      if (isCheckingBBPS)
+        const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryLight))),
+      if (!isCheckingBBPS && isBBPSOnboarded)
+        const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.verified, color: AppColors.success, size: 18)),
+      if (!isCheckingBBPS && !isBBPSOnboarded)
+        const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.lock_rounded, color: AppColors.warning, size: 18)),
+
+      // ✅ 3-dot menu (employee only) - REPLACES notification bell
+      if (isEmployee)
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert_rounded, color: AppColors.textHint, size: 22),
+          offset: const Offset(0, 40),
+          color: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: AppColors.border, width: 0.5),
+          ),
+          onSelected: (value) {
+            if (value == 'my_network') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => MyNetworkScreen(userId: userId)),
+              );
+            } else if (value == 'create_account') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => CreateAccountScreen(userId: userId)),
+              );
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'my_network',
+              child: Row(
+                children: [
+                  Icon(Icons.people_rounded, color: AppColors.accent, size: 20),
+                  SizedBox(width: 12),
+                  Text('My Network', style: TextStyle(color: Colors.white, fontSize: 14)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'create_account',
+              child: Row(
+                children: [
+                  Icon(Icons.person_add_rounded, color: AppColors.accent, size: 20),
+                  SizedBox(width: 12),
+                  Text('Create Account', style: TextStyle(color: Colors.white, fontSize: 14)),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+      const SizedBox(width: 6),
+      _IconBtn(Icons.logout_rounded, onLogout, destructive: true),
+    ]);
+  }
+ /* Widget _buildHeader(WalletProvider wp) {
+    final initial = (wp.userName ?? 'M')[0].toUpperCase();
+    final isEmployee = userRole == 'employee';
     return Row(children: [
       Container(
         width: 44, height: 44,
@@ -1352,7 +1492,7 @@ class HomeDashboard extends StatelessWidget {
       const SizedBox(width: 6),
       _IconBtn(Icons.logout_rounded, onLogout, destructive: true),
     ]);
-  }
+  }*/
 
   Widget _buildBalanceCard(WalletProvider wp, BuildContext context) {
     final total = (wp.mainWallet?.balance ?? 0) + (wp.aepsWallet?.balance ?? 0);
