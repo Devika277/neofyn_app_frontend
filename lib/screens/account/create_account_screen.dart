@@ -22,7 +22,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _isLoadingParents = false;
 
   String? _selectedRole;
-  String? _selectedAccountType;
   int? _selectedParentId;
   List<Map<String, dynamic>> _parentOptions = [];
   int _currentStep = 0;
@@ -41,11 +40,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _pa = TextEditingController();
 
   final List<String> _roles = ['master_distributor', 'distributor', 'retailer'];
-  final List<Map<String, dynamic>> _accountTypes = [
-    {'value': 'regular', 'label': 'Regular', 'icon': Icons.person_outline, 'description': 'Standard account with basic features'},
-    {'value': 'premium', 'label': 'Premium', 'icon': Icons.workspace_premium, 'description': 'Advanced features & priority support'},
-    {'value': 'business', 'label': 'Business', 'icon': Icons.business, 'description': 'Enterprise-grade solutions'},
-  ];
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -77,10 +71,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   Future<void> _createAccount() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedAccountType == null) {
-      _showToast('Please select an account type', error: true);
-      return;
-    }
     if (_selectedRole != 'master_distributor' && _selectedParentId == null) {
       _showToast('Select a parent', error: true);
       return;
@@ -96,7 +86,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         'email': _em.text.trim(),
         'phone': _ph.text.trim(),
         'intended_role': _selectedRole,
-        'accountType': _selectedAccountType, // Now using selected account type
+        'accountType': _selectedRole, // ✅ Now accountType = selected role
         'business_name': _bn.text.trim(),
         'business_type': _bt.text.trim(),
         'business_address': _ba.text.trim(),
@@ -134,7 +124,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
     setState(() {
       _selectedRole = null;
-      _selectedAccountType = null;
       _selectedParentId = null;
       _parentOptions = [];
       _currentStep = 0;
@@ -180,6 +169,32 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         return 'Retailer';
       default:
         return r;
+    }
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'master_distributor':
+        return Icons.stars_rounded;
+      case 'distributor':
+        return Icons.local_shipping_rounded;
+      case 'retailer':
+        return Icons.store_rounded;
+      default:
+        return Icons.person;
+    }
+  }
+
+  String _getRoleDescription(String role) {
+    switch (role) {
+      case 'master_distributor':
+        return 'Top-level distributor with full access';
+      case 'distributor':
+        return 'Mid-level distribution partner';
+      case 'retailer':
+        return 'End-point retailer account';
+      default:
+        return '';
     }
   }
 
@@ -229,23 +244,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               _buildProgressIndicator(),
               const SizedBox(height: 24),
 
-              // Step 1: Role & Account Type Selection
+              // Step 1: Role Selection (which also determines accountType)
               if (_currentStep == 0) ...[
                 _buildSectionCard(
-                  title: 'Select Role',
+                  title: 'Select Account Type',
                   icon: Icons.badge_outlined,
-                  child: Column(
-                    children: [
-                      _buildRoleSelector(),
-                      const SizedBox(height: 16),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        child: _selectedRole != null
-                            ? _buildAccountTypeSelector()
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
+                  child: _buildRoleSelector(),
                 ),
                 if (_selectedRole != null && _selectedRole != 'master_distributor') ...[
                   const SizedBox(height: 16),
@@ -581,126 +585,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  Widget _buildAccountTypeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        const Text(
-          'Account Type',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ..._accountTypes.map((type) {
-          final isSelected = _selectedAccountType == type['value'];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _selectedAccountType = type['value'] as String;
-                  });
-                },
-                borderRadius: BorderRadius.circular(14),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF10B981)
-                          : Colors.white.withOpacity(0.08),
-                      width: isSelected ? 2 : 1,
-                    ),
-                    gradient: isSelected
-                        ? LinearGradient(
-                      colors: [
-                        const Color(0xFF10B981).withOpacity(0.15),
-                        const Color(0xFF10B981).withOpacity(0.05),
-                      ],
-                    )
-                        : null,
-                    color: isSelected ? null : Colors.white.withOpacity(0.02),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected
-                              ? const Color(0xFF10B981)
-                              : Colors.white.withOpacity(0.05),
-                        ),
-                        child: Icon(
-                          type['icon'] as IconData,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              type['label'] as String,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              type['description'] as String,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected
-                                ? const Color(0xFF10B981)
-                                : Colors.white.withOpacity(0.3),
-                            width: 2,
-                          ),
-                          color: isSelected
-                              ? const Color(0xFF10B981)
-                              : Colors.transparent,
-                        ),
-                        child: isSelected
-                            ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
   Widget _buildParentSelector() {
     if (_isLoadingParents) {
       return const Center(
@@ -834,8 +718,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildSummaryRow('Role', _roleLabel(_selectedRole ?? '')),
-          _buildSummaryRow('Account Type', _selectedAccountType ?? ''),
+          _buildSummaryRow('Account Type', _roleLabel(_selectedRole ?? '')),
           _buildSummaryRow('Name', '${_fn.text} ${_ln.text}'),
           _buildSummaryRow('Email', _em.text),
           _buildSummaryRow('Business', _bn.text),
@@ -870,10 +753,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       child: ElevatedButton(
         onPressed: () {
           if (_selectedRole == null) {
-            _showToast('Please select a role', error: true);
-            return;
-          }
-          if (_selectedAccountType == null) {
             _showToast('Please select an account type', error: true);
             return;
           }
@@ -990,32 +869,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         ),
       ),
     );
-  }
-
-  IconData _getRoleIcon(String role) {
-    switch (role) {
-      case 'master_distributor':
-        return Icons.stars_rounded;
-      case 'distributor':
-        return Icons.local_shipping_rounded;
-      case 'retailer':
-        return Icons.store_rounded;
-      default:
-        return Icons.person;
-    }
-  }
-
-  String _getRoleDescription(String role) {
-    switch (role) {
-      case 'master_distributor':
-        return 'Top-level distributor with full access';
-      case 'distributor':
-        return 'Mid-level distribution partner';
-      case 'retailer':
-        return 'End-point retailer account';
-      default:
-        return '';
-    }
   }
 
   @override
