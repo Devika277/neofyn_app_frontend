@@ -4,6 +4,7 @@
 -keepattributes *Annotation*
 -keepattributes EnclosingMethod
 -keepattributes InnerClasses
+-keepattributes Exceptions
 
 # ─── mATM SDK ─────────────────────────────────────────────────────────────────
 -dontwarn sun.misc.**
@@ -13,7 +14,7 @@
 -dontwarn com.morefun.**
 -dontwarn com.vimopay.**
 
-# ─── Gson (used internally by SDK) ────────────────────────────────────────────
+# ─── Gson ──────────────────────────────────────────────────────────────────────
 -keep class * extends com.google.gson.TypeAdapter
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer
@@ -33,7 +34,6 @@
 
 # ─── Retrofit + OkHttp ────────────────────────────────────────────────────────
 -keep class retrofit2.** { *; }
--keepattributes Exceptions
 -keepclasseswithmembers class * {
     @retrofit2.http.* <methods>;
 }
@@ -43,7 +43,7 @@
 -dontwarn okhttp3.**
 -dontwarn okio.**
 
-# ─── AndroidX / Compose ───────────────────────────────────────────────────────
+# ─── AndroidX / Compose ──────────────────────────────────────────────────────
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**
 -keep class androidx.lifecycle.** { *; }
@@ -73,9 +73,12 @@
     public void *(android.view.MenuItem);
 }
 
-# ─── Suppress common warnings from third-party libs ──────────────────────────
+# ─── Suppress warnings ──────────────────────────────────────────────────────
 -dontwarn sun.misc.**
 -dontwarn java.lang.invoke.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.conscrypt.**
 -dontwarn org.openjsse.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement

@@ -21,24 +21,22 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _isLoading = false;
   bool _isLoadingParents = false;
 
-  // Dropdown values
   String? _selectedRole;
   int? _selectedParentId;
   List<Map<String, dynamic>> _parentOptions = [];
 
-  // Form controllers
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _businessNameController = TextEditingController();
-  final _businessTypeController = TextEditingController();
-  final _businessAddressController = TextEditingController();
-  final _cityController = TextEditingController();
-  final _stateController = TextEditingController();
-  final _pinCodeController = TextEditingController();
-  final _aadhaarController = TextEditingController();
-  final _panController = TextEditingController();
+  final _fn = TextEditingController();
+  final _ln = TextEditingController();
+  final _em = TextEditingController();
+  final _ph = TextEditingController();
+  final _bn = TextEditingController();
+  final _bt = TextEditingController();
+  final _ba = TextEditingController();
+  final _ct = TextEditingController();
+  final _st = TextEditingController();
+  final _pc = TextEditingController();
+  final _aa = TextEditingController();
+  final _pa = TextEditingController();
 
   final List<String> _roles = ['master_distributor', 'distributor', 'retailer'];
 
@@ -49,114 +47,80 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   Future<void> _fetchParentOptions(String childRole) async {
     setState(() => _isLoadingParents = true);
-
     try {
       final token = await _getToken();
       if (token == null) return;
-
-      final url = '${ApiConfig.baseUrl}/api/members/parent-options?childRole=$childRole';
       final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        Uri.parse('${ApiConfig.baseUrl}/api/members/parent-options?childRole=$childRole'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
       );
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
           _parentOptions = List<Map<String, dynamic>>.from(data['parents'] ?? []);
           _selectedParentId = null;
-          _isLoadingParents = false;
         });
       }
     } catch (e) {
-      debugPrint('Error fetching parent options: $e');
+      debugPrint('Error: $e');
+    } finally {
       setState(() => _isLoadingParents = false);
     }
   }
 
   Future<void> _createAccount() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // Validate parent selection for distributor and retailer
     if (_selectedRole != 'master_distributor' && _selectedParentId == null) {
-      _showToast('Please select a parent', error: true);
+      _showToast('Select a parent', error: true);
       return;
     }
-
     setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
-
     try {
       final token = await _getToken();
       if (token == null) return;
-
-      // Use Map<String, dynamic> to allow mixed types
       final Map<String, dynamic> body = {
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'phone': _phoneController.text.trim(),
+        'first_name': _fn.text.trim(),
+        'last_name': _ln.text.trim(),
+        'email': _em.text.trim(),
+        'phone': _ph.text.trim(),
         'intended_role': _selectedRole,
-        'account_type': 'regular',
-        'business_name': _businessNameController.text.trim(),
-        'business_type': _businessTypeController.text.trim(),
-        'business_address': _businessAddressController.text.trim(),
-        'city': _cityController.text.trim(),
-        'state': _stateController.text.trim(),
-        'pin_code': _pinCodeController.text.trim(),
-        'aadhaar_number': _aadhaarController.text.trim(),
-        'pan_number': _panController.text.trim(),
+        'accountType': 'regular',
+        'business_name': _bn.text.trim(),
+        'business_type': _bt.text.trim(),
+        'business_address': _ba.text.trim(),
+        'city': _ct.text.trim(),
+        'state': _st.text.trim(),
+        'pin_code': _pc.text.trim(),
+        'aadhaar_number': _aa.text.trim(),
+        'pan_number': _pa.text.trim(),
       };
-
-      // Only add parent_id for non-master_distributor
       if (_selectedRole != 'master_distributor' && _selectedParentId != null) {
-        body['parent_id'] = _selectedParentId; // int goes into Map<String, dynamic>
+        body['parent_id'] = _selectedParentId;
       }
-
-      debugPrint('📦 Create body: ${json.encode(body)}');
-
       final response = await LoggedHttpClient.post(
         Uri.parse('${ApiConfig.baseUrl}/api/members/create'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: json.encode(body),
       );
-
       final data = json.decode(response.body);
-      debugPrint('📦 Create response: $data');
-
       if (response.statusCode == 200 && data['success'] == true) {
-        _showToast(data['message'] ?? 'Account created successfully!');
+        _showToast(data['message'] ?? 'Created!');
         _clearForm();
       } else {
-        _showToast(data['message'] ?? 'Failed to create account', error: true);
+        _showToast(data['message'] ?? 'Failed', error: true);
       }
     } catch (e) {
-      debugPrint('❌ Create error: $e');
-      _showToast('Network error. Please try again.', error: true);
+      _showToast('Network error', error: true);
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   void _clearForm() {
-    _firstNameController.clear();
-    _lastNameController.clear();
-    _emailController.clear();
-    _phoneController.clear();
-    _businessNameController.clear();
-    _businessTypeController.clear();
-    _businessAddressController.clear();
-    _cityController.clear();
-    _stateController.clear();
-    _pinCodeController.clear();
-    _aadhaarController.clear();
-    _panController.clear();
+    for (final c in [_fn, _ln, _em, _ph, _bn, _bt, _ba, _ct, _st, _pc, _aa, _pa]) {
+      c.clear();
+    }
     setState(() {
       _selectedRole = null;
       _selectedParentId = null;
@@ -166,21 +130,25 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   void _showToast(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(color: Colors.white)),
+      content: Text(msg, style: const TextStyle(color: Colors.white, fontSize: 12)),
       backgroundColor: error ? const Color(0xFFFF5252) : const Color(0xFF008169),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      margin: const EdgeInsets.all(12),
       duration: const Duration(seconds: 2),
     ));
   }
 
-  String _getRoleDisplay(String role) {
-    switch (role) {
-      case 'master_distributor': return 'Master Distributor';
-      case 'distributor': return 'Distributor';
-      case 'retailer': return 'Retailer';
-      default: return role;
+  String _roleLabel(String r) {
+    switch (r) {
+      case 'master_distributor':
+        return 'Master Distributor';
+      case 'distributor':
+        return 'Distributor';
+      case 'retailer':
+        return 'Retailer';
+      default:
+        return r;
     }
   }
 
@@ -190,158 +158,135 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       backgroundColor: const Color(0xFF0A0E0A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF151915),
-        title: const Text('Create Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        title: const Text('Create Account',
+            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(14),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF008169).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF008169).withOpacity(0.3)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, color: Color(0xFF00C897), size: 20),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Fill in the details to create a new account under your network.',
-                        style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Role Dropdown
-              _buildSectionTitle('Select Role'),
-              const SizedBox(height: 8),
-              _buildDropdown<String>(
+              // Role
+              _section('Role'),
+              const SizedBox(height: 6),
+              _dropdown<String>(
                 value: _selectedRole,
-                hint: 'Choose role',
-                items: _roles.map((r) => DropdownMenuItem<String>(value: r, child: Text(_getRoleDisplay(r)))).toList(),
-                onChanged: (value) {
+                hint: 'Select role',
+                items: _roles
+                    .map((r) => DropdownMenuItem<String>(
+                  value: r,
+                  child: Text(_roleLabel(r), style: const TextStyle(fontSize: 13)),
+                ))
+                    .toList(),
+                onChanged: (v) {
                   setState(() {
-                    _selectedRole = value;
+                    _selectedRole = v;
                     _selectedParentId = null;
                   });
-                  if (value != null) _fetchParentOptions(value);
+                  if (v != null) _fetchParentOptions(v);
                 },
-                showValidator: false, // Don't show validator for role (optional selection)
               ),
-              /*_buildDropdown(
-                value: _selectedRole,
-                hint: 'Choose role',
-                items: _roles.map((r) => DropdownMenuItem(value: r, child: Text(_getRoleDisplay(r)))).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedRole = value;
-                    _selectedParentId = null;
-                  });
-                  if (value != null) _fetchParentOptions(value);
-                },
-              ),*/
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
 
-              // Parent Dropdown (only for distributor & retailer)
+              // Parent
               if (_selectedRole != null && _selectedRole != 'master_distributor') ...[
-                _buildSectionTitle('Select Parent'),
-                const SizedBox(height: 8),
+                _section('Parent'),
+                const SizedBox(height: 6),
                 _isLoadingParents
-                    ? const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(color: Color(0xFF00C897), strokeWidth: 2)))
-                    : _buildDropdown<int>(
+                    ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Color(0xFF00C897))),
+                  ),
+                )
+                    : _dropdown<int>(
                   value: _selectedParentId,
-                  hint: 'Choose parent',
-                  items: _parentOptions.map((p) => DropdownMenuItem<int>(
+                  hint: 'Select parent',
+                  items: _parentOptions
+                      .map((p) => DropdownMenuItem<int>(
                     value: p['id'] as int,
-                    child: Text('${p['first_name']} ${p['last_name']} (${p['member_id']})'),
-                  )).toList(),
-                  onChanged: (value) => setState(() => _selectedParentId = value),
+                    child: Text(
+                        '${p['first_name']} ${p['last_name']} (${p['member_id']})',
+                        style: const TextStyle(fontSize: 13)),
+                  ))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedParentId = v),
                 ),
-                /*_buildDropdown(
-                  value: _selectedParentId,
-                  hint: 'Choose parent',
-                  items: _parentOptions.map((p) => DropdownMenuItem(
-                    value: p['id'],
-                    child: Text('${p['first_name']} ${p['last_name']} (${p['member_id']})'),
-                  )).toList(),
-                  onChanged: (value) => setState(() => _selectedParentId = value),
-                ),*/
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
               ],
 
-              // Only show form if role is selected
               if (_selectedRole != null) ...[
-                // Personal Info
-                _buildSectionTitle('Personal Information'),
-                const SizedBox(height: 12),
-                _buildTextField(_firstNameController, 'First Name'),
-                const SizedBox(height: 12),
-                _buildTextField(_lastNameController, 'Last Name'),
-                const SizedBox(height: 12),
-                _buildTextField(_emailController, 'Email', keyboardType: TextInputType.emailAddress),
-                const SizedBox(height: 12),
-                _buildTextField(_phoneController, 'Phone', keyboardType: TextInputType.phone, maxLength: 10),
-                const SizedBox(height: 24),
+                // Personal
+                _section('Personal'),
+                const SizedBox(height: 8),
+                _field(_fn, 'First Name'),
+                const SizedBox(height: 8),
+                _field(_ln, 'Last Name'),
+                const SizedBox(height: 8),
+                _field(_em, 'Email', keyboardType: TextInputType.emailAddress),
+                const SizedBox(height: 8),
+                _field(_ph, 'Phone', keyboardType: TextInputType.phone, maxLength: 10),
+                const SizedBox(height: 16),
 
-                // Business Info
-                _buildSectionTitle('Business Information'),
-                const SizedBox(height: 12),
-                _buildTextField(_businessNameController, 'Business Name'),
-                const SizedBox(height: 12),
-                _buildTextField(_businessTypeController, 'Business Type'),
-                const SizedBox(height: 12),
-                _buildTextField(_businessAddressController, 'Business Address', maxLines: 2),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: _buildTextField(_cityController, 'City')),
-                    const SizedBox(width: 12),
-                    Expanded(child: _buildTextField(_stateController, 'State')),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildTextField(_pinCodeController, 'PIN Code', keyboardType: TextInputType.number, maxLength: 6),
-                const SizedBox(height: 24),
+                // Business
+                _section('Business'),
+                const SizedBox(height: 8),
+                _field(_bn, 'Business Name'),
+                const SizedBox(height: 8),
+                _field(_bt, 'Business Type'),
+                const SizedBox(height: 8),
+                _field(_ba, 'Address', maxLines: 2),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: _field(_ct, 'City')),
+                  const SizedBox(width: 8),
+                  Expanded(child: _field(_st, 'State')),
+                ]),
+                const SizedBox(height: 8),
+                _field(_pc, 'PIN Code', keyboardType: TextInputType.number, maxLength: 6),
+                const SizedBox(height: 16),
 
-                // KYC Info
-                _buildSectionTitle('KYC Information'),
-                const SizedBox(height: 12),
-                _buildTextField(_aadhaarController, 'Aadhaar Number', keyboardType: TextInputType.number, maxLength: 12),
-                const SizedBox(height: 12),
-                _buildTextField(_panController, 'PAN Number', maxLength: 10),
-                const SizedBox(height: 32),
+                // KYC
+                _section('KYC'),
+                const SizedBox(height: 8),
+                _field(_aa, 'Aadhaar', keyboardType: TextInputType.number, maxLength: 12),
+                const SizedBox(height: 8),
+                _field(_pa, 'PAN', maxLength: 10),
+                const SizedBox(height: 20),
 
-                // Submit Button
+                // Button
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 44,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _createAccount,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF008169),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     child: _isLoading
-                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Create Account', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
+                        ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child:
+                        CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Create Account',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
               ],
             ],
           ),
@@ -350,94 +295,70 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-    );
-  }
+  Widget _section(String t) => Text(t,
+      style: const TextStyle(
+          color: Color(0xFF9CA3AF), fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5));
 
-  Widget _buildTextField(
-      TextEditingController controller,
-      String hint, {
+  Widget _field(
+      TextEditingController c,
+      String h, {
         TextInputType keyboardType = TextInputType.text,
         int? maxLength,
         int maxLines = 1,
       }) {
     return TextFormField(
-      controller: controller,
+      controller: c,
       keyboardType: keyboardType,
       maxLength: maxLength,
       maxLines: maxLines,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
+      style: const TextStyle(color: Colors.white, fontSize: 13),
       decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+        hintText: h,
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: Colors.white.withOpacity(0.04),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         counterText: '',
+        isDense: true,
       ),
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'This field is required';
-        }
-        return null;
-      },
+      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
     );
   }
 
-  Widget _buildDropdown<T>({
+  Widget _dropdown<T>({
     required T? value,
     required String hint,
     required List<DropdownMenuItem<T>> items,
-    required void Function(T?) onChanged,
-    bool showValidator = true,
+    required Function(T?) onChanged,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration:
+      BoxDecoration(color: Colors.white.withOpacity(0.04), borderRadius: BorderRadius.circular(8)),
       child: DropdownButtonFormField<T>(
         value: value,
         dropdownColor: const Color(0xFF151915),
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        isDense: true,
+        style: const TextStyle(color: Colors.white, fontSize: 13),
         decoration: InputDecoration(
           border: InputBorder.none,
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
+          contentPadding: EdgeInsets.zero,
         ),
-        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF6B7280)),
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF6B7280), size: 18),
         items: items,
         onChanged: onChanged,
-        validator: showValidator ? (value) {
-          if (value == null) return 'Please select an option';
-          return null;
-        } : null,
       ),
     );
   }
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _businessNameController.dispose();
-    _businessTypeController.dispose();
-    _businessAddressController.dispose();
-    _cityController.dispose();
-    _stateController.dispose();
-    _pinCodeController.dispose();
-    _aadhaarController.dispose();
-    _panController.dispose();
+    for (final c in [_fn, _ln, _em, _ph, _bn, _bt, _ba, _ct, _st, _pc, _aa, _pa]) {
+      c.dispose();
+    }
     super.dispose();
   }
 }
