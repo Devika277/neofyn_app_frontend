@@ -385,7 +385,36 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 const SizedBox(height: 16),
                 _buildSummaryCard(),
                 const SizedBox(height: 24),
-                _buildSubmitButton(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 52,
+                        child: OutlinedButton(
+                          onPressed: () => setState(() => _currentStep--),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF6C63FF),
+                            side: const BorderSide(color: Color(0xFF6C63FF)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.arrow_back_rounded, size: 20),
+                              SizedBox(width: 8),
+                              Text('Back', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildSubmitButton(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 30),
               ],
             ],
           ),
@@ -1001,15 +1030,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   Widget _buildSubmitButton() {
     return SizedBox(
-      width: double.infinity,
-      height: 56,
+      height: 52,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _createAccount,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF10B981),
           foregroundColor: Colors.white,
           disabledBackgroundColor: const Color(0xFF10B981).withOpacity(0.5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           elevation: 0,
         ),
         child: _isLoading
