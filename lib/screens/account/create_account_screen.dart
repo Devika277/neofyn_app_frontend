@@ -22,8 +22,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _isLoadingParents = false;
 
   String? _selectedRole;
+  String? _selectedAccountType;
   int? _selectedParentId;
   List<Map<String, dynamic>> _parentOptions = [];
+  int _currentStep = 0;
 
   final _fn = TextEditingController();
   final _ln = TextEditingController();
@@ -39,6 +41,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _pa = TextEditingController();
 
   final List<String> _roles = ['master_distributor', 'distributor', 'retailer'];
+  final List<Map<String, dynamic>> _accountTypes = [
+    {'value': 'regular', 'label': 'Regular', 'icon': Icons.person_outline, 'description': 'Standard account with basic features'},
+    {'value': 'premium', 'label': 'Premium', 'icon': Icons.workspace_premium, 'description': 'Advanced features & priority support'},
+    {'value': 'business', 'label': 'Business', 'icon': Icons.business, 'description': 'Enterprise-grade solutions'},
+  ];
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -70,6 +77,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   Future<void> _createAccount() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedAccountType == null) {
+      _showToast('Please select an account type', error: true);
+      return;
+    }
     if (_selectedRole != 'master_distributor' && _selectedParentId == null) {
       _showToast('Select a parent', error: true);
       return;
@@ -85,7 +96,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         'email': _em.text.trim(),
         'phone': _ph.text.trim(),
         'intended_role': _selectedRole,
-        'accountType': 'regular',
+        'accountType': _selectedAccountType, // Now using selected account type
         'business_name': _bn.text.trim(),
         'business_type': _bt.text.trim(),
         'business_address': _ba.text.trim(),
@@ -105,10 +116,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       );
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
-        _showToast(data['message'] ?? 'Created!');
+        _showToast(data['message'] ?? 'Account created successfully!');
         _clearForm();
       } else {
-        _showToast(data['message'] ?? 'Failed', error: true);
+        _showToast(data['message'] ?? 'Failed to create account', error: true);
       }
     } catch (e) {
       _showToast('Network error', error: true);
@@ -123,20 +134,40 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
     setState(() {
       _selectedRole = null;
+      _selectedAccountType = null;
       _selectedParentId = null;
       _parentOptions = [];
+      _currentStep = 0;
     });
   }
 
   void _showToast(String msg, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(color: Colors.white, fontSize: 12)),
-      backgroundColor: error ? const Color(0xFFFF5252) : const Color(0xFF008169),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      margin: const EdgeInsets.all(12),
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              error ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                msg,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: error ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+    );
   }
 
   String _roleLabel(String r) {
@@ -155,138 +186,156 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E0A),
+      backgroundColor: const Color(0xFF0A0E21),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF151915),
-        title: const Text('Create Account',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
+        backgroundColor: const Color(0xFF1A1F3A),
+        elevation: 0,
+        title: const Row(
+          children: [
+            Icon(Icons.person_add_rounded, color: Color(0xFF6C63FF), size: 24),
+            SizedBox(width: 10),
+            Text(
+              'Create Account',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Role
-              _section('Role'),
-              const SizedBox(height: 6),
-              _dropdown<String>(
-                value: _selectedRole,
-                hint: 'Select role',
-                items: _roles
-                    .map((r) => DropdownMenuItem<String>(
-                  value: r,
-                  child: Text(_roleLabel(r), style: const TextStyle(fontSize: 13)),
-                ))
-                    .toList(),
-                onChanged: (v) {
-                  setState(() {
-                    _selectedRole = v;
-                    _selectedParentId = null;
-                  });
-                  if (v != null) _fetchParentOptions(v);
-                },
-              ),
-              const SizedBox(height: 14),
+              // Progress Indicator
+              _buildProgressIndicator(),
+              const SizedBox(height: 24),
 
-              // Parent
-              if (_selectedRole != null && _selectedRole != 'master_distributor') ...[
-                _section('Parent'),
-                const SizedBox(height: 6),
-                _isLoadingParents
-                    ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Color(0xFF00C897))),
+              // Step 1: Role & Account Type Selection
+              if (_currentStep == 0) ...[
+                _buildSectionCard(
+                  title: 'Select Role',
+                  icon: Icons.badge_outlined,
+                  child: Column(
+                    children: [
+                      _buildRoleSelector(),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _selectedRole != null
+                            ? _buildAccountTypeSelector()
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
                   ),
-                )
-                    : _dropdown<int>(
-                  value: _selectedParentId,
-                  hint: 'Select parent',
-                  items: _parentOptions
-                      .map((p) => DropdownMenuItem<int>(
-                    value: p['id'] as int,
-                    child: Text(
-                        '${p['first_name']} ${p['last_name']} (${p['member_id']})',
-                        style: const TextStyle(fontSize: 13)),
-                  ))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedParentId = v),
                 ),
-                const SizedBox(height: 14),
+                if (_selectedRole != null && _selectedRole != 'master_distributor') ...[
+                  const SizedBox(height: 16),
+                  _buildSectionCard(
+                    title: 'Select Parent',
+                    icon: Icons.account_tree_outlined,
+                    child: _buildParentSelector(),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                _buildNextButton(),
               ],
 
-              if (_selectedRole != null) ...[
-                // Personal
-                _section('Personal'),
-                const SizedBox(height: 8),
-                _field(_fn, 'First Name'),
-                const SizedBox(height: 8),
-                _field(_ln, 'Last Name'),
-                const SizedBox(height: 8),
-                _field(_em, 'Email', keyboardType: TextInputType.emailAddress),
-                const SizedBox(height: 8),
-                _field(_ph, 'Phone', keyboardType: TextInputType.phone, maxLength: 10),
-                const SizedBox(height: 16),
-
-                // Business
-                _section('Business'),
-                const SizedBox(height: 8),
-                _field(_bn, 'Business Name'),
-                const SizedBox(height: 8),
-                _field(_bt, 'Business Type'),
-                const SizedBox(height: 8),
-                _field(_ba, 'Address', maxLines: 2),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: _field(_ct, 'City')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _field(_st, 'State')),
-                ]),
-                const SizedBox(height: 8),
-                _field(_pc, 'PIN Code', keyboardType: TextInputType.number, maxLength: 6),
-                const SizedBox(height: 16),
-
-                // KYC
-                _section('KYC'),
-                const SizedBox(height: 8),
-                _field(_aa, 'Aadhaar', keyboardType: TextInputType.number, maxLength: 12),
-                const SizedBox(height: 8),
-                _field(_pa, 'PAN', maxLength: 10),
-                const SizedBox(height: 20),
-
-                // Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _createAccount,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF008169),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child:
-                        CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Create Account',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+              // Step 2: Personal Information
+              if (_currentStep == 1) ...[
+                _buildSectionCard(
+                  title: 'Personal Information',
+                  icon: Icons.person_outline,
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: _buildModernField(_fn, 'First Name', Icons.person)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildModernField(_ln, 'Last Name', Icons.person_outline)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildModernField(_em, 'Email Address', Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress),
+                      const SizedBox(height: 16),
+                      _buildModernField(_ph, 'Phone Number', Icons.phone_outlined,
+                          keyboardType: TextInputType.phone, maxLength: 10),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 24),
+                _buildNavigationButtons(),
+              ],
+
+              // Step 3: Business Details
+              if (_currentStep == 2) ...[
+                _buildSectionCard(
+                  title: 'Business Details',
+                  icon: Icons.business_outlined,
+                  child: Column(
+                    children: [
+                      _buildModernField(_bn, 'Business Name', Icons.store),
+                      const SizedBox(height: 16),
+                      _buildModernField(_bt, 'Business Type', Icons.category_outlined),
+                      const SizedBox(height: 16),
+                      _buildModernField(_ba, 'Business Address', Icons.location_on_outlined,
+                          maxLines: 2),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(child: _buildModernField(_ct, 'City', Icons.location_city)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildModernField(_st, 'State', Icons.map_outlined)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildModernField(_pc, 'PIN Code', Icons.pin_outlined,
+                          keyboardType: TextInputType.number, maxLength: 6),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildNavigationButtons(),
+              ],
+
+              // Step 4: KYC Details & Submit
+              if (_currentStep == 3) ...[
+                _buildSectionCard(
+                  title: 'KYC Verification',
+                  icon: Icons.verified_user_outlined,
+                  child: Column(
+                    children: [
+                      _buildModernField(_aa, 'Aadhaar Number', Icons.credit_card_outlined,
+                          keyboardType: TextInputType.number, maxLength: 12),
+                      const SizedBox(height: 16),
+                      _buildModernField(_pa, 'PAN Number', Icons.description_outlined,
+                          maxLength: 10),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildSummaryCard(),
+                const SizedBox(height: 24),
+                _buildSubmitButton(),
               ],
             ],
           ),
@@ -295,63 +344,678 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  Widget _section(String t) => Text(t,
-      style: const TextStyle(
-          color: Color(0xFF9CA3AF), fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5));
+  Widget _buildProgressIndicator() {
+    final steps = ['Account Type', 'Personal', 'Business', 'KYC'];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [const Color(0xFF6C63FF).withOpacity(0.1), const Color(0xFF6C63FF).withOpacity(0.05)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF6C63FF).withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(steps.length, (index) {
+              final isActive = index <= _currentStep;
+              final isCurrent = index == _currentStep;
+              return Column(
+                children: [
+                  Container(
+                    width: isCurrent ? 36 : 30,
+                    height: isCurrent ? 36 : 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: isActive
+                          ? const LinearGradient(
+                        colors: [Color(0xFF6C63FF), Color(0xFF8B83FF)],
+                      )
+                          : null,
+                      color: isActive ? null : Colors.white.withOpacity(0.1),
+                      border: isActive
+                          ? null
+                          : Border.all(color: Colors.white.withOpacity(0.2), width: 2),
+                    ),
+                    child: Center(
+                      child: isActive
+                          ? Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: isCurrent ? 20 : 16,
+                      )
+                          : Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    steps[index],
+                    style: TextStyle(
+                      color: isActive ? Colors.white : Colors.white.withOpacity(0.4),
+                      fontSize: 11,
+                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (_currentStep + 1) / 4,
+              backgroundColor: Colors.white.withOpacity(0.1),
+              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+              minHeight: 4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _field(
-      TextEditingController c,
-      String h, {
+  Widget _buildSectionCard({required String title, required IconData icon, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F3A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C63FF).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: const Color(0xFF6C63FF), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoleSelector() {
+    return Column(
+      children: _roles.map((role) {
+        final isSelected = _selectedRole == role;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedRole = role;
+                  _selectedParentId = null;
+                });
+                _fetchParentOptions(role);
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF6C63FF)
+                        : Colors.white.withOpacity(0.08),
+                    width: isSelected ? 2 : 1,
+                  ),
+                  gradient: isSelected
+                      ? LinearGradient(
+                    colors: [
+                      const Color(0xFF6C63FF).withOpacity(0.15),
+                      const Color(0xFF6C63FF).withOpacity(0.05),
+                    ],
+                  )
+                      : null,
+                  color: isSelected ? null : Colors.white.withOpacity(0.02),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected
+                            ? const Color(0xFF6C63FF)
+                            : Colors.white.withOpacity(0.05),
+                      ),
+                      child: Icon(
+                        _getRoleIcon(role),
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _roleLabel(role),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _getRoleDescription(role),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF6C63FF)
+                              : Colors.white.withOpacity(0.3),
+                          width: 2,
+                        ),
+                        color: isSelected
+                            ? const Color(0xFF6C63FF)
+                            : Colors.transparent,
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAccountTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        const Text(
+          'Account Type',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ..._accountTypes.map((type) {
+          final isSelected = _selectedAccountType == type['value'];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedAccountType = type['value'] as String;
+                  });
+                },
+                borderRadius: BorderRadius.circular(14),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF10B981)
+                          : Colors.white.withOpacity(0.08),
+                      width: isSelected ? 2 : 1,
+                    ),
+                    gradient: isSelected
+                        ? LinearGradient(
+                      colors: [
+                        const Color(0xFF10B981).withOpacity(0.15),
+                        const Color(0xFF10B981).withOpacity(0.05),
+                      ],
+                    )
+                        : null,
+                    color: isSelected ? null : Colors.white.withOpacity(0.02),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected
+                              ? const Color(0xFF10B981)
+                              : Colors.white.withOpacity(0.05),
+                        ),
+                        child: Icon(
+                          type['icon'] as IconData,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              type['label'] as String,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              type['description'] as String,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.5),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF10B981)
+                                : Colors.white.withOpacity(0.3),
+                            width: 2,
+                          ),
+                          color: isSelected
+                              ? const Color(0xFF10B981)
+                              : Colors.transparent,
+                        ),
+                        child: isSelected
+                            ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildParentSelector() {
+    if (_isLoadingParents) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Color(0xFF6C63FF),
+          ),
+        ),
+      );
+    }
+
+    if (_parentOptions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.people_outline, color: Colors.white.withOpacity(0.3), size: 40),
+              const SizedBox(height: 8),
+              Text(
+                'No parents available',
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: DropdownButtonFormField<int>(
+        value: _selectedParentId,
+        dropdownColor: const Color(0xFF1A1F3A),
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          hintText: 'Select parent account',
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+          prefixIcon: const Icon(Icons.account_tree_outlined, color: Color(0xFF6C63FF), size: 20),
+        ),
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF6C63FF)),
+        items: _parentOptions.map((p) {
+          return DropdownMenuItem<int>(
+            value: p['id'] as int,
+            child: Text(
+              '${p['first_name']} ${p['last_name']} (${p['member_id']})',
+              style: const TextStyle(fontSize: 14),
+            ),
+          );
+        }).toList(),
+        onChanged: (v) => setState(() => _selectedParentId = v),
+        validator: (v) => v == null ? 'Please select a parent' : null,
+      ),
+    );
+  }
+
+  Widget _buildModernField(
+      TextEditingController controller,
+      String hint,
+      IconData icon, {
         TextInputType keyboardType = TextInputType.text,
         int? maxLength,
         int maxLines = 1,
       }) {
     return TextFormField(
-      controller: c,
+      controller: controller,
       keyboardType: keyboardType,
       maxLength: maxLength,
       maxLines: maxLines,
-      style: const TextStyle(color: Colors.white, fontSize: 13),
+      style: const TextStyle(color: Colors.white, fontSize: 14),
       decoration: InputDecoration(
-        hintText: h,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.04),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        fillColor: Colors.white.withOpacity(0.03),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFEF4444)),
+        ),
+        prefixIcon: Icon(icon, color: const Color(0xFF6C63FF), size: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         counterText: '',
-        isDense: true,
       ),
-      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+      validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
     );
   }
 
-  Widget _dropdown<T>({
-    required T? value,
-    required String hint,
-    required List<DropdownMenuItem<T>> items,
-    required Function(T?) onChanged,
-  }) {
+  Widget _buildSummaryCard() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration:
-      BoxDecoration(color: Colors.white.withOpacity(0.04), borderRadius: BorderRadius.circular(8)),
-      child: DropdownButtonFormField<T>(
-        value: value,
-        dropdownColor: const Color(0xFF151915),
-        isDense: true,
-        style: const TextStyle(color: Colors.white, fontSize: 13),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
-          contentPadding: EdgeInsets.zero,
-        ),
-        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF6B7280), size: 18),
-        items: items,
-        onChanged: onChanged,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.summarize_outlined, color: Color(0xFF10B981), size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Summary',
+                style: TextStyle(
+                  color: Color(0xFF10B981),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildSummaryRow('Role', _roleLabel(_selectedRole ?? '')),
+          _buildSummaryRow('Account Type', _selectedAccountType ?? ''),
+          _buildSummaryRow('Name', '${_fn.text} ${_ln.text}'),
+          _buildSummaryRow('Email', _em.text),
+          _buildSummaryRow('Business', _bn.text),
+        ],
       ),
     );
+  }
+
+  Widget _buildSummaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+          ),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNextButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: () {
+          if (_selectedRole == null) {
+            _showToast('Please select a role', error: true);
+            return;
+          }
+          if (_selectedAccountType == null) {
+            _showToast('Please select an account type', error: true);
+            return;
+          }
+          if (_selectedRole != 'master_distributor' && _selectedParentId == null) {
+            _showToast('Please select a parent', error: true);
+            return;
+          }
+          setState(() => _currentStep = 1);
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF6C63FF),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 0,
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Continue',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            SizedBox(width: 8),
+            Icon(Icons.arrow_forward_rounded, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigationButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 52,
+            child: OutlinedButton(
+              onPressed: () => setState(() => _currentStep--),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF6C63FF),
+                side: const BorderSide(color: Color(0xFF6C63FF)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.arrow_back_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text('Back', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: () {
+                if (!_formKey.currentState!.validate()) return;
+                setState(() => _currentStep++);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6C63FF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Next', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_forward_rounded, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _createAccount,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF10B981),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xFF10B981).withOpacity(0.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 0,
+        ),
+        child: _isLoading
+            ? const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+        )
+            : const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 22),
+            SizedBox(width: 10),
+            Text(
+              'Create Account',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'master_distributor':
+        return Icons.stars_rounded;
+      case 'distributor':
+        return Icons.local_shipping_rounded;
+      case 'retailer':
+        return Icons.store_rounded;
+      default:
+        return Icons.person;
+    }
+  }
+
+  String _getRoleDescription(String role) {
+    switch (role) {
+      case 'master_distributor':
+        return 'Top-level distributor with full access';
+      case 'distributor':
+        return 'Mid-level distribution partner';
+      case 'retailer':
+        return 'End-point retailer account';
+      default:
+        return '';
+    }
   }
 
   @override
