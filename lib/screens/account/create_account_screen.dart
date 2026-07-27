@@ -96,7 +96,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         'email': _em.text.trim(),
         'phone': _ph.text.trim(),
         'accountType': _selectedAccountType, // regular or employee
-        'intended_role': _selectedRole, // master_distributor, distributor, retailer, employee
+        'intendedRole': _selectedRole, // ✅ Changed from intended_role to intendedRole (camelCase)
         'business_name': _bn.text.trim(),
         'business_type': _bt.text.trim(),
         'business_address': _ba.text.trim(),
