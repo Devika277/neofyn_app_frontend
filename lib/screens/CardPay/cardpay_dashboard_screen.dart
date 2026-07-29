@@ -1,13 +1,18 @@
-// lib/screens/cardpay/cardpay_dashboard_screen.dart
+// lib/screens/CardPay/cardpay_dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cardpay_provider.dart';
-import 'cardpay_balance_card.dart';
-import 'cardpay_transaction_list.dart';
-import 'cardpay_quick_actions.dart';
 import 'cardpay_initiate_screen.dart';
 import 'cardpay_ledger_screen.dart';
 import 'cardpay_history_screen.dart';
+import 'cardpay_receipt_screen.dart';  // Add this import
+import 'cardpay_balance_card.dart';
+import 'cardpay_quick_actions.dart';
+import 'cardpay_transaction_list.dart';
+import '../Cardpay_out/cardpay_out_dashboard_screen.dart';
+
+
+
 
 class CardPayDashboardScreen extends StatefulWidget {
   const CardPayDashboardScreen({Key? key}) : super(key: key);
@@ -82,26 +87,28 @@ class _CardPayDashboardScreenState extends State<CardPayDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Balance Card
+                  // Balance Card - imported from widgets
                   CardPayBalanceCard(
                     balance: provider.walletBalance,
                     userBalance: provider.userBalance,
                   ),
                   const SizedBox(height: 16),
 
-                  // Quick Actions
+                  // Quick Actions - imported from widgets
                   CardPayQuickActions(
                     onInitiatePayment: () => _navigateToInitiatePayment(context),
                     onMoveToMain: () => _showMoveToMainDialog(context, provider),
                     onViewLedger: () => _navigateToLedger(context),
+                    onWithdrawToBank: () => _navigateToWithdrawToBank(context), 
                   ),
                   const SizedBox(height: 16),
 
-                  // Recent Transactions
+                  // Recent Transactions - imported from widgets
                   CardPayTransactionList(
                     transactions: provider.transactions,
                     onRefresh: _loadData,
                     onViewAll: () => _navigateToHistory(context),
+                    onTransactionTap: (ref) => _navigateToReceipt(context, ref),
                   ),
                 ],
               ),
@@ -117,6 +124,37 @@ class _CardPayDashboardScreenState extends State<CardPayDashboardScreen> {
       context,
       MaterialPageRoute(builder: (_) => const CardPayInitiateScreen()),
     ).then((_) => _loadData());
+  }
+
+  void _navigateToHistory(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CardPayHistoryScreen()),
+    );
+  }
+
+    // ✅ New navigation method for CardPay-Out
+  void _navigateToWithdrawToBank(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CardPayOutDashboardScreen()),
+    );
+  }
+
+  void _navigateToLedger(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CardPayLedgerScreen()),
+    );
+  }
+
+  void _navigateToReceipt(BuildContext context, String ref) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CardPayReceiptScreen(ref: ref),
+      ),
+    );
   }
 
   void _showMoveToMainDialog(BuildContext context, CardPayProvider provider) {
@@ -182,18 +220,7 @@ class _CardPayDashboardScreenState extends State<CardPayDashboardScreen> {
       ),
     );
   }
-
-  void _navigateToLedger(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const CardPayLedgerScreen()),
-    );
-  }
-
-  void _navigateToHistory(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const CardPayHistoryScreen()),
-    );
-  }
 }
+
+// Import these widgets at the top
+// These are already in your project structure

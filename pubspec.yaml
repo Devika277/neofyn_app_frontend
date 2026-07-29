@@ -48,6 +48,7 @@ dependencies:
   flutter_riverpod: ^2.4.0
   # UI Components
   google_fonts: ^6.1.0
+  geocoding: ^2.0.0 
   # Utilities
   flutter_secure_storage: ^9.0.0
   connectivity_plus: ^5.0.2

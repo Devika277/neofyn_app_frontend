@@ -8,9 +8,7 @@ import 'services/mpin_service.dart';
 import 'screens/account/login_screen.dart';
 import 'screens/account/set_mpin_screen.dart';
 import 'screens/account/mpin_verify_screen.dart';
-
 import 'package:provider/provider.dart' as provider;   // 👈 add prefix
-
 import 'providers/aeps_provider.dart';
 import 'providers/payout_provider.dart';
 import 'providers/beneficiary_provider.dart';
@@ -23,6 +21,7 @@ import 'providers/bbps_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';  // 👈 Add this import
 import 'providers/fund_provider.dart';
 import 'providers/cardpay_provider.dart';  // 👈 Add this import
+import 'providers/cardpay_out_provider.dart';
 
 
 void main() async {
@@ -51,6 +50,7 @@ class MyApp extends StatelessWidget {
     provider.ChangeNotifierProvider(create: (_) => BBPSProvider()),
     provider.ChangeNotifierProvider(create: (_) => FundProvider()),
     provider.ChangeNotifierProvider(create: (_) => CardPayProvider()),
+    provider.ChangeNotifierProvider(create: (_) => CardPayOutProvider()),
 
   ],
       child: ProviderScope(   // 👈 Riverpod scope now wraps MaterialApp

@@ -1,4 +1,4 @@
-// lib/widgets/cardpay/cardpay_transaction_list.dart
+// lib/screens/CardPay/cardpay_transaction_list.dart
 import 'package:flutter/material.dart';
 import '../../models/cardpay_models.dart';
 
@@ -6,12 +6,14 @@ class CardPayTransactionList extends StatelessWidget {
   final List<CardPayTransaction> transactions;
   final VoidCallback onRefresh;
   final VoidCallback onViewAll;
+  final Function(String) onTransactionTap;  // Add this
 
   const CardPayTransactionList({
     Key? key,
     required this.transactions,
     required this.onRefresh,
     required this.onViewAll,
+    required this.onTransactionTap,  // Required parameter
   }) : super(key: key);
 
   @override
@@ -63,79 +65,82 @@ class CardPayTransactionList extends StatelessWidget {
     final isPending = txn.txnStatus == 'pending';
     final statusColor = isSuccess ? Colors.green : (isPending ? Colors.orange : Colors.red);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade200),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              isSuccess ? Icons.check_circle_rounded : (isPending ? Icons.pending_rounded : Icons.error_rounded),
-              color: statusColor,
-              size: 24,
-            ),
+    return GestureDetector(
+      onTap: () => onTransactionTap(txn.merchantRefId),  // Navigate to receipt
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Colors.grey.shade200),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '₹${txn.amount.toStringAsFixed(2)}',
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isSuccess ? Icons.check_circle_rounded : (isPending ? Icons.pending_rounded : Icons.error_rounded),
+                color: statusColor,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                  _formatAmount(txn.amount),  // Use the formatter
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                  Text(
+                    txn.merchantRefId,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    txn.txnStatus.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  txn.merchantRefId,
+                  _formatDate(txn.createdAt),
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
+                    fontSize: 10,
+                    color: Colors.grey.shade400,
                   ),
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  txn.txnStatus.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _formatDate(txn.createdAt),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey.shade400,
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -148,4 +153,13 @@ class CardPayTransactionList extends StatelessWidget {
       return dateTimeString;
     }
   }
+
+  // Add this helper method at the bottom:
+String _formatAmount(double amount) {
+  try {
+    return '₹${amount.toStringAsFixed(2)}';
+  } catch (_) {
+    return '₹0.00';
+  }
+}
 }

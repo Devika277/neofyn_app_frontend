@@ -65,6 +65,20 @@ class CardPayInitiateResponse {
   }
 }
 
+class CardPayState {
+  final String id;
+  final String name;
+
+  CardPayState({required this.id, required this.name});
+
+  factory CardPayState.fromJson(Map<String, dynamic> json) {
+    return CardPayState(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? json['state'] ?? json['stateName'] ?? '',
+    );
+  }
+}
+
 class CardPayTransaction {
   final int id;
   final String merchantRefId;
@@ -112,7 +126,7 @@ class CardPayTransaction {
     return CardPayTransaction(
       id: _parseInt(json['id']),
       merchantRefId: json['merchant_ref_id'] ?? '',
-      amount: _parseDouble(json['amount']),  // ✅ Use _parseDouble instead of toDouble()
+      amount: _parseDouble(json['amount']),
       txnStatus: json['txn_status'] ?? 'pending',
       txnStatusCode: json['txn_status_code']?.toString(),
       paymentLink: json['payment_link'],
@@ -274,33 +288,26 @@ class CardPayPagination {
 
 // ========== HELPER METHODS ==========
 
-/// Safely parse a value to double, handling String, int, and null
 double _parseDouble(dynamic value) {
   if (value == null) return 0.0;
   if (value is double) return value;
   if (value is int) return value.toDouble();
   if (value is String) {
-    // Remove any currency symbols, commas, and extra characters
     final cleaned = value.replaceAll(RegExp(r'[^0-9.]'), '');
-    final parsed = double.tryParse(cleaned);
-    return parsed ?? 0.0;
+    return double.tryParse(cleaned) ?? 0.0;
   }
-  // If it's a num, convert to double
   if (value is num) return value.toDouble();
   return 0.0;
 }
 
-/// Safely parse a value to int, handling String, double, and null
 int _parseInt(dynamic value) {
   if (value == null) return 0;
   if (value is int) return value;
   if (value is double) return value.toInt();
   if (value is String) {
     final cleaned = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final parsed = int.tryParse(cleaned);
-    return parsed ?? 0;
+    return int.tryParse(cleaned) ?? 0;
   }
-  // If it's a num, convert to int
   if (value is num) return value.toInt();
   return 0;
 }

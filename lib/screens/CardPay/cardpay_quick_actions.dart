@@ -1,16 +1,18 @@
-// lib/widgets/cardpay/cardpay_quick_actions.dart
+// lib/screens/CardPay/cardpay_quick_actions.dart
 import 'package:flutter/material.dart';
 
 class CardPayQuickActions extends StatelessWidget {
   final VoidCallback onInitiatePayment;
   final VoidCallback onMoveToMain;
   final VoidCallback onViewLedger;
+  final VoidCallback onWithdrawToBank; // ✅ Added new callback
 
   const CardPayQuickActions({
     Key? key,
     required this.onInitiatePayment,
     required this.onMoveToMain,
     required this.onViewLedger,
+    required this.onWithdrawToBank, // ✅ Required parameter
   }) : super(key: key);
 
   @override
@@ -26,7 +28,7 @@ class CardPayQuickActions extends StatelessWidget {
             onTap: onInitiatePayment,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
           child: _buildActionCard(
             context,
@@ -36,7 +38,7 @@ class CardPayQuickActions extends StatelessWidget {
             onTap: onMoveToMain,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
           child: _buildActionCard(
             context,
@@ -44,6 +46,16 @@ class CardPayQuickActions extends StatelessWidget {
             label: 'Ledger',
             color: Colors.orange,
             onTap: onViewLedger,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildActionCard(
+            context,
+            icon: Icons.currency_rupee_rounded,
+            label: 'Withdraw',
+            color: Colors.teal,
+            onTap: onWithdrawToBank, // ✅ New action
           ),
         ),
       ],
@@ -60,28 +72,28 @@ class CardPayQuickActions extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: color.withOpacity(0.3),
-            width: 1,
+            width: 0.5,
           ),
         ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
               color: color,
-              size: 28,
+              size: 24,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: color,
               ),

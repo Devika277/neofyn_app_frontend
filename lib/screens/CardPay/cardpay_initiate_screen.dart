@@ -1,6 +1,9 @@
-// lib/screens/cardpay/cardpay_initiate_screen.dart
+// lib/screens/CardPay/cardpay_initiate_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../providers/cardpay_provider.dart';
 import '../../services/cardpay/card_pay_service.dart';
 import '../../models/cardpay_models.dart';
@@ -18,32 +21,128 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
   final _mobileController = TextEditingController();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _locationController = TextEditingController();
   final _latController = TextEditingController();
   final _longController = TextEditingController();
   
   bool _isLoading = false;
+  bool _isFetchingLocation = false;
   String? _selectedState;
   List<String> _states = [];
+  String? _currentAddress;
 
   @override
   void initState() {
     super.initState();
     _loadStates();
+    _getCurrentLocation();
   }
 
   Future<void> _loadStates() async {
     try {
-      final service = CardPayService();
-      final states = await service.getStateList();
-      setState(() {
-        _states = states;
-        if (_states.isNotEmpty) {
-          _selectedState = _states.first;
-        }
-      });
+      final provider = Provider.of<CardPayProvider>(context, listen: false);
+      if (provider.states.isNotEmpty) {
+        setState(() {
+          _states = provider.states;
+          if (_states.isNotEmpty && _selectedState == null) {
+            _selectedState = _states.first;
+          }
+        });
+      } else {
+        final service = CardPayService();
+        final states = await service.getStateList();
+        setState(() {
+          _states = states;
+          if (_states.isNotEmpty && _selectedState == null) {
+            _selectedState = _states.first;
+          }
+        });
+      }
     } catch (e) {
       debugPrint('Error loading states: $e');
+    }
+  }
+
+  // ✅ Auto-fetch current location
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isFetchingLocation = true);
+
+    try {
+      // Check permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() => _isFetchingLocation = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission denied. Please enter manually.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _isFetchingLocation = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location permission permanently denied. Please enter manually.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Update lat/long fields
+      setState(() {
+        _latController.text = position.latitude.toStringAsFixed(6);
+        _longController.text = position.longitude.toStringAsFixed(6);
+        _isFetchingLocation = false;
+      });
+
+      // Get address from coordinates
+      try {
+        final placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+          final state = place.administrativeArea ?? place.locality ?? '';
+          setState(() {
+            _currentAddress = '${place.locality ?? ''}, ${place.administrativeArea ?? ''}, ${place.country ?? ''}';
+            // Auto-select state if available
+            if (state.isNotEmpty && _states.contains(state)) {
+              _selectedState = state;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint('Error getting address: $e');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Location fetched successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isFetchingLocation = false);
+      debugPrint('Error getting location: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not fetch location: $e. Please enter manually.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
@@ -54,6 +153,13 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
         title: const Text('Initiate Card Payment'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(_isFetchingLocation ? Icons.location_searching : Icons.my_location),
+            onPressed: _isFetchingLocation ? null : _getCurrentLocation,
+            tooltip: 'Get Current Location',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -62,6 +168,56 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Location Status
+              if (_isFetchingLocation)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: const [
+                      SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Fetching your location...'),
+                    ],
+                  ),
+                ),
+              
+              // Current Address (if available)
+              if (_currentAddress != null && !_isFetchingLocation)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.location_on, color: Colors.green.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _currentAddress!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               // Amount
               TextFormField(
                 controller: _amountController,
@@ -143,11 +299,11 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Location (State)
+              // Location (State) Dropdown
               DropdownButtonFormField<String>(
                 value: _selectedState,
                 decoration: const InputDecoration(
-                  labelText: 'State',
+                  labelText: 'State *',
                   border: OutlineInputBorder(),
                 ),
                 items: _states.map((state) {
@@ -170,15 +326,16 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Latitude & Longitude (Row)
+              // Latitude & Longitude (Row) with Auto-fetch button
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
                       controller: _latController,
                       decoration: const InputDecoration(
-                        labelText: 'Latitude',
+                        labelText: 'Latitude *',
                         border: OutlineInputBorder(),
+                        hintText: 'e.g., 28.6139',
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
@@ -197,8 +354,9 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
                     child: TextFormField(
                       controller: _longController,
                       decoration: const InputDecoration(
-                        labelText: 'Longitude',
+                        labelText: 'Longitude *',
                         border: OutlineInputBorder(),
+                        hintText: 'e.g., 77.2090',
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
@@ -213,6 +371,17 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Manual entry hint
+              Text(
+                '📍 Tap the location icon in the app bar to auto-fetch, or enter manually',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade500,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -282,6 +451,7 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
   void _showSuccessDialog(CardPayInitiateResponse result) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Payment Initiated'),
         content: Column(
@@ -304,19 +474,43 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
             const SizedBox(height: 12),
             const Text('Please use the payment link to complete the transaction:'),
             const SizedBox(height: 8),
+            // Clickable Payment Link
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
               ),
-              child: Text(
-                result.paymentLink,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.blue,
+              child: InkWell(
+                onTap: () => _launchPaymentLink(result.paymentLink),
+                child: Row(
+                  children: [
+                    const Icon(Icons.open_in_new, color: Colors.blue, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        result.paymentLink,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue,
+                          decoration: TextDecoration.underline,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                maxLines: 3,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Tap the link above to open in browser',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
               ),
             ),
           ],
@@ -326,9 +520,38 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+          ElevatedButton.icon(
+            onPressed: () => _launchPaymentLink(result.paymentLink),
+            icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+            label: const Text('Open Link'),
+          ),
         ],
       ),
     );
+  }
+
+  // Launch the payment link
+  Future<void> _launchPaymentLink(String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+      } else {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open link: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -337,7 +560,6 @@ class _CardPayInitiateScreenState extends State<CardPayInitiateScreen> {
     _mobileController.dispose();
     _nameController.dispose();
     _emailController.dispose();
-    _locationController.dispose();
     _latController.dispose();
     _longController.dispose();
     super.dispose();

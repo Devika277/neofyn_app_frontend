@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../models/cardpay_models.dart';
 import '../services/cardpay/card_pay_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CardPayProvider extends ChangeNotifier {
   final CardPayService _service = CardPayService();
@@ -123,31 +124,41 @@ class CardPayProvider extends ChangeNotifier {
   }
 
   /// Get transaction history
-  Future<void> fetchUserHistory({
-    String? status,
-    String? startDate,
-    String? endDate,
-    String? search,
-    int limit = 20,
-    int offset = 0,
-  }) async {
-    try {
-      _setLoading(true);
-      final result = await _service.getUserHistory(
-        status: status,
-        startDate: startDate,
-        endDate: endDate,
-        search: search,
-        limit: limit,
-        offset: offset,
-      );
-      _transactions = result['transactions'] ?? [];
-      _totalTransactions = result['total'] ?? 0;
-      _setLoading(false);
-    } catch (e) {
-      _setError(e.toString());
+Future<void> fetchUserHistory({
+  String? status,
+  String? startDate,
+  String? endDate,
+  String? search,
+  int limit = 20,
+  int offset = 0,
+}) async {
+  try {
+    _setLoading(true);
+    final result = await _service.getUserHistory(
+      status: status,
+      startDate: startDate,
+      endDate: endDate,
+      search: search,
+      limit: limit,
+      offset: offset,
+    );
+    
+    // Ensure we're assigning the correct type
+    final transactionsData = result['transactions'];
+    if (transactionsData is List) {
+      _transactions = transactionsData.cast<CardPayTransaction>();
+    } else {
+      _transactions = [];
     }
+    
+    _totalTransactions = result['total'] ?? 0;
+    _setLoading(false);
+  } catch (e) {
+    _setError(e.toString());
+    _transactions = [];
+    _totalTransactions = 0;
   }
+}
 
   /// Get wallet ledger
   Future<void> fetchLedger({int limit = 50, int offset = 0}) async {
@@ -181,9 +192,8 @@ class CardPayProvider extends ChangeNotifier {
   /// Get receipt
   Future<Map<String, dynamic>?> getReceipt(String ref) async {
     try {
-      _setLoading(true);
+      // Don't set loading to avoid UI issues
       final result = await _service.getReceipt(ref);
-      _setLoading(false);
       return result;
     } catch (e) {
       _setError(e.toString());
@@ -255,6 +265,24 @@ class CardPayProvider extends ChangeNotifier {
       return null;
     }
   }
+
+
+  Future<void> launchPaymentLink(String url) async {
+  try {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+    } else {
+      throw 'Could not launch $url';
+    }
+  } catch (e) {
+    _setError('Failed to open payment link: $e');
+    rethrow;
+  }
+}
 
   // ─── Helper Methods ────────────────────────────────────────
 

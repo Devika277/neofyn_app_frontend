@@ -104,7 +104,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
                               size: 20,
                             ),
                           ),
-                          title: Text('₹${txn.amount.toStringAsFixed(2)}'),
+                          title: Text(_formatAmount(txn.amount)),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -372,6 +372,14 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
       return dateTimeString;
     }
   }
+
+  String _formatAmount(double amount) {
+  try {
+    return '₹${amount.toStringAsFixed(2)}';
+  } catch (_) {
+    return '₹0.00';
+  }
+}
 
   String _formatDateForDisplay(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';

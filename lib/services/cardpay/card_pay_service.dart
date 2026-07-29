@@ -1,4 +1,4 @@
-// lib/services/cardpay/cardpay_service.dart
+// lib/services/cardpay/card_pay_service.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -12,30 +12,26 @@ class CardPayService {
   factory CardPayService() => _instance;
   CardPayService._internal();
 
-  // ✅ Get auth token from SharedPreferences
   Future<String> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('accessToken') ?? prefs.getString('token') ?? '';
   }
 
-  // ✅ Get userId from SharedPreferences (NOT from ApiConfig)
   Future<String> _getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('userId') ?? '';
   }
 
-  // ✅ Get auth headers with token and userId from SharedPreferences
   Future<Map<String, String>> _getAuthHeaders() async {
     final token = await _getToken();
-    final userId = await _getUserId();  // ✅ Dynamically fetched
+    final userId = await _getUserId();
     return {
       'Content-Type': 'application/json',
       if (token.isNotEmpty) 'Authorization': 'Bearer $token',
-      if (userId.isNotEmpty) 'userId': userId,  // ✅ Added dynamically
+      if (userId.isNotEmpty) 'userId': userId,
     };
   }
 
-  // ─── Core request method ───────────────────────────────────
   Future<Map<String, dynamic>> _request(
     String endpoint, {
     Map<String, dynamic>? body,
@@ -43,8 +39,9 @@ class CardPayService {
     Map<String, String>? customHeaders,
   }) async {
     final url = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    debugPrint('📤 [CardPay] Request: $endpoint');
 
-    Map<String, String> headers = await _getAuthHeaders();  // ✅ Gets userId dynamically
+    Map<String, String> headers = await _getAuthHeaders();
     if (customHeaders != null) {
       headers.addAll(customHeaders);
     }
@@ -72,112 +69,63 @@ class CardPayService {
           throw Exception(data['message'] ?? 'Operation failed');
         }
       } else {
-        throw Exception('Server error: ${response.statusCode} - ${response.body}');
+        throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      throw Exception('Network error: $e');
-    }
-  }
-
-  // ─── Public Routes (No Auth) ──────────────────────────────
-
-  /// Handle CardPay webhook callback (Public endpoint)
-  Future<Map<String, dynamic>> processCallback(Map<String, dynamic> callbackData) async {
-    try {
-      final url = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.cardPayCallback}');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(callbackData),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': data['success'] ?? false,
-          'message': data['message'] ?? 'Callback processed',
-        };
-      } else {
-        throw Exception('Callback failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('❌ [CardPay] processCallback error: $e');
+      debugPrint('❌ [CardPay] Request error: $e');
       rethrow;
     }
   }
 
-  // ─── User Routes (Requires Auth) ──────────────────────────
+  // ========== USER ROUTES ==========
 
-// In cardpay_service.dart
+// lib/services/cardpay/card_pay_service.dart
 
-/// Get list of states
-// lib/services/cardpay/cardpay_service.dart
-
-/// Get list of states
 Future<List<String>> getStateList() async {
   try {
-    debugPrint('📤 [CardPay] Getting states from: ${ApiConfig.cardPayStates}');
     final response = await _request(ApiConfig.cardPayStates, isPost: false);
     
-    // Get the states data from response
-    final statesData = response['states'];
+    // Get the states data
+    final statesData = response['states'] ?? response['data'];
     
     if (statesData == null) {
-      debugPrint('⚠️ [CardPay] No states data found in response');
+      debugPrint('⚠️ [CardPay] No states data found');
       return [];
     }
-    
-    debugPrint('📦 [CardPay] States data type: ${statesData.runtimeType}');
-    debugPrint('📦 [CardPay] States data: $statesData');
-    
+
     List<String> stateNames = [];
-    
-    // Case 1: If it's already a List<String>
-    if (statesData is List<String>) {
-      stateNames = statesData;
-    }
-    // Case 2: If it's a List<dynamic> (could be objects or strings)
-    else if (statesData is List) {
+
+    // Handle List response - states are objects with description and code
+    if (statesData is List) {
       for (var item in statesData) {
         if (item is String) {
           stateNames.add(item);
         } else if (item is Map<String, dynamic>) {
-          // Try to extract state name from object
-          // Common field names for state name
-          final name = item['name'] ?? 
+          // Extract state name from object - try description first, then name, then state
+          final name = item['description'] ?? 
+                       item['name'] ?? 
                        item['state'] ?? 
                        item['stateName'] ?? 
-                       item['state_name'] ?? 
-                       item['value'] ?? 
-                       item['label'] ??
-                       item['text'];
-          
+                       item['state_name'] ??
+                       item['value'] ??
+                       item['label'];
           if (name is String && name.isNotEmpty) {
             stateNames.add(name);
           } else {
-            // If we can't extract a name, add the object as string (fallback)
-            debugPrint('⚠️ [CardPay] Could not extract state name from: $item');
-            // Try to get the first value from the object
-            if (item.isNotEmpty) {
-              final firstValue = item.values.firstWhere(
-                (v) => v is String && v.isNotEmpty,
-                orElse: () => item.toString(),
-              );
-              if (firstValue is String) {
-                stateNames.add(firstValue);
+            // If no name found, try to get any string value
+            for (var value in item.values) {
+              if (value is String && value.isNotEmpty) {
+                stateNames.add(value);
+                break;
               }
             }
           }
-        } else {
-          // Fallback: convert to string
-          stateNames.add(item.toString());
         }
       }
     }
-    // Case 3: If it's a Map, try to extract state list from it
+    // Handle Map response
     else if (statesData is Map<String, dynamic>) {
-      // Try common keys that might contain the state list
-      final possibleKeys = ['states', 'stateList', 'data', 'list', 'items', 'results'];
+      final possibleKeys = ['states', 'stateList', 'list', 'data', 'items'];
       for (var key in possibleKeys) {
         if (statesData.containsKey(key)) {
           final value = statesData[key];
@@ -186,12 +134,7 @@ Future<List<String>> getStateList() async {
               if (item is String) {
                 stateNames.add(item);
               } else if (item is Map<String, dynamic>) {
-                final name = item['name'] ?? 
-                            item['state'] ?? 
-                            item['stateName'] ?? 
-                            item['state_name'] ??
-                            item['value'] ??
-                            item['label'];
+                final name = item['description'] ?? item['name'] ?? item['state'] ?? item['value'];
                 if (name is String && name.isNotEmpty) {
                   stateNames.add(name);
                 }
@@ -202,21 +145,19 @@ Future<List<String>> getStateList() async {
         }
       }
     }
-    
+
     // Remove duplicates and sort
     stateNames = stateNames.toSet().toList();
     stateNames.sort();
     
     debugPrint('✅ [CardPay] Extracted ${stateNames.length} states');
     return stateNames;
-  } catch (e, stackTrace) {
+  } catch (e) {
     debugPrint('❌ [CardPay] getStateList error: $e');
-    debugPrint('❌ [CardPay] Stack trace: $stackTrace');
     return [];
   }
 }
 
-  /// Initiate a card payment
   Future<CardPayInitiateResponse> initiatePayment(CardPayInitiateRequest request) async {
     try {
       final body = request.toJson();
@@ -235,7 +176,6 @@ Future<List<String>> getStateList() async {
     }
   }
 
-  /// Check transaction status by reference
   Future<CardPayTransaction> checkStatus(String ref) async {
     try {
       final response = await _request(
@@ -253,7 +193,6 @@ Future<List<String>> getStateList() async {
     }
   }
 
-  /// Get receipt for a transaction
   Future<Map<String, dynamic>> getReceipt(String ref) async {
     try {
       final response = await _request(
@@ -271,18 +210,16 @@ Future<List<String>> getStateList() async {
     }
   }
 
-  /// Get card pay wallet balance
   Future<double> getWalletBalance() async {
     try {
       final response = await _request(ApiConfig.cardPayWalletBalance, isPost: false);
-      return (response['balance'] ?? 0.0).toDouble();
+      return _parseDouble(response['balance']);
     } catch (e) {
       debugPrint('❌ [CardPay] getWalletBalance error: $e');
-      rethrow;
+      return 0.0;
     }
   }
 
-  /// Get card pay wallet ledger
   Future<List<CardPayWalletLedger>> getCardPayLedger({
     int limit = 50,
     int offset = 0,
@@ -293,15 +230,14 @@ Future<List<String>> getStateList() async {
         isPost: false,
       );
 
-      final List<dynamic> entries = response['entries'] ?? [];
+      final entries = response['entries'] ?? [];
       return entries.map((e) => CardPayWalletLedger.fromJson(e)).toList();
     } catch (e) {
       debugPrint('❌ [CardPay] getCardPayLedger error: $e');
-      rethrow;
+      return [];
     }
   }
 
-  /// Move funds from card pay wallet to main wallet
   Future<Map<String, dynamic>> moveToMain(double amount) async {
     try {
       final response = await _request(
@@ -312,8 +248,8 @@ Future<List<String>> getStateList() async {
       return {
         'success': true,
         'message': response['message'] ?? 'Funds moved successfully',
-        'newCardPayBalance': (response['newCardPayBalance'] ?? 0.0).toDouble(),
-        'newMainBalance': (response['newMainBalance'] ?? 0.0).toDouble(),
+        'newCardPayBalance': _parseDouble(response['newCardPayBalance']),
+        'newMainBalance': _parseDouble(response['newMainBalance']),
       };
     } catch (e) {
       debugPrint('❌ [CardPay] moveToMain error: $e');
@@ -321,7 +257,6 @@ Future<List<String>> getStateList() async {
     }
   }
 
-  /// Get user's card pay balance and main balance
   Future<CardPayUserBalance> getUserBalance() async {
     try {
       final response = await _request(ApiConfig.cardPayBalance, isPost: false);
@@ -331,11 +266,9 @@ Future<List<String>> getStateList() async {
       throw Exception(response['message'] ?? 'Failed to get balance');
     } catch (e) {
       debugPrint('❌ [CardPay] getUserBalance error: $e');
-      rethrow;
+      return CardPayUserBalance(balance: 0.0);
     }
   }
-
-  // In cardpay_service.dart - getUserHistory method
 
 Future<Map<String, dynamic>> getUserHistory({
   String? status,
@@ -361,14 +294,13 @@ Future<Map<String, dynamic>> getUserHistory({
         .join('&');
 
     final endpoint = '${ApiConfig.cardPayHistory}?$queryString';
-    debugPrint('📤 [CardPay] Getting history from: $endpoint');
-    
     final response = await _request(endpoint, isPost: false);
 
-    // Get transactions list - could be null or empty
+    // Get transactions list
     final transactionsData = response['transactions'] ?? [];
-    final List<CardPayTransaction> transactions = [];
     
+    // Convert to List<CardPayTransaction>
+    final List<CardPayTransaction> transactions = [];
     if (transactionsData is List) {
       for (var item in transactionsData) {
         try {
@@ -377,13 +309,14 @@ Future<Map<String, dynamic>> getUserHistory({
           }
         } catch (e) {
           debugPrint('⚠️ [CardPay] Error parsing transaction: $e');
+          // Continue with next item
         }
       }
     }
     
     return {
       'success': true,
-      'transactions': transactions,
+      'transactions': transactions,  // Now properly typed
       'total': response['total'] ?? transactions.length,
       'message': response['message'] ?? 'History retrieved',
     };
@@ -391,15 +324,15 @@ Future<Map<String, dynamic>> getUserHistory({
     debugPrint('❌ [CardPay] getUserHistory error: $e');
     return {
       'success': false,
-      'transactions': [],
+      'transactions': <CardPayTransaction>[],  // Empty typed list
       'total': 0,
       'message': 'Failed to get history',
     };
   }
 }
-  // ─── Admin Routes (Requires Admin Auth) ───────────────────
 
-  /// Admin: Get dashboard data
+  // ========== ADMIN ROUTES ==========
+
   Future<CardPayDashboard> getDashboard() async {
     try {
       final response = await _request(ApiConfig.cardPayAdminDashboard, isPost: false);
@@ -413,7 +346,6 @@ Future<Map<String, dynamic>> getUserHistory({
     }
   }
 
-  /// Admin: Get all transactions with filters
   Future<Map<String, dynamic>> getAdminTransactions({
     String? status,
     String? search,
@@ -444,7 +376,7 @@ Future<Map<String, dynamic>> getUserHistory({
         isPost: false,
       );
 
-      final List<dynamic> data = response['data'] ?? [];
+      final data = response['data'] ?? [];
       return {
         'success': true,
         'data': data.map((t) => CardPayTransaction.fromJson(t)).toList(),
@@ -457,7 +389,6 @@ Future<Map<String, dynamic>> getUserHistory({
     }
   }
 
-  /// Admin: Export report as CSV
   Future<String> exportReport({
     String? status,
     String? startDate,
@@ -486,7 +417,7 @@ Future<Map<String, dynamic>> getUserHistory({
       if (response.statusCode == 200) {
         return response.body;
       } else {
-        throw Exception('Failed to export report: ${response.statusCode}');
+        throw Exception('Failed to export report');
       }
     } catch (e) {
       debugPrint('❌ [CardPay] exportReport error: $e');
@@ -494,7 +425,6 @@ Future<Map<String, dynamic>> getUserHistory({
     }
   }
 
-  /// Admin: Get all user balances
   Future<List<Map<String, dynamic>>> adminGetAllUserBalances() async {
     try {
       final response = await _request(
@@ -504,11 +434,10 @@ Future<Map<String, dynamic>> getUserHistory({
       return List<Map<String, dynamic>>.from(response['data'] ?? []);
     } catch (e) {
       debugPrint('❌ [CardPay] adminGetAllUserBalances error: $e');
-      rethrow;
+      return [];
     }
   }
 
-  /// Admin: Get card pay ledger with filters
   Future<Map<String, dynamic>> adminGetCardPayLedger({
     int limit = 20,
     int offset = 0,
@@ -535,7 +464,7 @@ Future<Map<String, dynamic>> getUserHistory({
         isPost: false,
       );
 
-      final List<dynamic> data = response['data'] ?? [];
+      final data = response['data'] ?? [];
       return {
         'success': true,
         'data': data.map((l) => CardPayWalletLedger.fromJson(l)).toList(),
@@ -548,19 +477,17 @@ Future<Map<String, dynamic>> getUserHistory({
     }
   }
 
-  /// Admin: Get configuration
   Future<List<CardPayConfig>> getConfig() async {
     try {
       final response = await _request(ApiConfig.cardPayAdminConfig, isPost: false);
-      final List<dynamic> data = response['data'] ?? [];
+      final data = response['data'] ?? [];
       return data.map((c) => CardPayConfig.fromJson(c)).toList();
     } catch (e) {
       debugPrint('❌ [CardPay] getConfig error: $e');
-      rethrow;
+      return [];
     }
   }
 
-  /// Admin: Update configuration
   Future<Map<String, dynamic>> updateConfig({
     required int id,
     required String keyValue,
@@ -569,7 +496,7 @@ Future<Map<String, dynamic>> getUserHistory({
       final response = await _request(
         ApiConfig.cardPayAdminConfig,
         body: {'id': id, 'keyValue': keyValue},
-        isPost: false, // Using PUT internally via _request
+        isPost: true,
       );
 
       return {
@@ -582,30 +509,51 @@ Future<Map<String, dynamic>> getUserHistory({
     }
   }
 
-  // ─── Helper Methods ────────────────────────────────────────
+  // ========== PUBLIC ROUTE ==========
 
-  /// Validate email format
+  Future<Map<String, dynamic>> processCallback(Map<String, dynamic> callbackData) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.cardPayCallback}');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(callbackData),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': data['success'] ?? false,
+          'message': data['message'] ?? 'Callback processed',
+        };
+      } else {
+        throw Exception('Callback failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('❌ [CardPay] processCallback error: $e');
+      rethrow;
+    }
+  }
+
+  // ========== HELPER METHODS ==========
+
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      final cleaned = value.replaceAll(RegExp(r'[^0-9.]'), '');
+      return double.tryParse(cleaned) ?? 0.0;
+    }
+    return 0.0;
+  }
+
   static bool isValidEmail(String email) {
-    final RegExp emailRegex = RegExp(
-      r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-    );
+    final RegExp emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
     return emailRegex.hasMatch(email);
   }
 
-  /// Validate amount
   static bool isValidAmount(double amount) {
     return amount > 0 && amount < 100000;
-  }
-
-  /// Validate coordinates
-  static bool isValidCoordinates(String lat, String long) {
-    try {
-      final latDouble = double.parse(lat);
-      final longDouble = double.parse(long);
-      return latDouble >= -90 && latDouble <= 90 &&
-          longDouble >= -180 && longDouble <= 180;
-    } catch (_) {
-      return false;
-    }
   }
 }
