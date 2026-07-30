@@ -376,12 +376,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (_) => OtpEkycScreen(
+                builder: (_) => EKYC_Screen(
                   merchantId: merchantId ?? '',
                   merchantRefId: merchantRefId ?? '',
                   pipe: currentPipe,
                   aadhaarNumber: provider.aadhaarNo ?? '',
-                  phoneNumber: _mobileController.text.isNotEmpty ? _mobileController.text : (widget.phone ?? ''),
+                  // phoneNumber: _mobileController.text.isNotEmpty ? _mobileController.text : (widget.phone ?? ''),
                 ),
               ),
             );
@@ -1104,12 +1104,12 @@ class _MerchantRegistrationScreenState extends State<MerchantRegistrationScreen>
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => OtpEkycScreen(
+            builder: (_) => EKYC_Screen(
               merchantId: merchantId,
               merchantRefId: merchantRefId,
               pipe: currentPipe,
               aadhaarNumber: _aadhaarController.text.replaceAll(' ', '').trim(),
-              phoneNumber: _mobileController.text.trim(),
+              // phoneNumber: _mobileController.text.trim(),
             ),
           ),
         );
