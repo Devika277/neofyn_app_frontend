@@ -190,24 +190,24 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
     }
   }
 
-  Future<void> _editBeneficiary(Beneficiary beneficiary) async {
-    HapticFeedback.mediumImpact();
-    // Navigate to edit screen with beneficiary data
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => DMTAddBeneficiaryScreen(
-          remitterId: widget.remitterId,
-           // Pass beneficiary for editing
-        ),
-      ),
-    );
-    if (result == true && mounted) {
-      _showToast('Beneficiary updated successfully');
-      // Refresh the list
-      setState(() {});
-    }
-  }
+  // Future<void> _editBeneficiary(Beneficiary beneficiary) async {
+  //   HapticFeedback.mediumImpact();
+  //   // Navigate to edit screen with beneficiary data
+  //   final result = await Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (context) => DMTAddBeneficiaryScreen(
+  //         remitterId: widget.remitterId,
+  //          // Pass beneficiary for editing
+  //       ),
+  //     ),
+  //   );
+  //   if (result == true && mounted) {
+  //     _showToast('Beneficiary updated successfully');
+  //     // Refresh the list
+  //     setState(() {});
+  //   }
+  // }
 
   void _showToast(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -426,13 +426,7 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
                           color: AppColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: IconButton(
-                          icon: const Icon(Iconsax.edit, size: 16, color: AppColors.primary),
-                          onPressed: () => _editBeneficiary(beneficiary),
-                          padding: const EdgeInsets.all(6),
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          tooltip: 'Edit',
-                        ),
+                        
                       ),
                       const SizedBox(width: 4),
                       // Delete Button
