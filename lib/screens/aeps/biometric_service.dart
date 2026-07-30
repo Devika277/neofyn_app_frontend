@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
-import '../../services/morpho_native_service.dart';  // ← ADD THIS LINE
+import '../../services/morpho_native_service.dart';
 
 class BiometricService {
   static const String _rdServicePath = '/rd/info';
@@ -32,7 +32,7 @@ class BiometricService {
     ),
     'morpho': DeviceConfig(
       name: 'Morpho MSO 1300',
-      portRange: [11101, 11102, 11103],  // ← REMOVED 11100 (Mantra's port)
+      portRange: [11101, 11102, 11103],
       defaultPort: 11101,
       protocols: ['http'],
       responseContains: 'Morpho',
@@ -272,33 +272,57 @@ class BiometricService {
 
   // ─── CAPTURE PID ─────────────────────────────────────────
 
-  static Future<String> capturePid({
-    String clientKey = 'NEOFYN',
-    String? wadh,
-    String pipe = '1',
-    bool skipWadh = false,
-    String? deviceType = 'mantra',
-  }) async {
+static Future<String> capturePid({
+  String clientKey = 'NEOFYN',
+  String? wadh,
+  String pipe = '1',
+  bool skipWadh = false,
+  String? deviceType = 'mantra',
+}) async {
+  
+  // Get the correct WADH for this pipe
+  final pipeWadh = skipWadh ? '' : (wadh ?? WadhConfig.getWadhForPipe(pipe) ?? '');
+  
+  print('🔑 Using WADH for Pipe $pipe: ${pipeWadh.isNotEmpty ? pipeWadh.substring(0, 20) + "..." : "EMPTY"}');
 
-    // ─── MORPHO: Use native plugin ───
-    if (deviceType == 'morpho') {
-      print('📱 Morpho native capture starting...');
+  // ─── MORPHO: Use native plugin ───
+  if (deviceType == 'morpho') {
+    print('📱 Morpho native capture starting...');
 
-      // Open RD Service app first
-      await MorphoNativeService.openRDService();
-      await Future.delayed(Duration(seconds: 2));
+    final morphoXml = _buildPidOptionsXml(
+      clientKey,
+      wadh: pipeWadh,
+      is2FA: skipWadh,
+      compactXml: false,
+      skipCustOpts: true,
+    );
 
-      // Capture
-      final result = await MorphoNativeService.captureFingerprint();
+    print('📄 Morpho PID_OPTIONS XML: $morphoXml');
 
-      if (result['success'] == true && result['pidData'] != null && result['pidData'].toString().isNotEmpty) {
-        print('✅ Morpho native capture successful');
-        return result['pidData'].toString();
-      } else {
-        throw Exception(result['error'] ?? 'Morpho capture failed');
+    final result = await MorphoNativeService.captureFingerprint(
+      pidOptionsXml: morphoXml,
+    );
+
+    if (result['success'] == true && result['pidData'] != null && result['pidData'].toString().isNotEmpty) {
+      String pidData = result['pidData'].toString();
+      
+      // CRITICAL: Always inject WADH for Morpho (even if skipWadh is true for 2FA)
+      // For Pipe 1 (2FA), we still need WADH in the PID data for the API
+      if (pipeWadh.isNotEmpty) {
+        pidData = injectWadhIntoPidData(pidData, pipeWadh, pipe);
       }
+      
+      print('✅ Morpho native capture successful');
+      print('📊 Final PID Data length: ${pidData.length}');
+      print('🔍 PID contains wadh: ${pidData.contains("wadh=")}');
+      
+      return pidData;
+    } else {
+      throw Exception(result['error'] ?? 'Morpho capture failed');
     }
+  }
     // ─── END MORPHO ───
+
 
     // ─── MANTRA / STARTEK: HTTP capture (UNCHANGED) ───
     Exception? lastError;
@@ -405,6 +429,72 @@ class BiometricService {
     throw lastError ?? Exception('Capture failed');
   }
 
+
+// Add this method to your BiometricService class
+
+/// Injects WADH into PID XML data based on pipe number
+static String injectWadhIntoPidData(String pidData, String wadh, String pipe) {
+  // Check if WADH already exists in PID data
+  if (pidData.contains('wadh="') || pidData.contains("wadh='") || 
+      pidData.contains('WADH="') || pidData.contains("WADH='")) {
+    print('✓ WADH already present in PID data');
+    return pidData;
+  }
+  
+  print('🔧 Injecting WADH for Pipe $pipe: ${wadh.substring(0, 20)}...');
+  
+  try {
+    // Find the first opening tag after XML declaration
+    // We want to inject wadh into the DeviceInfo element
+    final deviceInfoPattern = RegExp(r'<DeviceInfo\s');
+    final match = deviceInfoPattern.firstMatch(pidData);
+    
+    if (match != null) {
+      // Find the end of the DeviceInfo opening tag
+      final startPos = match.start;
+      final remaining = pidData.substring(startPos);
+      final tagEndPos = remaining.indexOf('>');
+      
+      if (tagEndPos != -1) {
+        final beforeTagEnd = pidData.substring(0, startPos + tagEndPos);
+        final afterTagEnd = pidData.substring(startPos + tagEndPos);
+        
+        // Insert wadh attribute before the closing >
+        final modified = '$beforeTagEnd wadh="$wadh"$afterTagEnd';
+        
+        print('✅ WADH injected into DeviceInfo element');
+        return modified;
+      }
+    }
+    
+    // Fallback: Inject into PidData root element
+    final pidDataPattern = RegExp(r'<PidData\s');
+    final pidMatch = pidDataPattern.firstMatch(pidData);
+    
+    if (pidMatch != null) {
+      final startPos = pidMatch.start;
+      final remaining = pidData.substring(startPos);
+      final tagEndPos = remaining.indexOf('>');
+      
+      if (tagEndPos != -1) {
+        final beforeTagEnd = pidData.substring(0, startPos + tagEndPos);
+        final afterTagEnd = pidData.substring(startPos + tagEndPos);
+        
+        final modified = '$beforeTagEnd wadh="$wadh"$afterTagEnd';
+        
+        print('✅ WADH injected into PidData element');
+        return modified;
+      }
+    }
+    
+    print('⚠️ Could not find injection point for WADH');
+    return pidData;
+    
+  } catch (e) {
+    print('❌ Error injecting WADH: $e');
+    return pidData;
+  }
+}
   // ─── BUILD XML ──────────────────────────────────────────
 
   static String _buildPidOptionsXml(
@@ -413,9 +503,22 @@ class BiometricService {
         bool is2FA = false,
         bool compactXml = false,
         bool skipCustOpts = false,
+        String? deviceType,
       }) {
     final timeout = is2FA ? '30000' : '10000';
 
+    // Morpho specific: Don't include wadh in Opts, handle it separately
+  if (deviceType == 'morpho' && !is2FA) {
+    return '<?xml version="1.0"?>\n'
+        '<PidOptions ver="1.0">\n'
+        '  <Opts fCount="1" fType="2" format="0" pidVer="2.0" '
+        'timeout="$timeout" posh="UNKNOWN" env="P"/>\n'  // Note: NO wadh here
+        '  <CustOpts>\n'
+        '    <Param name="clientKey" value="$clientKey"/>\n'
+        '    <Param name="wadh" value="$wadh"/>\n'  // WADH in CustOpts instead
+        '  </CustOpts>\n'
+        '</PidOptions>';
+  }
     if (compactXml) {
       final opts = '<Opts fCount="1" fType="2" iCount="0" pCount="0" '
           'format="0" pidVer="2.0" timeout="$timeout" '
@@ -533,4 +636,20 @@ class DeviceConfig {
     this.skipCustOpts = false,
     this.infoPaths = const ['/rd/info'],
   });
+}
+
+
+// Add this to your BiometricService class or create a separate config
+
+class WadhConfig {
+  // Pre-generated WADH values from VimoPay
+  static const Map<String, String> pipeWadh = {
+    '1': 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=',
+    '2': '18f4CEiXeXcfGXvgWA/blxD+w2pw7hfQPY45JMytkPw=',
+    '4': 'E0jzJ/P8UopUHAieZn8CKqS4WPMi5ZSYXgfnlfkWjrc=',
+  };
+  
+  static String? getWadhForPipe(String pipe) {
+    return pipeWadh[pipe];
+  }
 }

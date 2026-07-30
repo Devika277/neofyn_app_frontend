@@ -21,9 +21,15 @@ class MorphoNativeService {
     }
   }
 
-  static Future<Map<String, dynamic>> captureFingerprint() async {
+  /// [pidOptionsXml] should be the fully-built PidOptions XML string
+  /// (see BiometricService._buildPidOptionsXml) including the real wadh.
+  static Future<Map<String, dynamic>> captureFingerprint({
+    required String pidOptionsXml,
+  }) async {
     try {
-      final result = await _channel.invokeMethod('captureFingerprint');
+      final result = await _channel.invokeMethod('captureFingerprint', {
+        'pidOptionsXml': pidOptionsXml,
+      });
       return Map<String, dynamic>.from(result);
     } catch (e) {
       return {'success': false, 'error': e.toString()};

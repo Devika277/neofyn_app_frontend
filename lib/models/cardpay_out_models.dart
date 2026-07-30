@@ -40,12 +40,16 @@ class CardPayOutInitiateRequest {
   final String mode; // IMPS or NEFT
   final String tpin;
   final String? remarks;
+  final String lat;   // ✅ Added
+  final String long;
 
   CardPayOutInitiateRequest({
     required this.amount,
     required this.beneficiaryId,
     required this.mode,
     required this.tpin,
+    required this.lat,
+    required this.long,
     this.remarks,
   });
 
@@ -56,6 +60,8 @@ class CardPayOutInitiateRequest {
       'mode': mode,
       'tpin': tpin,
       'remarks': remarks ?? '',
+      'lat': lat,    // ✅ Added
+      'long': long,
     };
   }
 }

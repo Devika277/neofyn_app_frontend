@@ -5,11 +5,10 @@ import android.content.pm.PackageManager;
 
 public class MorphoRDHelper {
 
+    // Per IDEMIA "RD Services Solution for Android - L1" integration doc, section 14:
+    // Package Name: "com.idemia.l1rdservice"
     private static final String[] RD_PACKAGES = {
-            "com.scl.morpho.rdservice",
-            "com.morpho.mso1300.rdservice",
-            "com.morpho.rdservice.l1",
-            "in.morpho.mso1300.rdservice"
+            "com.idemia.l1rdservice"
     };
 
     private Context context;
@@ -26,8 +25,11 @@ public class MorphoRDHelper {
                 pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES);
                 detectedPackage = pkg;
                 return pkg;
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                // not installed, try next
+            }
         }
+        detectedPackage = null;
         return null;
     }
 

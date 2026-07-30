@@ -1,9 +1,12 @@
 // lib/screens/CardPayOut/cardpay_out_initiate_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../providers/cardpay_out_provider.dart';
 import '../../models/cardpay_out_models.dart';
 import 'cardpay_out_beneficiaries_screen.dart';
+import 'cardpay_out_receipt_screen.dart';
 
 class CardPayOutInitiateScreen extends StatefulWidget {
   const CardPayOutInitiateScreen({Key? key}) : super(key: key);
@@ -16,22 +19,102 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _tpinController = TextEditingController();
-  final _remarkController = TextEditingController();
+  final _remarkController = TextEditingController();  // ✅ Added back
+  final _latController = TextEditingController();
+  final _longController = TextEditingController();
   
   int? _selectedBeneficiaryId;
   String? _selectedMode;
   bool _isLoading = false;
+  bool _isFetchingLocation = false;
+  String? _currentAddress;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _getCurrentLocation();
   }
 
   Future<void> _loadData() async {
     final provider = Provider.of<CardPayOutProvider>(context, listen: false);
     await provider.fetchBeneficiaries();
     await provider.fetchLimits();
+  }
+
+  // Auto-fetch current location
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isFetchingLocation = true);
+
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() => _isFetchingLocation = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission denied. Please enter manually.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _isFetchingLocation = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location permission permanently denied. Please enter manually.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _latController.text = position.latitude.toStringAsFixed(6);
+        _longController.text = position.longitude.toStringAsFixed(6);
+        _isFetchingLocation = false;
+      });
+
+      try {
+        final placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+          setState(() {
+            _currentAddress = '${place.locality ?? ''}, ${place.administrativeArea ?? ''}, ${place.country ?? ''}';
+          });
+        }
+      } catch (e) {
+        debugPrint('Error getting address: $e');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Location fetched successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isFetchingLocation = false);
+      debugPrint('Error getting location: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not fetch location: $e. Please enter manually.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   @override
@@ -41,6 +124,13 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
         title: const Text('Withdraw to Bank'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(_isFetchingLocation ? Icons.location_searching : Icons.my_location),
+            onPressed: _isFetchingLocation ? null : _getCurrentLocation,
+            tooltip: 'Get Current Location',
+          ),
+        ],
       ),
       body: Consumer<CardPayOutProvider>(
         builder: (context, provider, child) {
@@ -55,6 +145,56 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Location Status
+                  if (_isFetchingLocation)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: const [
+                          SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 12),
+                          Text('Fetching your location...'),
+                        ],
+                      ),
+                    ),
+                  
+                  // Current Address
+                  if (_currentAddress != null && !_isFetchingLocation)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.location_on, color: Colors.green.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _currentAddress!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Balance Info
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -216,7 +356,7 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // TPIN Field - ✅ Fixed to 6 digits
+                  // TPIN Field
                   TextFormField(
                     controller: _tpinController,
                     decoration: const InputDecoration(
@@ -226,12 +366,12 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
                     ),
                     obscureText: true,
                     keyboardType: TextInputType.number,
-                    maxLength: 6,  // ✅ Changed from 4 to 6
+                    maxLength: 6,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your TPIN';
                       }
-                      if (value.length != 6) {  // ✅ Changed from 4 to 6
+                      if (value.length != 6) {
                         return 'TPIN must be 6 digits';
                       }
                       return null;
@@ -239,14 +379,73 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Remark (Optional)
+                  // ✅ Remark Field (Optional)
                   TextFormField(
                     controller: _remarkController,
                     decoration: const InputDecoration(
                       labelText: 'Remark (Optional)',
                       border: OutlineInputBorder(),
+                      hintText: 'Add a note for this withdrawal',
                     ),
                     maxLines: 2,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Lat/Long fields
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _latController,
+                          decoration: const InputDecoration(
+                            labelText: 'Latitude',
+                            border: OutlineInputBorder(),
+                            hintText: 'Auto-fetched',
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Required';
+                            }
+                            if (double.tryParse(value) == null) {
+                              return 'Invalid';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _longController,
+                          decoration: const InputDecoration(
+                            labelText: 'Longitude',
+                            border: OutlineInputBorder(),
+                            hintText: 'Auto-fetched',
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Required';
+                            }
+                            if (double.tryParse(value) == null) {
+                              return 'Invalid';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  Text(
+                    '📍 Tap the location icon in the app bar to auto-fetch coordinates',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -290,19 +489,28 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
 
     try {
       final provider = Provider.of<CardPayOutProvider>(context, listen: false);
+      
       final request = CardPayOutInitiateRequest(
         amount: double.parse(_amountController.text),
         beneficiaryId: _selectedBeneficiaryId!,
         mode: _selectedMode!,
         tpin: _tpinController.text,
-        remarks: _remarkController.text.isNotEmpty ? _remarkController.text : null,
+        lat: _latController.text,
+        long: _longController.text,
+        remarks: _remarkController.text.isNotEmpty ? _remarkController.text : null,  // ✅ Pass remark
       );
 
       final result = await provider.initiatePayout(request);
       
       if (!mounted) return;
       
-      _showSuccessDialog(result);
+      // Navigate to receipt screen with the reference ID
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CardPayOutReceiptScreen(ref: result.merchantRefId),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -315,59 +523,13 @@ class _CardPayOutInitiateScreenState extends State<CardPayOutInitiateScreen> {
     }
   }
 
-  void _showSuccessDialog(CardPayOutInitiateResponse result) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Withdrawal Initiated'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Your withdrawal has been initiated successfully.'),
-            const SizedBox(height: 12),
-            const Text('Reference ID:'),
-            Text(
-              result.merchantRefId,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('Amount:'),
-            Text(
-              '₹${result.amount.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            if (result.bankRefNo != null) ...[
-              const SizedBox(height: 8),
-              const Text('Bank Reference No:'),
-              Text(
-                result.bankRefNo!,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-            const SizedBox(height: 12),
-            const Text(
-              'The amount will be credited to your bank account shortly.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _amountController.dispose();
     _tpinController.dispose();
-    _remarkController.dispose();
+    _remarkController.dispose();  // ✅ Dispose remark controller
+    _latController.dispose();
+    _longController.dispose();
     super.dispose();
   }
 }
