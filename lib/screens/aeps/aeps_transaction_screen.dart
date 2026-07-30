@@ -88,10 +88,20 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
   // DEVICE & LOCATION
   // ======================================================================
   Future<void> _checkDev() async {
-    setState(() => _checkingDev = true);
-    try { final c = await BiometricService.checkDevice(); if (mounted) setState(() => _devOk = c); } catch (_) { if (mounted) setState(() => _devOk = false); }
-    finally { if (mounted) setState(() => _checkingDev = false); }
+  setState(() => _checkingDev = true);
+  try {
+    // ✅ Pass the selected device type
+    final c = await BiometricService.checkDevice(
+      deviceType: _selectedDevice.apiValue,  // This was missing!
+    );
+    if (mounted) setState(() => _devOk = c);
+  } catch (e) {
+    if (mounted) setState(() => _devOk = false);
+    debugPrint('Device check error: $e');
+  } finally {
+    if (mounted) setState(() => _checkingDev = false);
   }
+}
 
   Future<void> _getLoc() async {
     setState(() => _gettingLoc = true);
@@ -102,16 +112,36 @@ class _AepsTransactionScreenState extends State<AepsTransactionScreen> with Tick
   // ======================================================================
   // BIOMETRIC CAPTURE
   // ======================================================================
-  Future<void> _captureBio() async {
-    if (_bankIIN == null) { _err('Select bank first'); return; }
-    setState(() => _capturing = true);
-    try {
-      final p = context.read<AepsProvider>();
-      final pid = await BiometricService.capturePid(clientKey: 'NEOFYN', skipWadh: true, pipe: p.pipe ?? '1');
-      if (mounted) { setState(() { _pidData = pid; _bioOk = true; }); _ok('Biometric captured!'); }
-    } catch (e) { _err('Capture failed'); BiometricService.resetDiscovery(); }
-    finally { if (mounted) setState(() => _capturing = false); }
+Future<void> _captureBio() async {
+  if (_bankIIN == null) { _err('Select bank first'); return; }
+  setState(() => _capturing = true);
+  try {
+    final p = context.read<AepsProvider>();
+    final pipe = p.pipe ?? '1';
+    
+    // ✅ Pass device type and pipe for proper WADH handling
+    final pid = await BiometricService.capturePid(
+      clientKey: 'NEOFYN',
+      skipWadh: true,  // 2FA doesn't need WADH during capture
+      pipe: pipe,
+      deviceType: _selectedDevice.apiValue,  // This was missing!
+    );
+    
+    if (mounted) {
+      setState(() { 
+        _pidData = pid; 
+        _bioOk = true; 
+      });
+      _ok('Biometric captured!');
+    }
+  } catch (e) {
+    debugPrint('Capture error: $e');
+    _err('Capture failed: ${e.toString()}');
+    BiometricService.resetDiscovery();
+  } finally {
+    if (mounted) setState(() => _capturing = false);
   }
+}
 
   // ======================================================================
   // TRANSACTION FLOW: Validate → Confirm → Process → Show Result
@@ -559,10 +589,57 @@ String _safeGet(dynamic obj, String key, [String defaultValue = '']) {
     ]));
   }
 
-  Widget _devSel() => Container(padding: const EdgeInsets.all(2), decoration: BoxDecoration(color: TxnColors.cardColor, borderRadius: BorderRadius.circular(10)), child: Row(children: DeviceType.values.map((d) {
-    final sel = _selectedDevice == d;
-    return Expanded(child: GestureDetector(onTap: () => setState(() { _selectedDevice = d; _resetBio(); _checkDev(); }), child: Container(padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: sel ? TxnColors.primary.withOpacity(0.15) : Colors.transparent, borderRadius: BorderRadius.circular(8), border: sel ? Border.all(color: TxnColors.primary.withOpacity(0.5)) : null), child: Column(children: [Icon(d.icon, color: sel ? TxnColors.primaryLight : Colors.white38, size: 18), const SizedBox(height: 2), Text(d.shortName, style: TextStyle(color: sel ? Colors.white : Colors.white54, fontSize: 10, fontWeight: sel ? FontWeight.w600 : FontWeight.w400))]))));
-  }).toList()));
+Widget _devSel() => Container(
+  padding: const EdgeInsets.all(2),
+  decoration: BoxDecoration(
+    color: TxnColors.cardColor,
+    borderRadius: BorderRadius.circular(10)
+  ),
+  child: Row(
+    children: DeviceType.values.map((d) {
+      final sel = _selectedDevice == d;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () {
+            setState(() { 
+              _selectedDevice = d; 
+              _resetBio(); 
+              _devOk = false; // ✅ Reset device status immediately
+            });
+            // ✅ Re-check device with new type
+            _checkDev(); 
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: sel ? TxnColors.primary.withOpacity(0.15) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: sel ? Border.all(color: TxnColors.primary.withOpacity(0.5)) : null
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  d.icon,
+                  color: sel ? TxnColors.primaryLight : Colors.white38,
+                  size: 18
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  d.shortName,
+                  style: TextStyle(
+                    color: sel ? Colors.white : Colors.white54,
+                    fontSize: 10,
+                    fontWeight: sel ? FontWeight.w600 : FontWeight.w400
+                  )
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }).toList(),
+  ),
+);
 
   Widget _label(String t) => Padding(padding: const EdgeInsets.only(left: 4, bottom: 2), child: Text(t, style: const TextStyle(color: Colors.white60, fontSize: 11)));
 

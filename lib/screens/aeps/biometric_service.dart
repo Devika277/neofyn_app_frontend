@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import '../../services/morpho_native_service.dart';
+import '../../services/mantra_native_service.dart';
+
 
 class BiometricService {
   static const String _rdServicePath = '/rd/info';
@@ -66,6 +68,17 @@ class BiometricService {
         print('⚠️ Morpho native init skipped: $e');
       }
     }
+
+     // ─── Initialize Mantra native plugin ───
+    if (Platform.isAndroid) {
+      try {
+        final result = await MantraNativeService().initialize();
+        print('📱 Mantra native init: $result');
+      } catch (e) {
+        print('⚠️ Mantra native init skipped: $e');
+      }
+    }
+
 
     print('✅ Biometric Service initialized');
   }
@@ -249,7 +262,17 @@ class BiometricService {
       }
       // ─── END MORPHO ───
 
-      // ─── MANTRA / STARTEK: HTTP scanning (UNCHANGED) ───
+
+      // ─── MANTRA: Use native plugin ───
+      if (deviceType == 'mantra') {
+        final result = await MantraNativeService().checkDevice();
+        final ready = result['ready'] == true;
+        _deviceConnected = ready;
+        print(ready ? '✅ Mantra RD Service ready' : '❌ Mantra RD Service not ready: $result');
+        return ready;
+      }
+      
+      // STARTEK: HTTP scanning (UNCHANGED) ───
       final baseUrl = await findRdServiceUrl(
         deviceType: deviceType,
         forceRediscovery: true,
@@ -322,9 +345,34 @@ static Future<String> capturePid({
     }
   }
     // ─── END MORPHO ───
+   // ─── MANTRA: Use native plugin ───
+    if (deviceType == 'mantra') {
+      print('📱 Mantra native capture starting...');
 
+      final mantraXml = _buildPidOptionsXml(
+        clientKey,
+        wadh: pipeWadh,
+        is2FA: skipWadh,
+        compactXml: false,
+        skipCustOpts: false,
+      );
 
-    // ─── MANTRA / STARTEK: HTTP capture (UNCHANGED) ───
+      print('📄 Mantra PID_OPTIONS XML: $mantraXml');
+
+      final result = await MantraNativeService().captureFingerprint(mantraXml);
+
+      if (result['success'] == true &&
+          result['pidData'] != null &&
+          result['pidData'].toString().isNotEmpty) {
+        print('✅ Mantra native capture successful');
+        return result['pidData'].toString();
+      } else {
+        throw Exception(result['error'] ?? 'Mantra capture failed');
+      }
+    }
+    // ─── END MANTRA ───
+
+    // ───  STARTEK: HTTP capture (UNCHANGED) ───
     Exception? lastError;
     final config = _deviceConfigs[deviceType] ?? _deviceConfigs['mantra']!;
     final is2FA = skipWadh;

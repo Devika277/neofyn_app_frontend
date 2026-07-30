@@ -14,6 +14,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.UUID
 import com.example.my_app.morpho.MorphoPlugin
+import com.example.my_app.mantra.MantraPlugin
 
 class MainActivity : FlutterActivity() {
 
@@ -84,7 +85,11 @@ class MainActivity : FlutterActivity() {
 
         // ─── EXISTING MORPHO PLUGIN ────────────────────────────────────
         flutterEngine.plugins.add(MorphoPlugin())
+   
+           // ─── MANTRA PLUGIN ──────────────────────────────────────────────
+        flutterEngine.plugins.add(MantraPlugin())
     }
+
 
     // ─── ADD: Permission Request Method ──────────────────────────────
     private fun requestPermissions() {

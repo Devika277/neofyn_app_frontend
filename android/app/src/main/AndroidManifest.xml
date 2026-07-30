@@ -107,6 +107,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
+
+               <!-- Mantra RD Service — candidate package names, confirm actual
+             installed name via `adb shell pm list packages | grep mantra` -->
+        <package android:name="com.mantra.mfs110.rdservice" />
+        <package android:name="com.mantra.rdservice" />
+        <package android:name="com.mantra.mfs100.rdservice" />
     </queries>
 
 </manifest>
