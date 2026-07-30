@@ -16,13 +16,23 @@ class MyNetworkScreen extends StatefulWidget {
 }
 
 class _MyNetworkScreenState extends State<MyNetworkScreen> {
-  List<Map<String, dynamic>> _members = [];
+  // Hierarchy data
+  Map<String, dynamic>? _treeData;
+  List<Map<String, dynamic>> _children = [];
+  List<Map<String, dynamic>> _downline = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
-  int _currentPage = 1;
-  String _selectedRole = '';
+
+  // View mode: 'children' (direct) or 'downline' (full tree)
+  String _viewMode = 'children';
+
+  // Search (client-side since hierarchy APIs don't support search)
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+
+  // Role filter (client-side)
+  String _selectedRole = '';
+
   final ScrollController _scrollController = ScrollController();
 
   final List<Map<String, String>> _roles = [
@@ -30,18 +40,20 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
     {'value': 'master_distributor', 'label': 'MD'},
     {'value': 'distributor', 'label': 'Dist'},
     {'value': 'retailer', 'label': 'Retail'},
+    {'value': 'employee', 'label': 'Emp'},
   ];
 
   @override
   void initState() {
     super.initState();
-    _fetchMembers();
+    _fetchHierarchyData();
     _scrollController.addListener(_onScroll);
   }
 
   void _onScroll() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 150) {
-      if (!_isLoadingMore) _loadMore();
+      // Hierarchy APIs return all data at once, so pagination might not be needed
+      // But you can implement if your API supports limit/offset
     }
   }
 
@@ -50,60 +62,118 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
     return prefs.getString('accessToken');
   }
 
-  Future<void> _fetchMembers() async {
-    setState(() {
-      _isLoading = true;
-      _currentPage = 1;
-    });
+  Future<void> _fetchHierarchyData() async {
+    setState(() => _isLoading = true);
     try {
       final token = await _getToken();
       if (token == null) return;
-      String url = '${ApiConfig.baseUrl}/api/members/all?page=$_currentPage';
-      if (_selectedRole.isNotEmpty) url += '&role=$_selectedRole';
-      if (_searchQuery.isNotEmpty) url += '&search=$_searchQuery';
 
-      final response = await http.get(Uri.parse(url), headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      });
+      if (_viewMode == 'children') {
+        // Fetch direct children only
+        final response = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/hierarchy/children'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        setState(() {
-          _members = List<Map<String, dynamic>>.from(data['members'] ?? []);
-          _isLoading = false;
-        });
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          setState(() {
+            _children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+            _isLoading = false;
+          });
+        } else {
+          setState(() => _isLoading = false);
+        }
+      } else {
+        // Fetch full downline tree
+        final response = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/hierarchy/downline'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          setState(() {
+            _downline = List<Map<String, dynamic>>.from(data['downline'] ?? []);
+            _isLoading = false;
+          });
+        } else {
+          setState(() => _isLoading = false);
+        }
       }
+
+      // Also fetch tree summary for counts
+      _fetchTreeSummary();
     } catch (e) {
+      debugPrint('Error fetching hierarchy: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadMore() async {
-    setState(() => _isLoadingMore = true);
+  Future<void> _fetchTreeSummary() async {
     try {
       final token = await _getToken();
       if (token == null) return;
-      _currentPage++;
-      String url = '${ApiConfig.baseUrl}/api/members/all?page=$_currentPage';
-      if (_selectedRole.isNotEmpty) url += '&role=$_selectedRole';
-      if (_searchQuery.isNotEmpty) url += '&search=$_searchQuery';
 
-      final response = await http.get(Uri.parse(url), headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      });
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/hierarchy/tree'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
-          _members.addAll(List<Map<String, dynamic>>.from(data['members'] ?? []));
-          _isLoadingMore = false;
+          _treeData = data;
         });
       }
     } catch (e) {
-      _currentPage--;
-      setState(() => _isLoadingMore = false);
+      debugPrint('Error fetching tree summary: $e');
+    }
+  }
+
+  // Get filtered list based on view mode, search, and role filter
+  List<Map<String, dynamic>> get _filteredMembers {
+    List<Map<String, dynamic>> source = _viewMode == 'children' ? _children : _downline;
+
+    return source.where((member) {
+      final name = '${member['first_name'] ?? ''} ${member['last_name'] ?? ''}'.toLowerCase();
+      final memberId = (member['member_id'] ?? '').toString().toLowerCase();
+      final phone = (member['phone'] ?? '').toString().toLowerCase();
+      final role = (member['role'] ?? '').toString().toLowerCase();
+      final query = _searchQuery.toLowerCase();
+
+      // Search filter
+      if (query.isNotEmpty) {
+        if (!name.contains(query) &&
+            !memberId.contains(query) &&
+            !phone.contains(query)) {
+          return false;
+        }
+      }
+
+      // Role filter
+      if (_selectedRole.isNotEmpty && role != _selectedRole.toLowerCase()) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
+  int get _totalCount {
+    if (_viewMode == 'children') {
+      return _treeData?['directChildrenCount'] ?? _children.length;
+    } else {
+      return _treeData?['downlineCount'] ?? _downline.length;
     }
   }
 
@@ -117,6 +187,8 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
         return 'Dist';
       case 'retailer':
         return 'Retail';
+      case 'employee':
+        return 'Emp';
       case 'whitelabel':
         return 'WL';
       default:
@@ -134,6 +206,8 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
         return const Color(0xFF1AA88A);
       case 'retailer':
         return const Color(0xFFFFB74D);
+      case 'employee':
+        return const Color(0xFF42A5F5);
       default:
         return const Color(0xFF9CA3AF);
     }
@@ -152,6 +226,22 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // View mode toggle
+          Container(
+            margin: const EdgeInsets.only(right: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _viewModeButton('children', 'Direct'),
+                _viewModeButton('downline', 'Tree'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             icon: const Icon(Icons.person_add_rounded, color: Color(0xFF00C897), size: 20),
             tooltip: 'Create Account',
@@ -160,7 +250,7 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                 context,
                 MaterialPageRoute(
                     builder: (_) => CreateAccountScreen(userId: widget.userId)),
-              );
+              ).then((_) => _fetchHierarchyData()); // Refresh on return
             },
           ),
         ],
@@ -179,7 +269,7 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                     controller: _searchController,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: 'Search...',
+                      hintText: 'Search by name, ID or phone...',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
                       prefixIcon:
                       const Icon(Icons.search_rounded, color: Color(0xFF6B7280), size: 18),
@@ -188,7 +278,6 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                         onTap: () {
                           _searchController.clear();
                           setState(() => _searchQuery = '');
-                          _fetchMembers();
                         },
                         child: const Icon(Icons.close_rounded,
                             color: Color(0xFF6B7280), size: 16),
@@ -203,9 +292,8 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       isDense: true,
                     ),
-                    onSubmitted: (v) {
-                      _searchQuery = v;
-                      _fetchMembers();
+                    onChanged: (v) {
+                      setState(() => _searchQuery = v);
                     },
                   ),
                 ),
@@ -222,7 +310,6 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                       return GestureDetector(
                         onTap: () {
                           setState(() => _selectedRole = role['value']!);
-                          _fetchMembers();
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -258,13 +345,30 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
               ],
             ),
           ),
+
+          // Stats bar
+          if (!_isLoading && _treeData != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  _statChip('Direct', _treeData?['directChildrenCount'] ?? 0, const Color(0xFF7B4FDB)),
+                  const SizedBox(width: 8),
+                  _statChip('Downline', _treeData?['downlineCount'] ?? 0, const Color(0xFF1AA88A)),
+                  const Spacer(),
+                  Text('${_filteredMembers.length} shown',
+                      style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
+                ],
+              ),
+            ),
+
           // Count bar
-          if (!_isLoading)
+          if (!_isLoading && _treeData == null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(
                 children: [
-                  Text('${_members.length} members',
+                  Text('${_filteredMembers.length} members',
                       style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
                   const Spacer(),
                   if (_selectedRole.isNotEmpty)
@@ -274,12 +378,13 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                 ],
               ),
             ),
+
           // List
           Expanded(
             child: _isLoading
                 ? const Center(
                 child: CircularProgressIndicator(color: Color(0xFF00C897), strokeWidth: 2))
-                : _members.isEmpty
+                : _filteredMembers.isEmpty
                 ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -287,39 +392,32 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                   Icon(Icons.people_outline_rounded,
                       color: Colors.white.withOpacity(0.15), size: 48),
                   const SizedBox(height: 10),
-                  Text('No members found',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.4), fontSize: 13)),
+                  Text(
+                    _viewMode == 'children'
+                        ? 'No direct members yet'
+                        : 'No downline members',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.4), fontSize: 13),
+                  ),
                 ],
               ),
             )
                 : RefreshIndicator(
-              onRefresh: _fetchMembers,
+              onRefresh: _fetchHierarchyData,
               color: const Color(0xFF00C897),
               child: ListView.builder(
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: _members.length + (_isLoadingMore ? 1 : 0),
+                itemCount: _filteredMembers.length,
                 itemBuilder: (_, index) {
-                  if (index == _members.length) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                color: Color(0xFF00C897), strokeWidth: 2)),
-                      ),
-                    );
-                  }
-                  final m = _members[index];
+                  final m = _filteredMembers[index];
                   final role = m['role'] ?? '';
                   final name =
                   '${m['first_name'] ?? ''} ${m['last_name'] ?? ''}'.trim();
+                  final level = m['level'] ?? m['depth'];
                   return _memberCard(
-                      name, role, m['member_id'] ?? '', m['phone'] ?? '');
+                      name, role, m['member_id'] ?? '', m['phone'] ?? '', level);
                 },
               ),
             ),
@@ -329,7 +427,69 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
     );
   }
 
-  Widget _memberCard(String name, String role, String memberId, String phone) {
+  Widget _viewModeButton(String mode, String label) {
+    final isSelected = _viewMode == mode;
+    return GestureDetector(
+      onTap: () {
+        if (_viewMode != mode) {
+          setState(() {
+            _viewMode = mode;
+            _isLoading = true;
+          });
+          _fetchHierarchyData();
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF008169) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white.withOpacity(0.5),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statChip(String label, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3), width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$count ',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: color.withOpacity(0.8),
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memberCard(String name, String role, String memberId, String phone, dynamic level) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -340,6 +500,25 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
       ),
       child: Row(
         children: [
+          // Level indicator for tree view
+          if (_viewMode == 'downline' && level != null)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1AA88A).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'L$level',
+                style: const TextStyle(
+                  color: Color(0xFF1AA88A),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+
           Container(
             width: 36,
             height: 36,
@@ -366,7 +545,7 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> {
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Text(memberId,
+                    Text(memberId.isNotEmpty ? memberId : 'Pending',
                         style: const TextStyle(color: Color(0xFF6B7280), fontSize: 10)),
                     if (phone.isNotEmpty) ...[
                       const SizedBox(width: 8),
