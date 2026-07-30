@@ -1,14 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- ─── EXISTING PERMISSIONS (keep all) ────────────────────────── -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
-<!--    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />-->
-<!--    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />-->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    
+    <!-- ─── ADD THIS: mATM SDK Required Permissions ──────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
+    <!-- ─── EXISTING PERMISSIONS (keep) ────────────────────────────── -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -16,11 +20,13 @@
 
     <uses-feature android:name="android.hardware.usb.host" />
     <uses-permission android:name="android.permission.USB_PERMISSION" />
-    <!-- Storage permissions (keep only ONE instance of each) -->
+    
+    <!-- Storage permissions -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    
     <!-- For Android 13+ (API 33+) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
@@ -64,7 +70,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ── VimoPay MATM SDK activities (from classes.jar scan) ──── -->
+        <!-- ── VimoPay MATM SDK activities ──────────────────────────── -->
         <activity
             android:name="com.vimopay.matm.presentation.MatmStatusActivity"
             android:exported="false"
@@ -101,6 +107,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
+
+               <!-- Mantra RD Service — candidate package names, confirm actual
+             installed name via `adb shell pm list packages | grep mantra` -->
+        <package android:name="com.mantra.mfs110.rdservice" />
+        <package android:name="com.mantra.rdservice" />
+        <package android:name="com.mantra.mfs100.rdservice" />
     </queries>
 
 </manifest>

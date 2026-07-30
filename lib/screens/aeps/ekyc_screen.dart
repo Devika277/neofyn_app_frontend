@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/aeps_provider.dart';
 import '../../widgets/custom_button.dart';
-import '../../screens/aeps/biometric_service.dart';
+import 'biometric_service.dart';
 import '../../layout/UserHomeScreen.dart';
 import 'aeps_wrapper_screen.dart';
 

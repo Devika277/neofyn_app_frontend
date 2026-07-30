@@ -190,6 +190,25 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
     }
   }
 
+  Future<void> _editBeneficiary(Beneficiary beneficiary) async {
+    HapticFeedback.mediumImpact();
+    // Navigate to edit screen with beneficiary data
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DMTAddBeneficiaryScreen(
+          remitterId: widget.remitterId,
+           // Pass beneficiary for editing
+        ),
+      ),
+    );
+    if (result == true && mounted) {
+      _showToast('Beneficiary updated successfully');
+      // Refresh the list
+      setState(() {});
+    }
+  }
+
   void _showToast(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -331,9 +350,8 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
   }
 
   Widget _buildBeneficiaryCard(Beneficiary beneficiary) {
-    final String maskedAccount = beneficiary.accountNumber.length >= 4
-        ? '••••${beneficiary.accountNumber.substring(beneficiary.accountNumber.length - 4)}'
-        : beneficiary.accountNumber;
+    // Show full account number
+    final String accountNumber = beneficiary.accountNumber;
 
     final String initials = beneficiary.accountHolderName
         .split(' ')
@@ -390,7 +408,8 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
                           ],
                         ),
                         const SizedBox(height: 3),
-                        Text('${beneficiary.bankName} • $maskedAccount', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textDarkSecondary)),
+                        // Show full account number
+                        Text('${beneficiary.bankName} • $accountNumber', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textDarkSecondary)),
                         if (beneficiary.beneficiaryMobile != null) ...[
                           const SizedBox(height: 2),
                           Row(children: [const Icon(Iconsax.call, size: 10, color: AppColors.textDarkHint), const SizedBox(width: 4), Text('+91 ${beneficiary.beneficiaryMobile}', style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textDarkHint))]),
@@ -398,15 +417,39 @@ class _DMTBeneficiaryListScreenState extends State<DMTBeneficiaryListScreen> {
                       ],
                     ),
                   ),
-                  Container(
-                    decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: IconButton(
-                      icon: const Icon(Iconsax.trash, size: 16, color: AppColors.error),
-                      onPressed: () => _deleteBeneficiary(beneficiary.id),
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      tooltip: 'Delete',
-                    ),
+                  // Action buttons row
+                  Row(
+                    children: [
+                      // Edit Button
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Iconsax.edit, size: 16, color: AppColors.primary),
+                          onPressed: () => _editBeneficiary(beneficiary),
+                          padding: const EdgeInsets.all(6),
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Edit',
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // Delete Button
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Iconsax.trash, size: 16, color: AppColors.error),
+                          onPressed: () => _deleteBeneficiary(beneficiary.id),
+                          padding: const EdgeInsets.all(6),
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Delete',
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

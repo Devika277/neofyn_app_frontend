@@ -30,8 +30,10 @@ import '../screens/dmt/dmt_selector_screen.dart';
 import '../screens/bbps/onboarding_page.dart';
 import '../screens/bbps/bill_payment_page.dart';
 import '../screens/recharge/recharge_screen.dart';
+import '../screens/matm/matm_screen.dart';
 import '../screens/commission/commission_history_screen.dart';
 import '../services/permission_service.dart';
+import '../screens/CardPay/cardpay_dashboard_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BRAND COLORS - Cohesive Green & Dark Theme
@@ -1298,6 +1300,10 @@ class HomeDashboard extends StatelessWidget {
     }
   }
 
+
+
+
+
   void _showToast(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: const TextStyle(color: Colors.white)),
@@ -1590,8 +1596,8 @@ class HomeDashboard extends StatelessWidget {
       {'name': 'Recharge', 'icon': Icons.phone_android},
       {'name': 'Bills', 'icon': Icons.description},
       {'name': 'Insurance', 'icon': Icons.shield_rounded, 'isComingSoon': false},
-      {'name': 'MATM', 'icon': Icons.atm_rounded, 'isComingSoon': true},
-      {'name': 'Credit Card', 'icon': Icons.credit_card_rounded, 'isComingSoon': true},
+      {'name': 'MATM', 'icon': Icons.atm_rounded},
+      {'name': 'Credit Card', 'icon': Icons.credit_card_rounded, 'isComingSoon': false},
     ];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1646,6 +1652,27 @@ class HomeDashboard extends StatelessWidget {
                 _launchInsuranceUrl(context); // ← Call method with context
                 return;
               }
+
+               // ─── ADD: MATM Navigation ────────────────────────────────
+            // In HomeDashboard._buildServicesGrid
+              if (s['name'] == 'MATM') {
+                // Navigate to MatmScreen instead of showing bottom sheet
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => const MatmScreen())
+                );
+                return;
+              }
+
+               // ─── ADD: CardPay Navigation ────────────────────────────────
+            if (s['name'] == 'Credit Card' || s['name'] == 'CardPay') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CardPayDashboardScreen())
+              );
+              return;
+            }
+        
               onServiceTap(s['name'] as String);
             },
             child: Column(mainAxisSize: MainAxisSize.min, children: [

@@ -1,4 +1,4 @@
-package com.example.my_app.morpho;
+package com.example.my_app.mantra;
 
 import android.app.Activity;
 import android.content.Context;
@@ -17,37 +17,39 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry;
 
-public class MorphoPlugin implements FlutterPlugin, MethodCallHandler,
+public class MantraPlugin implements FlutterPlugin, MethodCallHandler,
         ActivityAware, PluginRegistry.ActivityResultListener {
 
-    private static final String CHANNEL = "com.example.my_app/morpho";
+    private static final String CHANNEL = "com.example.my_app/mantra";
 
-    // Per IDEMIA L1 RD Service integration doc (section 6.1 / 6.3)
+    // Same UIDAI Registered Device Service actions as MorphoPlugin — this is
+    // the generic Android RD Service spec, not vendor-specific. Confirmed
+    // identical against your working MorphoPlugin.java source.
     private static final String ACTION_DEVICE_INFO = "in.gov.uidai.rdservice.fp.INFO";
     private static final String ACTION_CAPTURE = "in.gov.uidai.rdservice.fp.CAPTURE";
 
     private MethodChannel channel;
     private Context context;
     private Activity activity;
-    private MorphoRDHelper rdHelper;
+    private MantraRDHelper rdHelper;
     private Result pendingResult;
 
-    private static final int DEVICE_INFO_REQUEST = 1000;
-    private static final int CAPTURE_REQUEST = 1001;
+    private static final int DEVICE_INFO_REQUEST = 2000;
+    private static final int CAPTURE_REQUEST = 2001;
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         context = binding.getApplicationContext();
         channel = new MethodChannel(binding.getBinaryMessenger(), CHANNEL);
         channel.setMethodCallHandler(this);
-        rdHelper = new MorphoRDHelper(context);
+        rdHelper = new MantraRDHelper(context);
     }
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
         switch (call.method) {
             case "initialize":
-                initMorpho(result);
+                initMantra(result);
                 break;
             case "checkDevice":
                 checkDevice(result);
@@ -63,7 +65,7 @@ public class MorphoPlugin implements FlutterPlugin, MethodCallHandler,
         }
     }
 
-    private void initMorpho(Result result) {
+    private void initMantra(Result result) {
         String pkg = rdHelper.detectRDService();
         Map<String, Object> map = new HashMap<>();
         map.put("success", pkg != null);
@@ -72,9 +74,10 @@ public class MorphoPlugin implements FlutterPlugin, MethodCallHandler,
     }
 
     /**
-     * "installed" just checks the APK exists. This alone previously reported
-     * false because the package name list was wrong. Real readiness is only
-     * confirmed by actually firing the DEVICE_INFO intent and getting RESULT_OK.
+     * Same caveat as Morpho: "installed" only confirms the APK exists under
+     * one of the candidate package names. Real readiness is only confirmed
+     * by firing DEVICE_INFO and getting RESULT_OK back — this is exactly
+     * the check that the old HTTP port-scan approach couldn't do reliably.
      */
     private void checkDevice(Result result) {
         String pkg = rdHelper.getDetectedPackage();
@@ -87,7 +90,6 @@ public class MorphoPlugin implements FlutterPlugin, MethodCallHandler,
             return;
         }
 
-        // Fire DEVICE_INFO to confirm the service actually responds.
         pendingResult = result;
         Intent intent = new Intent(ACTION_DEVICE_INFO);
         intent.setPackage(pkg);
@@ -107,16 +109,19 @@ public class MorphoPlugin implements FlutterPlugin, MethodCallHandler,
 
         String rdPackage = rdHelper.getDetectedPackage();
         if (rdPackage == null) {
-            result.error("NO_RD", "IDEMIA L1 RD Service (com.idemia.l1rdservice) not found. "
-                    + "Install it from the Play Store or sideload the APK.", null);
+            result.error("NO_RD", "Mantra RD Service not found under any known package name "
+                    + "(com.mantra.mfs110.rdservice, com.mantra.rdservice, "
+                    + "com.mantra.mfs100.rdservice). Confirm the actual installed package via "
+                    + "'adb shell pm list packages | grep mantra' and add it to "
+                    + "MantraRDHelper.RD_PACKAGES if missing.", null);
             return;
         }
 
         pendingResult = result;
 
-        // Prefer the XML built by Dart (biometric_service.dart's _buildPidOptionsXml),
-        // which correctly includes the real wadh/clientKey for this request.
-        // Only fall back to a default here if Dart didn't pass one (shouldn't normally happen).
+        // Prefer the XML built by Dart (biometric_service.dart's capturePid()),
+        // same PidOptions schema already used for the HTTP path — only the
+        // transport changes here, not the payload format.
         String pidXml = call.argument("pidOptionsXml");
         if (pidXml == null || pidXml.isEmpty()) {
             pidXml = "<PidOptions ver=\"2.0\">" +
