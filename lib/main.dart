@@ -22,6 +22,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';  // 👈 Add this impor
 import 'providers/fund_provider.dart';
 import 'providers/cardpay_provider.dart';  // 👈 Add this import
 import 'providers/cardpay_out_provider.dart';
+import 'providers/bank_provider.dart';  // 👈 Add this import
+
 
 
 void main() async {
@@ -51,6 +53,8 @@ class MyApp extends StatelessWidget {
     provider.ChangeNotifierProvider(create: (_) => FundProvider()),
     provider.ChangeNotifierProvider(create: (_) => CardPayProvider()),
     provider.ChangeNotifierProvider(create: (_) => CardPayOutProvider()),
+    provider.ChangeNotifierProvider(create: (_) => BankProvider()),
+
 
   ],
       child: ProviderScope(   // 👈 Riverpod scope now wraps MaterialApp

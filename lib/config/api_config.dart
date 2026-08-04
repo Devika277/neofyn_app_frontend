@@ -2,6 +2,9 @@ class ApiConfig {
   // Change this to your actual backend IP/URL
   static const String baseUrl = 'https://api.myneofyn.com'; // Your Node.js server IP
   
+  // Bank endpoints - include /api here
+  static const String banks = '/api/banks';
+
   // AEPS Endpoints
   static const String aepsBanks = '/api/aeps/banks';
   static const String aepsStates = '/api/aeps/states';
