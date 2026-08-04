@@ -63,10 +63,15 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   bool _showFilters = false;
+  bool _isLoading = true;
   String _selectedStatus = 'ALL';
   String _selectedDateFilter = 'ALL';
   DateTime? _startDate;
   DateTime? _endDate;
+
+  // Store all transactions and filtered transactions locally
+  List<dynamic> _allTransactions = [];
+  List<dynamic> _filteredTransactions = [];
 
   final Map<String, String> _dateFilters = {
     'ALL': 'All Time',
@@ -105,6 +110,8 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
   }
 
   Future<void> _loadHistory() async {
+    setState(() => _isLoading = true);
+
     final provider = Provider.of<CardPayProvider>(context, listen: false);
     await provider.fetchUserHistory(
       status: _selectedStatus != 'ALL' ? _selectedStatus : null,
@@ -112,6 +119,13 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
       endDate: _endDate?.toIso8601String().split('T').first,
       search: _searchController.text.isNotEmpty ? _searchController.text : null,
     );
+
+    // Store all transactions from provider
+    setState(() {
+      _allTransactions = List.from(provider.transactions);
+      _isLoading = false;
+      _applyLocalFilters();
+    });
   }
 
   bool get _hasActiveFilters =>
@@ -119,9 +133,74 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
           _searchController.text.isNotEmpty ||
           _selectedDateFilter != 'ALL';
 
+  void _applyLocalFilters() {
+    final filtered = _allTransactions.where((txn) {
+      // Status filter
+      if (_selectedStatus != 'ALL') {
+        if (txn.txnStatus.toLowerCase() != _selectedStatus) return false;
+      }
+
+      // Date filter
+      if (_selectedDateFilter != 'ALL') {
+        try {
+          final txDate = DateTime.parse(txn.createdAt);
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+
+          switch (_selectedDateFilter) {
+            case 'TODAY':
+              if (txDate.isBefore(today)) return false;
+              break;
+            case 'WEEK':
+              final weekStart = today.subtract(Duration(days: now.weekday - 1));
+              if (txDate.isBefore(weekStart)) return false;
+              break;
+            case 'MONTH':
+              final monthStart = DateTime(now.year, now.month, 1);
+              if (txDate.isBefore(monthStart)) return false;
+              break;
+            case 'CUSTOM':
+              if (_startDate != null) {
+                final start = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+                if (txDate.isBefore(start)) return false;
+              }
+              if (_endDate != null) {
+                final end = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+                if (txDate.isAfter(end)) return false;
+              }
+              break;
+          }
+        } catch (_) {
+          // If date parsing fails, skip this transaction
+          return false;
+        }
+      }
+
+      // Search filter
+      if (_searchController.text.isNotEmpty) {
+        final query = _searchController.text.toLowerCase();
+        final refId = (txn.merchantRefId ?? '').toLowerCase();
+        final card = (txn.cardLastFour ?? '').toLowerCase();
+        final network = (txn.cardNetwork ?? '').toLowerCase();
+        final amount = (txn.amount?.toString() ?? '').toLowerCase();
+        if (!refId.contains(query) &&
+            !card.contains(query) &&
+            !network.contains(query) &&
+            !amount.contains(query)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+
+    setState(() {
+      _filteredTransactions = filtered;
+    });
+  }
+
   void _applyFilters() {
-    // The provider handles filtering, just reload
-    _loadHistory();
+    _applyLocalFilters();
   }
 
   void _clearAllFilters() {
@@ -133,7 +212,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
       _endDate = null;
       _showFilters = false;
     });
-    _loadHistory();
+    _applyLocalFilters();
   }
 
   void _setDateFilter(String filter) {
@@ -142,7 +221,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
       return;
     }
     setState(() => _selectedDateFilter = filter);
-    _applyFilters();
+    _applyLocalFilters();
   }
 
   Future<void> _pickDateRange() async {
@@ -172,7 +251,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
         _endDate = picked.end;
         _selectedDateFilter = 'CUSTOM';
       });
-      _applyFilters();
+      _applyLocalFilters();
     }
   }
 
@@ -234,7 +313,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
         ),
         child: TextField(
           controller: _searchController,
-          onChanged: (v) => _applyFilters(),
+          onChanged: (v) => _applyLocalFilters(),
           style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
           decoration: InputDecoration(
             hintText: 'Search by Reference ID, Card...',
@@ -251,7 +330,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
                 ? GestureDetector(
               onTap: () {
                 _searchController.clear();
-                _applyFilters();
+                _applyLocalFilters();
               },
               child: const Icon(
                 Icons.close,
@@ -371,7 +450,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
               return GestureDetector(
                 onTap: () {
                   setState(() => _selectedStatus = e.key);
-                  _applyFilters();
+                  _applyLocalFilters();
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -417,13 +496,9 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
                   ],
                 ),
               ),
-              Consumer<CardPayProvider>(
-                builder: (context, provider, child) {
-                  return Text(
-                    '${provider.transactions.length} results',
-                    style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF6B7280)),
-                  );
-                },
+              Text(
+                '${_filteredTransactions.length} results',
+                style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF6B7280)),
               ),
             ],
           ),
@@ -462,69 +537,65 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
   }
 
   Widget _buildContent() {
-    return Consumer<CardPayProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading && provider.transactions.isEmpty) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF9B59B6)),
-          );
-        }
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF9B59B6)),
+      );
+    }
 
-        if (provider.transactions.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Iconsax.card,
-                    size: 56,
-                    color: Colors.white.withOpacity(0.15),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    provider.transactions.isEmpty && !_hasActiveFilters
-                        ? 'No CardPay transactions yet'
-                        : 'No matching transactions',
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (_hasActiveFilters) ...[
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _clearAllFilters,
-                      child: Text(
-                        'Clear Filters',
-                        style: GoogleFonts.poppins(color: const Color(0xFF9B59B6)),
-                      ),
-                    ),
-                  ],
-                ],
+    if (_filteredTransactions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Iconsax.card,
+                size: 56,
+                color: Colors.white.withOpacity(0.15),
               ),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: _loadHistory,
-          color: const Color(0xFF9B59B6),
-          child: ListView.builder(
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-            itemCount: provider.transactions.length,
-            itemBuilder: (_, index) {
-              final txn = provider.transactions[index];
-              return _buildCard(txn);
-            },
+              const SizedBox(height: 16),
+              Text(
+                _allTransactions.isEmpty
+                    ? 'No CardPay transactions yet'
+                    : 'No matching transactions',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (_hasActiveFilters) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _clearAllFilters,
+                  child: Text(
+                    'Clear Filters',
+                    style: GoogleFonts.poppins(color: const Color(0xFF9B59B6)),
+                  ),
+                ),
+              ],
+            ],
           ),
-        );
-      },
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadHistory,
+      color: const Color(0xFF9B59B6),
+      child: ListView.builder(
+        controller: _scrollController,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        itemCount: _filteredTransactions.length,
+        itemBuilder: (_, index) {
+          final txn = _filteredTransactions[index];
+          return _buildCard(txn);
+        },
+      ),
     );
   }
 
@@ -823,7 +894,6 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
   void _downloadReceipt(dynamic txn) {
     HapticFeedback.mediumImpact();
 
-    // Prepare receipt data as Map
     final receiptData = {
       'txn_id': txn.merchantRefId?.toString() ?? 'N/A',
       'amount': txn.amount?.toString() ?? '0',
@@ -838,7 +908,6 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
       'date': txn.createdAt?.toString() ?? DateTime.now().toString(),
     };
 
-    // Show receipt dialog with the data
     _showReceiptDialog(receiptData.cast<String, String>());
   }
 
@@ -930,7 +999,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
                 DateTime txDate;
                 try {
                   txDate = DateTime.parse(
-                      (data['date'] ?? DateTime.now().toString()).toString()
+                    (data['date'] ?? DateTime.now().toString()).toString(),
                   ).toLocal();
                 } catch (_) {
                   txDate = DateTime.now();
@@ -1143,7 +1212,7 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
     if (Platform.isAndroid) {
       final paths = [
         '/storage/emulated/0/Documents/NEOFYN/CardPay',
-        '/storage/emulated/0/Download/NEOFYN/CardPay'
+        '/storage/emulated/0/Download/NEOFYN/CardPay',
       ];
       for (final path in paths) {
         try {
@@ -1231,7 +1300,8 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
             pw.SizedBox(height: 16),
             _pdfRow(f, fb, 'Card', '****${r.cardLastFour}'),
             _pdfRow(f, fb, 'Network', r.cardNetwork),
-            _pdfRow(f, fb, 'Amount', '₹${r.amount.toStringAsFixed(2)}', vc: pc(const Color(0xFF10B981))),
+            _pdfRow(f, fb, 'Amount', '₹${r.amount.toStringAsFixed(2)}',
+                vc: pc(const Color(0xFF10B981))),
             _pdfRow(f, fb, 'Reference ID', r.merchantRefId),
             if (r.rrn != null && r.rrn!.isNotEmpty)
               _pdfRow(f, fb, 'RRN', r.rrn!),
@@ -1298,7 +1368,8 @@ class _CardPayHistoryScreenState extends State<CardPayHistoryScreen> {
     return file;
   }
 
-  pw.Widget _pdfRow(pw.Font f, pw.Font fb, String label, String value, {PdfColor? vc}) {
+  pw.Widget _pdfRow(pw.Font f, pw.Font fb, String label, String value,
+      {PdfColor? vc}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 3),
       child: pw.Row(
