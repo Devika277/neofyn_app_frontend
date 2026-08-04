@@ -8,6 +8,7 @@ import '../../screens/payout/payout_history_screen.dart';
 import '../BBPS/bbps_history_screen.dart';
 import '../dmt/dmt_history_screen.dart';
 import '../../screens/recharge/recharge_history_screen.dart';
+import '../cardpay/cardpay_history_screen.dart';
 
 class HistoryDashboardScreen extends StatefulWidget {
   const HistoryDashboardScreen({Key? key}) : super(key: key);
@@ -65,7 +66,7 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'View your AEPS, DMT, BBPS and Payout transaction history',
+              'View your AEPS, DMT, BBPS ,CardPay and Payout transaction history',
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.white.withOpacity(0.5),
@@ -135,6 +136,30 @@ class _HistoryDashboardScreenState extends State<HistoryDashboardScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const BbpsHistoryScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+
+            // ✅ CARD PAY History Card
+            _buildHistoryCard(
+              icon: Icons.credit_card_rounded,
+              title: 'CardPay Transactions',
+              subtitle: 'Card Payment Processing',
+              details: [
+                'Card Payments',
+                'Transaction Status',
+                'Payment History',
+                'Secure Payments',
+              ],
+              gradientColors: const [Color(0xFF9B59B6), Color(0xFF8E44AD)],
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CardPayHistoryScreen(),
+                  ),
                 );
               },
             ),
